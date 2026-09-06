@@ -80,6 +80,14 @@ of steps — edit the constants block at the top of the program's `main_*.cpp`
 and rebuild. Set the thread count of the OpenMP program with `OMP_NUM_THREADS`;
 without it that case falls back to eight threads.
 
+Every solver takes one optional argument, the isotropy order of the colour
+gradient — `E4`, `E6` or `E8`:
+
+```bash
+utilities/run_case.sh laplace            # the program's own default
+../../bin/solvers/color_gradient/laplace/laplace_opt E4   # the original stencil
+```
+
 ### About the generated files
 
 Every program writes four ASCII CSV grids per `interval` steps, named after the
@@ -131,15 +139,16 @@ Contains all the programs
 Contains all the sources for the library
 
 - `src/core` the constants
-- `src/lbm` the lattice Boltzmann declarations
+- `src/lbm` the scheme itself: the two-component equation of state and the
+  isotropic colour-gradient stencils, each carrying its reference
 - `src/omp` thread-level parallelism: thread count, ids, timing
 - `src/mpi` distributed memory: environment, Cartesian decomposition, halo
   exchange, error checking
 
-`src/lbm` is still header-only — the algorithm lives inside each program's
-`main_*.cpp`, and `src/main_cglbm.cpp` is the entry point waiting for it to gain
-its implementation units. `src/omp` and `src/mpi` are complete and tested; see
-[`docs/parallel.md`](docs/parallel.md).
+The time loop still lives inside each program's `main_*.cpp`, and
+`src/main_cglbm.cpp` is the entry point waiting for it to move into the library.
+`src/lbm`, `src/omp` and `src/mpi` are complete and tested; see
+[`docs/numerics.md`](docs/numerics.md) and [`docs/parallel.md`](docs/parallel.md).
 
 #### The `artifacts` folder
 

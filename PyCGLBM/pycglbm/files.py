@@ -105,6 +105,39 @@ class CaseOutput:
         area = float((self.phase(timestep) > 0).sum())
         return float(np.sqrt(area / np.pi))
 
+    def _centreline(self, field: np.ndarray) -> np.ndarray:
+        """The outward ray from the domain centre along +x, as a 1-D profile."""
+        ny, nx = field.shape
+        return field[ny // 2, nx // 2 :]
+
+    @staticmethod
+    def _first_crossing(profile: np.ndarray, level: float) -> float:
+        """Where ``profile`` first falls through ``level``, linearly interpolated.
+
+        Returns NaN when it never does.
+        """
+        shifted = profile - level
+        for k in range(len(shifted) - 1):
+            if shifted[k] >= 0.0 > shifted[k + 1]:
+                return float(k + shifted[k] / (shifted[k] - shifted[k + 1]))
+        return float("nan")
+
+    def phase_interface_radius(self, timestep: int) -> float:
+        """Radius where the phase field crosses zero, along the +x centreline."""
+        return self._first_crossing(self._centreline(self.phase(timestep)), 0.0)
+
+    def density_interface_radius(self, timestep: int) -> float:
+        """Radius where the density crosses halfway between its two bulk values.
+
+        For a droplet this is the interface as the *density* field sees it. It
+        need not coincide with :meth:`phase_interface_radius`: the two can
+        settle apart, and which one Laplace's law should be scored against
+        matters when they do.
+        """
+        profile = self._centreline(self.density(timestep))
+        midpoint = 0.5 * (float(profile[0]) + float(profile[-1]))
+        return self._first_crossing(profile, midpoint)
+
     def pressure_jump(self, timestep: int, inner: float, outer: float) -> float:
         """Mean pressure within ``inner`` of the centre, minus the mean beyond ``outer``.
 
