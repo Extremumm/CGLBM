@@ -656,6 +656,8 @@ than in an equation of state. That is a different model, not a missing term.
 | Leclaire et al. 2013 | 10³, dynamic | enhanced equilibrium distributions |
 | Ba et al. 2016 | 10³, dynamic, high Re; 0.74 % on σ, u_max 1.3 × 10⁻⁴ | MRT collision, CSF perturbation, normalised phase field |
 | Saito et al. 2023 | 10 accurately, 10³ marginally | sixth-order Hermite equilibria, central moments |
+| **this code, `TwoPopulationSolver`** | **10³ at 0.3 %, converged; 10⁴–10⁵ stable but not steady** | alpha_k equilibrium, isotropic gradient, CSF tension, recolouring adapted to the density ratio |
+| **this code, `Solver`** | **500, converged** | two-component equation of state, phi_N interface, CSF tension |
 
 Ratios of 10⁵ and beyond are reported by other families — chemical-potential
 pseudopotential models (> 6.5 × 10⁴), phase-field Allen–Cahn models, entropic
@@ -775,9 +777,29 @@ periodic, matched dynamic viscosity μ = 0.1667, run to 1.2 × 10⁵ steps:
 
 At 10² and 10³ this is better than the paper on both the tension and the
 spurious currents, and unlike anything in the first model it is *converged* —
-the last six reports of the run agree to every digit printed.
+the last six reports of the run agree to every digit printed. The
+`laplace_high_ratio` program is that case, and its tests pin it.
 
-The `laplace_high_ratio` program is that case, and its tests pin it.
+Above 10³ the picture changes character, and the honest description is neither
+"works" nor "fails". Run to 3 × 10⁵ steps:
+
+| ratio | behaviour | σ_cal / σ | max &#124;u&#124; |
+|---|---|---|---|
+| 10⁴ | stable indefinitely, never settles | 0.95 – 1.00, wandering | 1.2 – 3.0 × 10⁻² |
+| 10⁵ | stable indefinitely, never settles | 0.66 → 1.08 over the run | 1.1 – 5.0 × 10⁻² |
+
+Neither diverges — which is already a change from the first model, where 10³
+was fatal — but neither reaches a fixed point either. The spurious currents sit
+around 10⁻², three hundred times their value at 10³, and the tension wanders by
+several per cent at 10⁴ and by more at 10⁵. A single reading there can land on
+almost any number, including a very good one: the 10⁵ run passes through −0.1 %
+at 1.5 × 10⁵ steps and +7.9 % at 3 × 10⁵. **So 10⁴ and 10⁵ are reported as
+qualitative, not measured.** Raising the viscosity does not help: at μ = 0.5 the
+10⁴ case degrades steadily instead, from −1.9 % to −7.4 %.
+
+What is left to try there is the MRT collision — the one ingredient of Ba et al.
+still not implemented in either solver, and the one aimed at exactly this: the
+spurious currents that a single relaxation time leaves in the ghost moments.
 
 ## Isotropy of the colour gradient
 
