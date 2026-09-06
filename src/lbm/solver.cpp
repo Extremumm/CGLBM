@@ -216,12 +216,11 @@ void Solver::collide() {
 void Solver::force() {
     const bool parallel = parallel_;
     const bool wall = wall_y_;
-    // The wall-bounded cases have always started at j = 1, leaving the source
-    // term of the j = 0 row at zero. Preserved here; see docs/numerics.md.
-    const int j_start = wall ? 1 : 0;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
-        for (int j = j_start; j < ny_; j++) {
+        // Every row, including j = 0: the neighbour loop below already drops
+        // the directions that would cross the bottom wall.
+        for (int j = 0; j < ny_; j++) {
             // S_F, S_Sp and S_t are node-local: each is built and consumed
             // within this iteration. They used to be three more lattice-sized
             // arrays, which for the production Rayleigh-Taylor case was about a

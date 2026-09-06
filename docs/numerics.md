@@ -303,14 +303,30 @@ configurations, relative to the peak of each field:
 
 `laplace` is periodic and its output is unchanged, byte for byte.
 
-### The source term is never computed on the `j = 0` row
+### Fixed: the source term was never computed on the `j = 0` row
 
-`Solver::force()` runs `for (int j = j_start; j < ny_; j++)` with `j_start == 1`
-under `WallY`. Row `j = 0` therefore keeps a source term of zero for the whole
-run, while row `j = ny-1` gets a full one — the two walls are not treated alike.
-It also makes the `j == 0` branch inside the neighbour loop unreachable.
+`Solver::force()` ran `for (int j = j_start; j < ny_; j++)` with `j_start == 1`
+under `WallY`. Row `j = 0` therefore kept a source term of zero for the whole
+run — no body force, no third-order correction, no temporal correction — while
+row `j = ny-1` got a full one. The two walls were not treated alike. It also
+made the `j == 0` branch inside the neighbour loop unreachable, though that
+branch is exactly what makes starting at `j = 0` safe: it drops the directions
+that would read below the wall.
 
-Both are preserved as they were so that the extraction of the shared kernel
-could be verified bit for bit against the previous code. They are fixed in the
-commits that follow this one, each on its own, with the change in the results
-reported.
+The loop now starts at 0 on both boundaries. The effect is much smaller than
+the streaming defect above, because in three of the four cases the interface
+starts far from the wall and the bottom row is quiescent early on. After 200
+steps, relative to the peak of each field:
+
+| Case | ρ | φ | p | u |
+|---|---|---|---|---|
+| `capillary` | 0.09 % | 0.03 % | 0.32 % | 0.41 % |
+| `gravity_capillary` | 0 | 0 | 0 | 1e-8 |
+| `rayleigh_taylor` | 2e-7 | 1e-8 | 2e-6 | 1e-6 |
+
+The figures below 1e-6 are at the resolution of the six-digit CSV output rather
+than a measurement of the change. `laplace` is periodic and unchanged.
+
+Both were preserved through the extraction of the shared kernel, so that it
+could be verified bit for bit against the previous code, and fixed afterwards
+one commit at a time. Any measurement taken before those commits carries them.
