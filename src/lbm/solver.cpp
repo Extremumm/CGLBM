@@ -497,6 +497,11 @@ void Solver::step() {
     stream();
     macroscopic();
     phase_field();
+    // phi_n_ is read by collide_surface() and recolor() at the *next* step, so
+    // it has to be refreshed here, from the phase field this step just found.
+    // It used to be built once in initialize() and never again, which left the
+    // BulkNormalised option taking its gradient of a field frozen at t = 0.
+    update_interface_field();
     equilibrium();
 }
 

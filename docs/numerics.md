@@ -413,6 +413,19 @@ Two defects in the wall-bounded cases (`capillary`, `gravity_capillary`,
 `rayleigh_taylor`, `rayleigh_taylor_omp`). `laplace` is periodic and is affected
 by neither.
 
+### Fixed: the normalised phase field was never refreshed after t = 0
+
+`Solver::update_interface_field()` builds `phi_n_`, the bulk-normalised phase
+field of Ba et al. Eq. (21). It was called once, at the end of `initialize()`,
+and never again — so `--interface-field=normalised` took its gradient of the
+field as it stood at t = 0, for the whole run.
+
+The option was therefore never actually tested, and the negative result recorded
+against it in this file was not evidence about the normalised field. Re-measured
+with the refresh in place, the option on its own moves the Laplace jump by 0.2 %
+of itself. `update_interface_field()` now runs in `step()`, after
+`phase_field()`, from the phase field that step just computed.
+
 ### Fixed: the colour distribution was rebuilt from the wrong population at a wall
 
 `Solver::stream()` wrote the reflected population to `f_(ip, jp, kp)` and then
