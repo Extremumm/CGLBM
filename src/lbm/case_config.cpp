@@ -68,11 +68,16 @@ void print_usage(const std::string& program_name) {
               << "                      capillary stress in Omega^(2), or a body force from\n"
               << "                      an explicit curvature (Ba et al.); `csf` with\n"
               << "                      `--interface-field=normalised` is what reaches a\n"
-              << "                      density ratio of 1000\n"
+              << "                      density ratio of a few hundred\n"
               << "  --recolouring=width|latva-kokko\n"
               << "                      segregation strength from the pressure and an\n"
               << "                      interface width, or from the density and beta\n"
               << "  --beta=X            segregation strength of `latva-kokko`, in (0, 1]\n"
+              << "  --width=X           interface width the recolouring holds, in nodes/2.5.\n"
+              << "                      Wider resolves a steeper density profile: the density\n"
+              << "                      changes by about 5.6x per lattice node at a ratio of\n"
+              << "                      node. 1.6 is what the shipped cases use\n"
+              << "  --width-init=X      interface width of the initial profile\n"
               << "  --nu=X, --nu-b=X    kinematic shear and bulk viscosity of component 1\n"
               << "  --nu2=X, --nu-b2=X  the same for component 2; unset means equal to\n"
               << "                      component 1's. Setting nu2 = nu rho1/rho2 matches\n"
@@ -267,6 +272,18 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             } else {
                 std::cerr << "Unknown recolouring '" << value << "'; expected width or latva-kokko."
                           << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "width", &value)) {
+            if (!nonnegative_double(value, "width", &config.physics.ch_width_ope)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "width-init", &value)) {
+            if (!nonnegative_double(value, "width-init", &config.physics.ch_width_init)) {
                 return CommandLineResult::Error;
             }
             continue;

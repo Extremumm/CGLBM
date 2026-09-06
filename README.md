@@ -258,10 +258,9 @@ the resulting `CaseOutput`.
 
 ### Density ratio
 
-The scheme is quantitative — a few per cent on the Laplace jump — up to a
-density ratio of 10³, which is where the colour-gradient literature stops. Two
-things carry it there, and both come from
-[Ba et al. (2016)](docs/references.md):
+The scheme is quantitative — a couple of per cent on the Laplace jump — and
+steady up to a density ratio of about **500**. Two things carry it there, and
+both come from [Ba et al. (2016)](docs/references.md):
 
 - the interface is located by the bulk-normalised phase field φ_N = 2c − 1,
   whose zero contour is the surface where the two components occupy equal
@@ -272,16 +271,16 @@ things carry it there, and both come from
   needs the relaxation time to be uniform across the interface and it is not.
 
 On the shipped `laplace` case that moved the jump from 0.895 to 1.021 σ/R and
-cut the spurious currents by a factor of 72, to 1.7 × 10⁻⁵; at Ba et al.'s own
-static-droplet settings it gives +0.20 % at a ratio of 20 and −4.94 % at 10³.
-The enhanced equilibrium of Leclaire et al. (2013) turned out to be already
-present — it is the same expression as the third-order Hermite term the scheme
-already had, agreeing to 10⁻¹⁴.
+cut the spurious currents by a factor of 72, to 1.7 × 10⁻⁵. The enhanced
+equilibrium of Leclaire et al. (2013) turned out to be already present — it is
+the same expression as the third-order Hermite term the scheme already had,
+agreeing to 10⁻¹⁴.
 
-Above 10³ this configuration diverges. The older stress-based operator does not
-and still runs at 10⁵, but reads 0.35 σ/R there, which is qualitative;
-`--surface-tension=perturbation --interface-field=colour
---initial-profile=colour` selects it. The measurements, the derivations and what
+**At 10³ and above it diverges**, in both the new and the old configuration. Be
+careful reading short runs here: a density ratio of 10³ looks healthy for its
+first 5 × 10⁴ steps and dies at 8.7 × 10⁴, which is how this repository came to
+claim 10³ and, before that, 10⁵. Everything quoted now is from 1.2 × 10⁵ steps
+with the whole time series checked. The measurements, the derivations and what
 is still missing are in
 [`docs/numerics.md`](docs/numerics.md#how-far-the-density-ratio-goes).
 

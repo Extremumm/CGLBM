@@ -30,9 +30,11 @@ from pycglbm.testing import artifacts_dir, run_program
 #   restored EOS, E8 gradient                : 0.962 * sigma/R_rho, fewer currents
 #   the above, started in mechanical equilib.: 0.895 * sigma/R_rho
 #   the above, Ba et al. phi_N + CSF tension : 1.021 * sigma/R_rho
-# The last step is what carries the density ratio to 1000 within a few per cent
-# rather than a factor of two, and it cut the spurious currents by 72x on this
-# case. `--initial-profile=colour --interface-field=colour
+# The last step is what carries the density ratio to about 500 within a couple
+# of per cent rather than a factor of two, and it cut the spurious currents by
+# 72x on this case. (500, not 1000: at 1000 the case diverges after 8.7e4
+# steps, which shorter runs had hidden. See docs/numerics.md.)
+# `--initial-profile=colour --interface-field=colour
 # --surface-tension=perturbation` reproduces the row above it.
 MEASURED_JUMP_RATIO = 1.021
 MEASURED_JUMP_TOLERANCE = 0.03

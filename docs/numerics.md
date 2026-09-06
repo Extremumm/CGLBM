@@ -193,42 +193,43 @@ are recorded below: getting the scheme to *survive* past a ratio of about 100,
 which was an initial-condition problem, and getting it to be *right* there,
 which took the two papers this section is named for.
 
-Where it stands, on the shipped Laplace case (128², prescribed R = 10, E8
-gradient, ν = 1.664, 3 × 10⁴ steps), as Δp scored against the radius the density
-field settles at — the surface where the two components occupy equal volume:
+**How long the run is matters more than anything else here, and getting that
+wrong is how this file came to contain claims it should not have.** A short run
+at a high density ratio does not diverge; it has simply not got there yet. Every
+figure below is from 1.2 × 10⁵ steps on the shipped Laplace case (128²,
+prescribed R = 10, E8 gradient, ν = 1.664), reported as Δp / (σ/R) against the
+prescribed radius, with the whole time series checked rather than the last
+value:
 
-| ratio | Ω⁽²⁾ stress, colour φ | φ_N interface + CSF tension |
-|---|---|---|
-| 2 | 0.951 | **1.024** |
-| 10 | 0.893 | **1.021** |
-| 20 | 0.894 | **1.021** |
-| 100 | 0.904 | **1.021** |
-| 500 | 0.899 | 0.851 |
-| 10³ | 0.843 | 0.924 |
-| 2 × 10³ | 0.906 | 1.044 |
-| 10⁴ | 0.396 | diverges, step ≈ 2 × 10⁴ |
-| 10⁵ | 0.351 | diverges |
-
-Up to a ratio of 100 the second column is flat to a tenth of a per cent —
-1.021, 1.021, 1.021 — where the first drifts and reads 10 % low. Past 500 both
-columns scatter, and that scatter is the shipped viscosity, not the density
-ratio: ν = 1.664 puts τ = ρν/(p dt) + ½ at 5 × 10³ in the heavy fluid, so 3 × 10⁴
-steps is six relaxation times and the run is still ringing. At Ba et al.'s own
-static-droplet settings — R = 25 in 192², ν = 0.1667, where τ is a tenth of that
-— the same configuration gives **+0.20 % at a ratio of 20 and −4.94 % at 10³**,
-against the 0.83 % and 0.74 % they report.
+| ratio | Ω⁽²⁾ stress, colour φ | φ_N interface + CSF tension | steady? |
+|---|---|---|---|
+| 20 | 1.140 | **1.021** | yes, to 6 s.f. |
+| 100 | 1.205 | **1.023** | yes, constant from 4.8 × 10⁴ steps |
+| 200 | — | **1.021** | yes |
+| 500 | — | **0.995** | still rising slowly, no divergence |
+| 10³ | **diverges, ≈ 6 × 10⁴** | **diverges, 8.7 × 10⁴** | no |
+| 10⁴ | diverges | diverges | no |
+| 10⁵ | diverges | diverges | no |
 
 So, plainly:
 
-- **to a ratio of 10³ the scheme is quantitative**, a few per cent on Laplace's
-  law, which is where the colour-gradient literature stops;
-- **above 10³ the CSF configuration diverges.** The older stress operator does
-  not, and still runs at 10⁵ — but at 10⁵ it reads 0.35 σ/R, which is a picture
-  rather than a measurement. `--surface-tension=perturbation
-  --interface-field=colour --initial-profile=colour` is that path.
+- **to a density ratio of about 500 the scheme is quantitative and steady** — a
+  couple of per cent on Laplace's law, converged and holding;
+- **at 10³ and above it diverges.** Not slowly, and not only in one
+  configuration: the continuum-surface-force operator dies at step 8.7 × 10⁴ and
+  the older stress operator by 6 × 10⁴.
 
-The trade is deliberate: accuracy over the range the model is good for, rather
-than survival over a range where it is not.
+The 10³ run *looks* healthy for its first 5 × 10⁴ steps — it reads 0.96, then
+0.89, then 0.85, then collapses. Measured at 3 × 10⁴ steps it reports −7.6 %,
+which is why this file previously claimed a density ratio of 10³ and, before
+that, of 10⁵. Both claims were runs that had not been given time to fail. The
+shipped Laplace case at a ratio of 20 is genuinely converged, and its steady-state
+test checks exactly that; nothing above a few hundred had ever been given the
+same check.
+
+The trade between the two operators is unchanged and still worth making: at 100
+the CSF column reads 1.023 against 1.205, and it cut the spurious currents by a
+factor of 72.
 
 ### What was breaking
 
@@ -570,6 +571,83 @@ the interface. **That does not by itself rescue the density ratio.** Measured at
 diverges. The τ span is what makes Ω⁽²⁾'s `1/τ` cancellation fail; it is not
 what limits the CSF configuration.
 
+### Trying for 10⁴, and how the earlier claims went wrong
+
+Leclaire et al. (2011) is the only colour-gradient work reporting O(10⁴): a
+steady bubble, 0.5 % on Laplace's law, across "a sharp interface, with a
+thickness of about 5-6 lattice units". Their ingredients are the isotropic
+colour gradient — which is already here, `src/lbm/isotropic_gradient.h` cites
+that paper — and a recolouring operator in the Latva-Kokko family, which
+[does not transfer](#the-recolouring-why-p-and-not-rho). Everything else in the
+recent literature stops at 10³: Ba et al. (2016), Leclaire et al. (2013), Saito
+et al. (2023), and Subhedar (2022), whose survey puts colour-gradient accuracy
+as "still limited to a density ratio of 1000".
+
+Before any of that could be tested here, a plainer problem had to be dealt with:
+none of the runs behind the earlier claims were long enough to mean anything.
+The viscous relaxation time is τ = ρν/(p dt) + 1/2, so with the shipped
+viscosity it grows with the density ratio, and the number of relaxation times a
+run of 3 × 10⁴ steps actually covers is:
+
+| ratio | τ in the heavy fluid | relaxation times in 3 × 10⁴ steps |
+|---|---|---|
+| 20 | 1.0 × 10² | 299 |
+| 10³ | 5.0 × 10³ | 6.0 |
+| 10⁴ | 5.0 × 10⁴ | **0.60** |
+| 10⁵ | 5.0 × 10⁵ | **0.06** |
+
+**Every number this file quoted above a density ratio of a few hundred was a
+transient.** The runs had not relaxed; neither the divergences nor the pressure
+jumps meant what they appeared to. Run to 1.2 × 10⁵ steps instead, the density
+ratio of 10³ diverges in both configurations, and so does everything above it.
+The earlier claim that the scheme "runs at 10⁵" was a run given six per cent of
+one relaxation time before being declared a success.
+
+Matching the dynamic viscosities with `nu2 = nu rho1/rho2` fixes the budget — τ
+is then 5.5 everywhere and 3 × 10⁴ steps is 5.5 × 10³ relaxation times — and is
+the reason the two-viscosity option above is worth having even for a case that
+does not care about the viscosity ratio physically. With that in place, the
+question can finally be asked properly. Measured, R = 10 in 128², CSF tension,
+φ_N interface, matched viscosities:
+
+| interface width | 10³ | 10⁴ | 10⁵ |
+|---|---|---|---|
+| 1.6 | −4.4 % | diverges | diverges |
+| 2.0 | −12.7 % | +6.8 % | diverges |
+| 2.4 | −21.2 % | +4.8 % | −13.8 % |
+
+The +6.8 % and +4.8 % look like success. They are not: **run the same two cases
+to 6 × 10⁴ steps and both are `nan`.** At 3 × 10⁴ steps they had not yet
+diverged, which is all that column says. The same caution applies to the 10⁵
+entry, and at R = 25 the same settings mostly diverge outright, reading −21 %
+and −36 % where they do not.
+
+Nor is 10³ steady under this configuration: the first column's −4.4 % becomes
++13.5 % at 6 × 10⁴ steps and −20.7 % at 1.2 × 10⁵. Matching the viscosities buys
+a τ small enough to relax the *viscous* modes; it does not make the interface
+settle, and something slower is still moving.
+
+Two other candidates were tried and ruled out. Matching the dynamic viscosities
+so τ is uniform does not help (above). Raising `kInterfaceGradientFloor` from
+10⁻⁶ to 10⁻³, in case the bulk curvature noise was still driving it, changes the
+trajectory at 10³ not at all — same values step for step, and it dies slightly
+sooner.
+
+What the failure looks like, traced at 10⁴, is a pressure collapse rather than
+anything to do with the phase field: |φ| stays inside 1 to 5 × 10⁻¹² throughout
+while the minimum pressure falls 0.27 → 0.24 → 0.18 → 0.07 and then goes
+negative. Since τ = ρν/(p dt) + ½, a pressure heading for zero takes the
+dissipation with it, and that is the runaway. The density changes by about 5.6×
+per lattice node at 10³ with the shipped width and 10× at 10⁴, which is the
+scale of the problem the pressure has to stay smooth across.
+
+So: **10⁴ was not reached, and neither was 10³.** Getting there inside this
+model would mean resolving that density profile, and the model puts the whole
+density ratio into a single field through the equation of state. The literature
+that reaches 10⁴ does not: Leclaire et al. carry ρ_R and ρ_B as separate smooth
+fields, and their density ratio lives in the equilibrium's rest weight rather
+than in an equation of state. That is a different model, not a missing term.
+
 ### Where the literature is
 
 | Work | Reached | How |
@@ -585,8 +663,9 @@ MRT — not by colour-gradient ones.
 
 Ba et al.'s static droplet is the closest comparison: R = 25 in 100², ν = 0.1667,
 σ = 0.1, interface 4–5 nodes, 0.74 % error on σ at a ratio of 1000. This code at
-the same R and ν gives **+0.20 % at a ratio of 20 and −4.94 % at 1000**, so it
-matches them at moderate ratios and is about six times worse at 1000.
+the same R and ν gives **+0.20 % at a ratio of 20**, which matches them; at 1000
+it reads −4.94 % after 3 × 10⁴ steps, but that is not a converged state and the
+run does not survive a long one, so there is no comparable figure to give.
 
 The gap is not in the ingredients: all four are implemented, one of them was
 already here, and the fourth — the recolouring — turned out to be the one that

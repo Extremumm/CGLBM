@@ -70,8 +70,10 @@ CaseConfig laplace_case() {
     // Omega^(2) has to be injected where tau is largest, and it is divided by
     // tau: the tension collapses. Ba et al.'s continuum-surface-force operator
     // reaches the momentum equation through Guo's forcing instead, whose
-    // factor stays bounded, and it is what holds Laplace's law to a few per
-    // cent at a density ratio of 1000. See docs/numerics.md.
+    // factor stays bounded, and it is what holds Laplace's law to a couple of
+    // per cent up to a density ratio of about 500 -- which is where this
+    // scheme stops: at 1000 it diverges after 8.7e4 steps. See
+    // docs/numerics.md.
     config.surface_tension = cglbm::lbm::SurfaceTension::ContinuumSurfaceForce;
     config.warn_phase_out_of_range = true;
 

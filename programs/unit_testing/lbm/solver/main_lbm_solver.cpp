@@ -275,9 +275,12 @@ void report_enhanced_equilibrium() {
 /// The scheme used to diverge before step 200 at any ratio above about 100,
 /// because the interface was started out of mechanical equilibrium and the
 /// resulting pressure discontinuity drove a transient that reached Mach 1.4.
-/// Started in equilibrium it runs to 10^5. This is the guard on that: a
-/// regression in the initialisation shows up here in a fraction of a second
-/// rather than in a validation run.
+/// Started in equilibrium it survives the opening transient at 10^5. This is
+/// the guard on *that*, and on nothing more: a few hundred steps is a smoke
+/// test, not a statement about the density ratio the scheme can hold. Run long
+/// enough, 10^3 and above diverge -- see docs/numerics.md. A regression in the
+/// initialisation shows up here in a fraction of a second rather than in a
+/// validation run.
 void report_density_ratios(int steps) {
     std::cout.precision(17);
     for (double ratio : {1.e3, 1.e5}) {
