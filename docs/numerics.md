@@ -671,6 +671,114 @@ The gap is not in the ingredients: all four are implemented, one of them was
 already here, and the fourth — the recolouring — turned out to be the one that
 must *not* be carried over. What remains untried is MRT.
 
+## A second model, for density ratios past 10³
+
+The section above ends by saying that reaching 10⁴ would mean a different model
+rather than a missing term. `src/lbm/two_population_solver.h` is that model.
+Both are colour-gradient methods; they differ in where the density ratio lives,
+and that turns out to decide how far it can go.
+
+`Solver` carries the mixture `f` and the colour difference `g`, and gets the
+ratio from a two-component equation of state p = p(ρ, φ). The whole contrast
+sits in one density field. `TwoPopulationSolver` carries `f¹` and `f²` and
+streams them separately; the ratio comes from a free parameter in the
+*equilibrium*, each fluid keeping its own rest-particle weight and hence its own
+sound speed:
+
+$$(c_s^k)^2 = \tfrac{3}{5}(1-\alpha_k), \qquad p_k = \rho_k (c_s^k)^2,
+  \qquad \frac{\rho_1}{\rho_2} = \frac{1-\alpha_2}{1-\alpha_1}.$$
+
+Two things follow that the first model cannot have. The bulk pressures are
+**identically equal** — substituting the third relation into the second gives
+ρ₁(c_s¹)² = ρ₂(c_s²)² — so the pressure is continuous across the interface
+however large the ratio. And each ρ_k has its own smooth profile, so nothing has
+to resolve a jump of ρ₁/ρ₂ within a single field.
+
+The price is the classical limitation the first model was written to escape: the
+density ratio and the sound-speed ratio are no longer independent. At a ratio of
+10⁴ the heavy fluid's sound speed is 0.0069 in lattice units. For a static or
+slow flow that is a fair trade; for anything acoustic it is not.
+
+### Adapting the recolouring to a density ratio
+
+Latva-Kokko and Rothman's segregation operator, as Ba et al. write it in their
+Eq. (30), pushes colour along the **lattice weight** `w_i`:
+
+$$f_i^{1\ddagger} = \frac{\rho_1}{\rho} f_i^\dagger
+  + \beta\,w_i\,\frac{\rho_1\rho_2}{\rho}\cos\phi_i .$$
+
+That cannot work once the two fluids sit on different rest weights, and the
+arithmetic is worth doing because it is not obvious from the formula. What has
+to stay non-negative is fluid 2's share of the population, `(ρ₂/ρ) f_i†`. At a
+density ratio of 1000, at the point where the two occupy equal volume, the
+non-rest populations are
+
+    f_i^1 = rho_1 (1 - alpha_1)/5 = 500 x 1.6e-4 = 0.08
+    f_i^2 = rho_2 (1 - alpha_2)/5 = 0.5 x 0.16   = 0.08
+
+so `f_i† = 0.16` and fluid 2's share of it is `(0.5/500.5) × 0.16 = 1.6e-4`.
+The push is `β w_i ρ₁ρ₂/ρ = 0.7 × (1/9) × 0.4995 = 0.039`, **240 times larger**.
+The light fluid's distribution goes negative on the first step and the run is
+gone within ten. Measured, before the fix: fine at a ratio of 2, −69 % at 5,
+and `nan` from 30 upwards.
+
+Leclaire, Reggio and Trépanier (2012) report adapting this operator "for the
+case of variable density ratios", and Leclaire et al. (2011) credit that
+adaptation with reaching 10⁴. Their text was not available here, so the form
+used is derived from the two requirements the operator has to meet rather than
+transcribed. Replacing `w_i` with the mixture's own rest weight
+
+$$\Phi_i = \frac{\rho_1\varphi_i^1 + \rho_2\varphi_i^2}{\rho}
+  = \frac{f_i^{\mathrm{eq}}(\rho, 0)}{\rho}$$
+
+gives both:
+
+- **each fluid's mass is conserved exactly**, because `Φ_i` depends only on
+  `|e_i|` and the cosine is odd, so the push sums to zero over the directions;
+- **both distributions stay non-negative for any β ≤ 1**, because near
+  equilibrium the push is `β(ρ₁/ρ)` of fluid 2's own share, and ρ₁ ≤ ρ.
+
+It reduces to Latva-Kokko exactly when the two fluids share a rest weight, which
+is the case their form was written for. Measured, `min f` over a fifty-step
+droplet is **exactly 0** at density ratios of 20, 10³ and 10⁵, and |φ_N| is
+exactly 1 — the phase field is bounded because the populations are, not because
+anything clamps it.
+
+### The viscosity has to be matched, not the kinematic viscosity
+
+With the recolouring fixed the model runs at every ratio, and at 10³ it is still
+63 % low. The reason is the same τ that limits the first model, arriving by a
+different route. Since τ = μ/(p dt) + ½ and the two bulk pressures are equal,
+giving both fluids the same *kinematic* viscosity — as Ba et al. do, ν = 0.1667
+— puts τ at 348 in the heavy fluid against 0.85 in the light one. A BGK
+collision at τ = 348 leaves a viscous stress large enough to absorb most of the
+capillary force. Measured on a relaxed droplet at a ratio of 1000: the force
+integral is 0.00413, correct to within 3 % of σ/R, while the pressure jump is
+0.00176 — **43 % of the force actually applied**. The rest is viscous stress
+against the residual spurious current.
+
+Ba et al. carry that with an MRT collision, which relaxes the ghost moments at
+their own rate and leaves the shear mode at τ = 348. The alternative, taken
+here, is to match the **dynamic** viscosities, which makes τ uniform at 0.85 and
+needs no MRT. It is a different physical case — a viscosity ratio of ρ₁/ρ₂
+rather than 1 — and the shipped case says so in its own comments.
+
+### What it measures
+
+Ba et al.'s static droplet, R = 25 in 100², σ = 0.1, α₂ = 0.2, β = 0.7,
+periodic, matched dynamic viscosity μ = 0.1667, run to 1.2 × 10⁵ steps:
+
+| ratio | σ_cal / σ | steady? | max &#124;u&#124; | Ba et al. |
+|---|---|---|---|---|
+| 100 | **1.0024** | constant from 6 × 10⁴ steps | 2.9 × 10⁻⁵ | 1.0069, 6.8 × 10⁻⁵ |
+| 10³ | **1.0030** | constant from 6 × 10⁴ steps | 4.0 × 10⁻⁵ | 1.0074, 1.25 × 10⁻⁴ |
+
+At 10² and 10³ this is better than the paper on both the tension and the
+spurious currents, and unlike anything in the first model it is *converged* —
+the last six reports of the run agree to every digit printed.
+
+The `laplace_high_ratio` program is that case, and its tests pin it.
+
 ## Isotropy of the colour gradient
 
 The colour gradient is differentiated twice per step, and Ω⁽²⁾ divides it by its

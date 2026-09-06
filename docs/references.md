@@ -12,6 +12,15 @@
 
 ## High density ratio in colour-gradient models
 
+3. **D. Grunau, S. Chen, K. Eggert.** *A lattice Boltzmann model for multiphase
+   fluid flows.* Physics of Fluids A **5**, 2557, 1993.
+   DOI: [10.1063/1.858769](https://doi.org/10.1063/1.858769)
+
+   The rest-particle weight `alpha_k` that gives each fluid its own sound speed
+   and carries the density ratio in the equilibrium. Implemented in
+   `TwoPopulationSolver`; it is what lets that model hold a density ratio of
+   1000 where the equation-of-state model diverges.
+
 3. **S. Leclaire, M. Reggio, J.-Y. Trépanier.** *Isotropic color gradient for
    simulating very high-density ratios with a two-phase flow lattice Boltzmann
    model.* Computers & Fluids **48**(1), 98–112, 2011.
@@ -116,13 +125,24 @@
     The segregation operator every modern colour-gradient model recolours with,
     including Ba et al. Eq. (30).
 
-    **Implemented here as `Recolouring::LatvaKokko`, and off by default.** In
-    this code's variables it is the operator already in `Solver::recolor()` with
+    **Implemented twice here, to different ends.**
+
+    In `Solver` it is `Recolouring::LatvaKokko`, and off by default: in that
+    code's variables it is the operator already in `Solver::recolor()` with
     `beta * rho` in place of `p / (w cs^2)`, and that difference decides the
-    scheme at high density contrast: the pressure is continuous across an
-    interface and the density is not. Measured better at a density ratio of 2
-    (+0.3 % against +2.4 %) and unusable from 10 upwards. See
+    scheme at high density contrast, because the pressure is continuous across
+    an interface and the density is not. Measured better at a density ratio of
+    2 (+0.3 % against +2.4 %) and unusable from 10 upwards. See
     [`numerics.md`](numerics.md#the-recolouring-why-p-and-not-rho).
+
+    In `TwoPopulationSolver` it is the only recolouring, and it had to be
+    adapted: pushing along the lattice weight `w_i` drives the light fluid's
+    distribution negative by a factor of 240 at a density ratio of 1000, because
+    the two fluids sit on different rest weights. Pushing along the mixture's
+    own rest weight instead conserves each fluid's mass exactly and keeps both
+    distributions non-negative for any `beta <= 1`, and reduces to Latva-Kokko
+    when the rest weights agree. See
+    [`numerics.md`](numerics.md#adapting-the-recolouring-to-a-density-ratio).
 
 ## Lattice Boltzmann background
 

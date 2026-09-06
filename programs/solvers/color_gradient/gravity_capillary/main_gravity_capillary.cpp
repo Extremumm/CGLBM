@@ -41,6 +41,8 @@ CaseConfig gravity_capillary_case() {
     config.physics.ch_width_ope = 1.6 * config.units.dx;
     config.physics.p2_inf = 0.;
     config.physics.p1_inf = cglbm::lbm::matched_p1_inf(config.physics);
+    // Keep it matched if --rho1, --sigma or --radius move on the command line.
+    config.matched_pressure_offset = true;
 
     config.boundary = cglbm::lbm::Boundary::WallY;
     // Dense component below: the stable arrangement under gravity.

@@ -287,6 +287,20 @@ struct Physics {
 
     double p1_inf = 0.0;  ///< pressure at infinity of component 1
     double p2_inf = 0.0;  ///< pressure at infinity of component 2
+
+    /// Rest-particle weight of component 2, for `TwoPopulationSolver` only.
+    ///
+    /// That model gets its density ratio from the equilibrium rather than from
+    /// an equation of state: each fluid keeps its own rest weight `alpha_k`,
+    /// hence its own sound speed `(c_s^k)^2 = 3/5 (1 - alpha_k)`, and
+    ///
+    ///     rho1 / rho2 = (1 - alpha_2) / (1 - alpha_1)
+    ///
+    /// fixes `alpha_1` once `alpha_2` is chosen. Both must lie in [0, 1], so
+    /// `alpha_2` is what bounds the reachable density ratio: with the 0.2 Ba
+    /// et al. use, `1 - alpha_1 = 0.8 rho2/rho1`, which stays positive at any
+    /// ratio. `Solver` ignores this field.
+    double alpha2 = 0.2;
 };
 
 /// Density at which the equation of state gives `target_pressure` for `phi`.
@@ -392,6 +406,17 @@ struct CaseConfig {
 
     /// How the two components are segregated after collision. See `Recolouring`.
     Recolouring recolouring = Recolouring::InterfaceWidth;
+
+    /// Keep `physics.p1_inf` at the value `matched_p1_inf` gives.
+    ///
+    /// A case that sets `p1_inf = matched_p1_inf(physics)` has tied it to the
+    /// densities, the sound speeds, sigma and the radius. `--rho1`, `--sigma`
+    /// and the rest would then leave it stale, which is a silent wrong answer
+    /// rather than a visible one: the case would start with the wrong pressure
+    /// jump. Setting this makes `parse_command_line` recompute it after the
+    /// overrides are in. `TwoPopulationSolver` ignores it -- that model has no
+    /// pressure offset to match.
+    bool matched_pressure_offset = false;
 
     /// Isotropy order of the colour gradient.
     ///

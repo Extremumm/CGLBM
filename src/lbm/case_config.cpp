@@ -73,6 +73,9 @@ void print_usage(const std::string& program_name) {
               << "                      segregation strength from the pressure and an\n"
               << "                      interface width, or from the density and beta\n"
               << "  --beta=X            segregation strength of `latva-kokko`, in (0, 1]\n"
+              << "  --rho1=X, --rho2=X  bulk densities of the two components\n"
+              << "  --sigma=X           surface tension\n"
+              << "  --radius=X          prescribed interface radius\n"
               << "  --width=X           interface width the recolouring holds, in nodes/2.5.\n"
               << "                      Wider resolves a steeper density profile: the density\n"
               << "                      changes by about 5.6x per lattice node at a ratio of\n"
@@ -183,6 +186,22 @@ PhaseFieldInit cosine_layer(double amplitude, bool inverted) {
 
 namespace {
 
+bool nonnegative_double(const std::string& value, const char* name, double* out);
+
+/// Parse a strictly positive, finite number.
+bool positive_double(const std::string& value, const char* name, double* out) {
+    double parsed = 0.0;
+    if (!nonnegative_double(value, name, &parsed)) {
+        return false;
+    }
+    if (parsed <= 0.0) {
+        std::cerr << name << " must be greater than zero; got '" << value << "'." << std::endl;
+        return false;
+    }
+    *out = parsed;
+    return true;
+}
+
 /// Parse a viscosity: a finite, non-negative number.
 bool nonnegative_double(const std::string& value, const char* name, double* out) {
     try {
@@ -272,6 +291,30 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             } else {
                 std::cerr << "Unknown recolouring '" << value << "'; expected width or latva-kokko."
                           << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "rho1", &value)) {
+            if (!positive_double(value, "rho1", &config.physics.rho1)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "rho2", &value)) {
+            if (!positive_double(value, "rho2", &config.physics.rho2)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "sigma", &value)) {
+            if (!nonnegative_double(value, "sigma", &config.physics.sigma)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "radius", &value)) {
+            if (!positive_double(value, "radius", &config.physics.radius)) {
                 return CommandLineResult::Error;
             }
             continue;
@@ -385,6 +428,11 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
     if (threads > 0) {
         omp::set_thread_count(threads);
     }
+    if (config.matched_pressure_offset) {
+        // The case tied p1_inf to the densities, sigma and the radius, any of
+        // which may just have been overridden.
+        config.physics.p1_inf = matched_p1_inf(config.physics);
+    }
     return CommandLineResult::Run;
 }
 
@@ -434,6 +482,7 @@ std::string describe(const CaseConfig& config) {
         << "ch_width_init = " << physics.ch_width_init << "\n"
         << "ch_width_ope = " << physics.ch_width_ope << "\n"
         << "beta = " << physics.beta << "\n"
+        << "alpha2 = " << physics.alpha2 << "\n"
         << "p1_inf = " << physics.p1_inf << "\n"
         << "p2_inf = " << physics.p2_inf << "\n"
         << "output_precision = " << config.output_precision << "\n"

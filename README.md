@@ -155,6 +155,7 @@ Pass `--precision=17` for output that round-trips.
 | `gravity_capillary` | 128×128 | 5×10⁴ | 4/1 | yes | droplet under gravity and surface tension |
 | `rayleigh_taylor` | 128×1028 | 5×10⁶ | 4/1 | yes | Rayleigh–Taylor instability, σ = 0, serial |
 | `rayleigh_taylor_omp` | 1024×4096 | 2×10⁶ | 4/1 | yes | same case, OpenMP, production resolution |
+| `laplace_high_ratio` | 100×100 | 4×10⁴ | 1000/1 | no | Laplace law at a density ratio of 1000, two-population solver |
 
 > `rayleigh_taylor_omp` allocates several GB of lattice at its production
 > resolution. Check the available memory before launching it, or lower it with
@@ -179,7 +180,7 @@ Contains all the programs
 
 Contains all the sources for the library
 
-- `src/lbm` the scheme: the D2Q9 lattice, the solver and its time loop, the
+- `src/lbm` the schemes: the D2Q9 lattice, the two solvers and their time loops, the
   two-component equation of state, the isotropic colour-gradient stencils, the
   lattice storage and the output writers — each carrying its reference
 - `src/omp` thread-level parallelism: thread count, ids, timing
@@ -258,9 +259,16 @@ the resulting `CaseOutput`.
 
 ### Density ratio
 
-The scheme is quantitative — a couple of per cent on the Laplace jump — and
-steady up to a density ratio of about **500**. Two things carry it there, and
-both come from [Ba et al. (2016)](docs/references.md):
+There are two colour-gradient solvers here, and which one you want depends
+entirely on the density ratio.
+
+**`cglbm::lbm::Solver`** (`laplace`, `capillary`, `gravity_capillary`,
+`rayleigh_taylor`) is the improved method of Lafarge et al.: the density ratio
+comes from a two-component equation of state, so it is independent of the
+sound-speed ratio and the model is fully compressible. It is quantitative — a
+couple of per cent on the Laplace jump — and steady up to a density ratio of
+about **500**. Two things carry it there, and both come from
+[Ba et al. (2016)](docs/references.md):
 
 - the interface is located by the bulk-normalised phase field φ_N = 2c − 1,
   whose zero contour is the surface where the two components occupy equal
@@ -276,12 +284,31 @@ equilibrium of Leclaire et al. (2013) turned out to be already present — it is
 the same expression as the third-order Hermite term the scheme already had,
 agreeing to 10⁻¹⁴.
 
-**At 10³ and above it diverges**, in both the new and the old configuration. Be
-careful reading short runs here: a density ratio of 10³ looks healthy for its
-first 5 × 10⁴ steps and dies at 8.7 × 10⁴, which is how this repository came to
-claim 10³ and, before that, 10⁵. Everything quoted now is from 1.2 × 10⁵ steps
-with the whole time series checked. The measurements, the derivations and what
-is still missing are in
+**At 10³ and above it diverges.** Be careful reading short runs here: a density
+ratio of 10³ looks healthy for its first 5 × 10⁴ steps and dies at 8.7 × 10⁴,
+which is how this repository came to claim 10³ and, before that, 10⁵. Everything
+quoted now is from 1.2 × 10⁵ steps with the whole time series checked.
+
+**`cglbm::lbm::TwoPopulationSolver`** (`laplace_high_ratio`) is the classical
+model of Grunau, Reis & Phillips, Leclaire et al. and Ba et al.: one
+distribution per fluid, and the density ratio carried by the equilibrium's
+rest-particle weight. The two bulk pressures then match identically, so the
+pressure is continuous across the interface at any ratio, and each fluid's
+density has its own smooth profile. On Ba et al.'s own static-droplet
+benchmark it gives
+
+| density ratio | σ measured / σ | spurious currents | Ba et al. |
+|---|---|---|---|
+| 100 | 1.0024 | 2.9 × 10⁻⁵ | 1.0069, 6.8 × 10⁻⁵ |
+| 1000 | 1.0030 | 4.0 × 10⁻⁵ | 1.0074, 1.25 × 10⁻⁴ |
+
+converged, with the last half of the run flat to every digit. The price is the
+limitation the first model exists to avoid: the density ratio and the
+sound-speed ratio are tied together, so at 10³ the heavy fluid's sound speed is
+0.022 in lattice units. Use it for static or slow flows at high contrast, and
+`Solver` for anything acoustic below a few hundred.
+
+The measurements, the derivations and what is still missing are in
 [`docs/numerics.md`](docs/numerics.md#how-far-the-density-ratio-goes).
 
 ## PyCGLBM
