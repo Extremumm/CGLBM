@@ -170,6 +170,50 @@ enum class SurfaceTension {
     ContinuumSurfaceForce  ///< body force from an explicit curvature, Ba et al.
 };
 
+/// How the two components are pushed back apart after each collision.
+///
+/// Both forms push colour along the interface normal with the same
+/// `(1 - phi^2)` shape, and in this code's variables they differ only in what
+/// sets the strength:
+///
+///     InterfaceWidth:  omega_3 = W_i  p (1 - phi^2) (xi.n) / (2 w cs^2)
+///     LatvaKokko:      omega_3 = W_i  beta rho (1 - phi^2) cos(phi_i) / 2
+///
+/// The difference is `p` against `rho`, and at high density contrast that is
+/// the density ratio itself. The pressure is nearly uniform across an interface
+/// -- 0.36 against 0.33 on the Laplace case -- while the density spans the whole
+/// contrast, so `InterfaceWidth` segregates the heavy side about `rho1/rho2`
+/// times more weakly than Latva-Kokko would. Matching the two in the light bulk
+/// of the shipped case gives beta = p / (w cs^2 rho) = 0.625, close to the 0.7
+/// Ba et al. use; on the heavy side the same expression gives 6.2e-4.
+///
+/// `cos(phi_i)` is the cosine of the angle between the colour gradient and
+/// `xi_i`, so the Latva-Kokko term carries `(xi_i.n) / |xi_i|` where the other
+/// carries `(xi_i.n)`. That is the form the literature states, and it weights
+/// the diagonals by 1/sqrt(2) relative to the axes.
+///
+/// **Measured, and `InterfaceWidth` is the default for a reason.** Latva-Kokko
+/// is the better operator at a density ratio of 2 (+0.3 % on the Laplace jump
+/// against +2.4 %) and comes apart above about 10; by 1000 no beta in
+/// [0.01, 0.9] survives. It also leaves the range the equation of state is
+/// defined on -- |phi| reaches 1.00058 at a ratio of 2, where every other
+/// configuration here holds 1 to within 1e-9 -- because `g` is rebuilt each
+/// step as `f * phi + omega_3` rather than streamed as two component
+/// populations, so the positivity that bounds phi in the two-population form is
+/// not available. See docs/numerics.md.
+///
+/// Reference
+///  - M. Latva-Kokko, D. H. Rothman, "Diffusion properties of gradient-based
+///    lattice Boltzmann models of immiscible fluids", Phys. Rev. E 71, 056702
+///    (2005). The segregation operator, which removes the lattice pinning of
+///    the original colour-gradient recolouring.
+///  - Y. Ba, H. Liu, Q. Li, Q. Kang, J. Sun, Phys. Rev. E 94, 023310 (2016),
+///    Eq. (30), which is where the form implemented here is taken from.
+enum class Recolouring {
+    InterfaceWidth,  ///< p (1 - phi^2) / (2 w), Lafarge et al.
+    LatvaKokko       ///< beta rho (1 - phi^2) / 2, Latva-Kokko & Rothman
+};
+
 /// How the domain is closed along y. Both cases are periodic along x.
 enum class Boundary {
     /// Periodic on both axes. The droplet cases float in an unbounded fluid.
@@ -201,7 +245,14 @@ struct Physics {
     double gravity = 0.0;
 
     double ch_width_init = 1.1;  ///< interface width used to lay down phi at t = 0
-    double ch_width_ope = 1.6;   ///< interface width the recolouring operator maintains
+    double ch_width_ope = 1.6;   ///< interface width `Recolouring::InterfaceWidth` maintains
+
+    /// Segregation strength of `Recolouring::LatvaKokko`, in [0, 1].
+    ///
+    /// Plays the role `ch_width_ope` plays for the other operator: larger beta
+    /// is a thinner interface. Ba et al. use 0.7, which they report as an
+    /// interface 4 to 5 nodes wide. Ignored by `Recolouring::InterfaceWidth`.
+    double beta = 0.7;
 
     double p1_inf = 0.0;  ///< pressure at infinity of component 1
     double p2_inf = 0.0;  ///< pressure at infinity of component 2
@@ -307,6 +358,9 @@ struct CaseConfig {
 
     /// How the surface tension reaches the populations. See `SurfaceTension`.
     SurfaceTension surface_tension = SurfaceTension::Perturbation;
+
+    /// How the two components are segregated after collision. See `Recolouring`.
+    Recolouring recolouring = Recolouring::InterfaceWidth;
 
     /// Isotropy order of the colour gradient.
     ///

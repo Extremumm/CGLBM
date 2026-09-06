@@ -434,6 +434,8 @@ void Solver::collide_surface() {
 void Solver::recolor() {
     const bool parallel = parallel_;
     const double ch_width_ope = config_.physics.ch_width_ope;
+    const double beta = config_.physics.beta;
+    const bool latva_kokko = config_.recolouring == Recolouring::LatvaKokko;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -445,13 +447,31 @@ void Solver::recolor() {
             const double norm_grad_phi =
                 std::sqrt(grad_phi_x * grad_phi_x + grad_phi_y * grad_phi_y);
             if (norm_grad_phi > kGradientEpsilon) {
-                // Push the components apart along the gradient, at the rate
-                // that holds the interface at ch_width_ope.
-                for (int k = 0; k < kQ; k++) {
-                    const double xi_x = kXi[k][0], xi_y = kXi[k][1];
-                    omega_3_(i, j, k) =
-                        kW[k] * p_(i, j) * (1 - phi_(i, j) * phi_(i, j)) / (2. * ch_width_ope) *
-                        (xi_x * grad_phi_x + xi_y * grad_phi_y) / (cs2_ * norm_grad_phi);
+                // Push the components apart along the gradient. What sets the
+                // rate is the whole difference between the two operators: the
+                // pressure and an interface width, or the density and beta.
+                if (latva_kokko) {
+                    // g = phi f + 2 beta W_i (rho_R rho_B / rho) cos(phi_i),
+                    // with rho_R rho_B / rho = rho (1 - phi^2) / 4, so the
+                    // coefficient below is beta rho (1 - phi^2) / 2. cos(phi_i)
+                    // divides by |xi_i|, which is 0 for the rest particle and
+                    // leaves its term zero anyway.
+                    const double strength =
+                        0.5 * beta * rho_(i, j) * (1 - phi_(i, j) * phi_(i, j)) / norm_grad_phi;
+                    omega_3_(i, j, 0) = 0.0;
+                    for (int k = 1; k < kQ; k++) {
+                        const double xi_x = kXi[k][0], xi_y = kXi[k][1];
+                        const double speed = std::sqrt(xi_x * xi_x + xi_y * xi_y);
+                        omega_3_(i, j, k) =
+                            kW[k] * strength * (xi_x * grad_phi_x + xi_y * grad_phi_y) / speed;
+                    }
+                } else {
+                    for (int k = 0; k < kQ; k++) {
+                        const double xi_x = kXi[k][0], xi_y = kXi[k][1];
+                        omega_3_(i, j, k) =
+                            kW[k] * p_(i, j) * (1 - phi_(i, j) * phi_(i, j)) / (2. * ch_width_ope) *
+                            (xi_x * grad_phi_x + xi_y * grad_phi_y) / (cs2_ * norm_grad_phi);
+                    }
                 }
             } else {
                 for (int k = 0; k < kQ; k++) {

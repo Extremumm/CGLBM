@@ -42,16 +42,22 @@ def test_unit_test_lbm_solver_reports_its_stencil(solver_report, stencil):
 
 @pytest.mark.unit_test
 @pytest.mark.parametrize("stencil", STENCILS)
-@pytest.mark.parametrize("boundary", ["periodic", "wall"])
+@pytest.mark.parametrize("boundary", ["periodic", "wall", "csf", "latva_kokko"])
 def test_unit_test_lbm_solver_conserves_mass(solver_report, stencil, boundary):
-    """Streaming moves populations; none of the three operators creates them."""
+    """Streaming moves populations; none of the collision operators creates them.
+
+    `csf` and `latva_kokko` are the configurations added for high density ratio:
+    the tension applied as a body force rather than through Omega^(2), and the
+    Latva-Kokko segregation operator. Neither shares a code path with the two
+    above, so both are checked against the same invariants.
+    """
     values = solver_report[stencil]
     assert float(values[f"{boundary}_mass_drift"]) < MASS_DRIFT_TOLERANCE
 
 
 @pytest.mark.unit_test
 @pytest.mark.parametrize("stencil", STENCILS)
-@pytest.mark.parametrize("boundary", ["periodic", "wall"])
+@pytest.mark.parametrize("boundary", ["periodic", "wall", "csf"])
 def test_unit_test_lbm_solver_keeps_the_phase_field_bounded(solver_report, stencil, boundary):
     """phi must stay in [-1, 1], against a bounce-back wall as well as away from one.
 
@@ -61,6 +67,32 @@ def test_unit_test_lbm_solver_keeps_the_phase_field_bounded(solver_report, stenc
     """
     values = solver_report[stencil]
     assert float(values[f"{boundary}_max_abs_phase"]) <= 1.0 + PHASE_TOLERANCE
+
+
+#: How far past |phi| = 1 the Latva-Kokko operator runs at a density ratio of 2.
+#: A property of that operator in this formulation, not an accepted tolerance.
+LATVA_KOKKO_OVERSHOOT = 1.0e-3
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_lbm_solver_latva_kokko_overshoots_the_phase_field(solver_report, stencil):
+    """The Latva-Kokko operator leaves [-1, 1], and this pins by how much.
+
+    Every other configuration holds |phi| <= 1 to 1e-9. Latva-Kokko does not,
+    even at a density ratio of 2 where it gives the *best* Laplace jump of any
+    operator here. The reason is structural: `g` is rebuilt each step as
+    `f * phi + omega_3` rather than streamed as two component populations, so
+    nothing enforces the |phi| <= 1 that positivity of those populations would.
+    The equation of state is only defined on [-1, 1], so the overshoot grows
+    into a divergence as the density ratio rises -- above about 10 no beta in
+    [0.01, 0.9] survives. See docs/numerics.md.
+
+    This asserts the overshoot is *small*, not that it is acceptable. It is why
+    the operator is off by default.
+    """
+    overshoot = float(solver_report[stencil]["latva_kokko_max_abs_phase"]) - 1.0
+    assert 0.0 < overshoot < LATVA_KOKKO_OVERSHOOT
 
 
 @pytest.mark.unit_test

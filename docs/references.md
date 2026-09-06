@@ -53,6 +53,7 @@
    | (21) normalised phase field | `normalised_phase()`, `InterfaceField::BulkNormalised`, and `CaseConfig::initial_profile_field` |
    | (23)–(26) CSF perturbation | `Solver::surface_force()`, `SurfaceTension::ContinuumSurfaceForce` |
    | (29) velocity redefinition | `Solver::macroscopic()` already forms ρu = Σξf + F dt/2 |
+   | (30) Latva-Kokko recolouring | `Recolouring::LatvaKokko`, off by default — measured better below a density ratio of 2 and unusable above 10 |
    | (11)–(13) MRT collision | not implemented; the collision here is regularised |
    | (22) relaxation interpolation | not needed; τ is already continuous in ρ and p |
 
@@ -108,11 +109,20 @@
     stability at O(1000).
 
 11. **M. Latva-Kokko, D. H. Rothman.** *Diffusion properties of gradient-based
-   lattice Boltzmann models of immiscible fluids.* Physical Review E **71**,
-   056702, 2005.
-   DOI: [10.1103/PhysRevE.71.056702](https://doi.org/10.1103/PhysRevE.71.056702)
+    lattice Boltzmann models of immiscible fluids.* Physical Review E **71**,
+    056702, 2005.
+    DOI: [10.1103/PhysRevE.71.056702](https://doi.org/10.1103/PhysRevE.71.056702)
 
-   The recolouring lineage that `recolor()` sits in.
+    The segregation operator every modern colour-gradient model recolours with,
+    including Ba et al. Eq. (30).
+
+    **Implemented here as `Recolouring::LatvaKokko`, and off by default.** In
+    this code's variables it is the operator already in `Solver::recolor()` with
+    `beta * rho` in place of `p / (w cs^2)`, and that difference decides the
+    scheme at high density contrast: the pressure is continuous across an
+    interface and the density is not. Measured better at a density ratio of 2
+    (+0.3 % against +2.4 %) and unusable from 10 upwards. See
+    [`numerics.md`](numerics.md#the-recolouring-why-p-and-not-rho).
 
 ## Lattice Boltzmann background
 

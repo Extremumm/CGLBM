@@ -89,6 +89,10 @@ command line, so a resolution or a run length is a flag rather than a rebuild:
   --surface-tension=perturbation|csf
                       capillary stress in Omega^(2), or a body force from an
                       explicit curvature (Ba et al. 2016)
+  --recolouring=width|latva-kokko
+                      segregation strength from the pressure and an interface
+                      width, or from the density and beta
+  --beta=X            segregation strength of `latva-kokko`, in (0, 1]
   --initial-state=equilibrium|eos|linear
                       how rho and p are laid down at t = 0
   --nx=N, --ny=N      lattice size

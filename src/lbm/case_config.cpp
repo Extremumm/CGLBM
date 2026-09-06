@@ -69,6 +69,10 @@ void print_usage(const std::string& program_name) {
               << "                      an explicit curvature (Ba et al.); `csf` with\n"
               << "                      `--interface-field=normalised` is what reaches a\n"
               << "                      density ratio of 1000\n"
+              << "  --recolouring=width|latva-kokko\n"
+              << "                      segregation strength from the pressure and an\n"
+              << "                      interface width, or from the density and beta\n"
+              << "  --beta=X            segregation strength of `latva-kokko`, in (0, 1]\n"
               << "  --nx=N, --ny=N      lattice size, overriding the case default\n"
               << "  --steps=N           number of time steps\n"
               << "  --interval=N        write the CSV grids every N steps\n"
@@ -231,6 +235,28 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             }
             continue;
         }
+        if (option_value(argument, "recolouring", &value) ||
+            option_value(argument, "recoloring", &value)) {
+            if (value == "width") {
+                config.recolouring = Recolouring::InterfaceWidth;
+            } else if (value == "latva-kokko") {
+                config.recolouring = Recolouring::LatvaKokko;
+            } else {
+                std::cerr << "Unknown recolouring '" << value << "'; expected width or latva-kokko."
+                          << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "beta", &value)) {
+            const double beta = std::atof(value.c_str());
+            if (!(beta > 0.0) || beta > 1.0) {
+                std::cerr << "beta must lie in (0, 1]; got '" << value << "'." << std::endl;
+                return CommandLineResult::Error;
+            }
+            config.physics.beta = beta;
+            continue;
+        }
         if (option_value(argument, "initial-state", &value)) {
             if (value == "equilibrium") {
                 config.initial_state = InitialState::MechanicalEquilibrium;
@@ -326,6 +352,8 @@ std::string describe(const CaseConfig& config) {
         << (config.surface_tension == SurfaceTension::ContinuumSurfaceForce ? "csf"
                                                                             : "perturbation")
         << "\n"
+        << "recolouring = "
+        << (config.recolouring == Recolouring::LatvaKokko ? "latva-kokko" : "width") << "\n"
         << "dx = " << config.units.dx << "\n"
         << "dt = " << config.units.dt << "\n"
         << "rho1 = " << physics.rho1 << "\n"
@@ -339,6 +367,7 @@ std::string describe(const CaseConfig& config) {
         << "gravity = " << physics.gravity << "\n"
         << "ch_width_init = " << physics.ch_width_init << "\n"
         << "ch_width_ope = " << physics.ch_width_ope << "\n"
+        << "beta = " << physics.beta << "\n"
         << "p1_inf = " << physics.p1_inf << "\n"
         << "p2_inf = " << physics.p2_inf << "\n"
         << "output_precision = " << config.output_precision << "\n"

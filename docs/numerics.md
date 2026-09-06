@@ -459,6 +459,75 @@ operator, scored the same way, gives −8.5 % at (ratio 20, R = 10), +0.3 % at
 swings with viscosity and radius. The CSF form gives +2.09 % and +2.10 % at a
 ratio of 20 for viscosities a decade apart — the same number.
 
+### The recolouring: why `p` and not `rho`
+
+The last ingredient of Ba et al. not shared with this code was the recolouring.
+They use the Latva-Kokko segregation operator, their Eq. (30), with β = 0.7,
+and the error at a ratio of 1000 is strongly sensitive to the width the operator
+here holds — +10 % at `ch_width_ope` = 1.2, −7 % at 1.6, −29 % at 2.4, while at
+a ratio of 20 the same sweep barely moves. That pointed straight at it.
+
+Written in this code's variables the two operators turn out to be the same
+object with a different prefactor. From Eq. (30),
+
+$$g_i'' = \varphi f_i' + 2\beta W_i \frac{\rho_R \rho_B}{\rho}\cos\phi_i,
+  \qquad \frac{\rho_R\rho_B}{\rho} = \frac{\rho\,(1-\varphi^2)}{4},$$
+
+so Latva-Kokko is $W_i\,\beta\rho(1-\varphi^2)\cos\phi_i/2$ where
+`Solver::recolor()` has $W_i\,p\,(1-\varphi^2)(\xi\cdot\hat n)/(2wc_s^2)$.
+The difference is **p against ρ**. Matching them in the light bulk of the
+shipped case gives β = p/(w c_s² ρ) = 0.625, close to Ba et al.'s 0.7 — so at a
+density ratio of 1 they are the same operator, and the question is what happens
+as the two bulks separate.
+
+`Recolouring::LatvaKokko` implements it. Measured against the operator already
+here, everything else held at the configuration above:
+
+| ratio | `width` | LK β = 0.3 | LK β = 0.62 | LK β = 0.7 | LK β = 0.9 |
+|---|---|---|---|---|---|
+| 1 | +2.6 % | +3.1 % | +3.6 % | +3.0 % | +2.1 % |
+| 2 | +2.4 % | +3.5 % | +0.6 % | **+0.3 %** | **+0.3 %** |
+| 10 | +2.1 % | −3.0 % | −21.6 % | −7.8 % | diverges |
+| 10³ | −7.6 % | diverges | diverges | diverges | diverges |
+
+At a ratio of 1 the two agree, which is the check that the implementation is
+faithful rather than the conclusion. At 2 Latva-Kokko is the better operator.
+From 10 upwards it comes apart, and by 10³ no β in [0.01, 0.9] survives.
+
+The reason is the prefactor. The segregation flux is proportional to ρ under
+Latva-Kokko and to p under the operator here, and **p is continuous across an
+interface where ρ is not** — 0.36 against 0.33 on the Laplace case, while ρ goes
+from 10³ to 1. Relative to the local `f`, the strength is a uniform β/2 under
+Latva-Kokko and 0.31/ρ under the other: no single β is both strong enough on the
+light side to hold the interface and weak enough on the heavy side not to tear
+it.
+
+What it tears is the bound on φ, and that is visible long before the divergence.
+Every other configuration here holds |φ| ≤ 1 to 10⁻⁹. Latva-Kokko does not: at a
+density ratio of **2**, where it gives the best Laplace jump of any operator in
+this code, it already runs to |φ| = 1.00058. The equation of state is only
+defined on [−1, 1], so that overshoot is what grows into the divergence as the
+ratio rises. `test_unit_test_lbm_solver_latva_kokko_overshoots_the_phase_field`
+pins it.
+
+The overshoot is structural rather than a matter of tuning. In the two-population
+form the bound comes from positivity of `f_R` and `f_B`, which stream separately.
+Here `g` is not streamed: it is rebuilt every step as `f * phi + omega_3`, so
+there is no positivity left to enforce |φ| ≤ 1, and a segregation flux strong
+enough to hold a sharp interface is strong enough to push past it.
+
+This is worth stating plainly because it inverts the expectation. The
+pressure-weighted recolouring is not an approximation to Latva-Kokko that this
+code happens to use; at high density contrast it is the reason the scheme works
+at all, and Latva-Kokko is the one that cannot be carried over. The option is
+kept, defaulting off, because it is the better operator below a ratio of about
+2 and because the negative result should stay reproducible:
+
+    laplace_opt --recolouring=latva-kokko --beta=0.7
+
+That leaves MRT as the only untried ingredient of Ba et al., and it is the one
+aimed at stability — which is what the CSF configuration lacks above 10³.
+
 ### Where the literature is
 
 | Work | Reached | How |
@@ -477,17 +546,9 @@ Ba et al.'s static droplet is the closest comparison: R = 25 in 100², ν = 0.16
 the same R and ν gives **+0.20 % at a ratio of 20 and −4.94 % at 1000**, so it
 matches them at moderate ratios and is about six times worse at 1000.
 
-The gap is not in the ingredients above — those are implemented, and the
-equilibrium was there to begin with. The evidence points at the recolouring:
-Ba et al. use Latva-Kokko segregation with β = 0.7, which is not the profile
-`Solver::recolor()` maintains, and the error at a ratio of 1000 is strongly
-sensitive to the width that operator holds — +10 % at `ch_width_ope` = 1.2,
-−7 % at 1.6, −29 % at 2.4, while at a ratio of 20 the same sweep barely moves.
-No width was tuned; 1.6 is the value the case already had.
-
-The next thing to try, on that evidence, is the Latva-Kokko recolouring
-operator, and then MRT for the stability above 10³ that the CSF form currently
-lacks.
+The gap is not in the ingredients: all four are implemented, one of them was
+already here, and the fourth — the recolouring — turned out to be the one that
+must *not* be carried over. What remains untried is MRT.
 
 ## Isotropy of the colour gradient
 

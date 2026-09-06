@@ -178,6 +178,30 @@ void report_normalised_phase() {
     std::cout << "phin_identity_error = " << worst_identity << std::endl;
 }
 
+/// The configuration the shipped Laplace case runs: the interface located by
+/// the bulk-normalised phase field and the tension applied as a body force
+/// built from an explicit curvature.
+CaseConfig ba_case(GradientStencil stencil) {
+    CaseConfig config = small_case(Boundary::PeriodicY, stencil);
+    config.interface_field = cglbm::lbm::InterfaceField::BulkNormalised;
+    config.surface_tension = cglbm::lbm::SurfaceTension::ContinuumSurfaceForce;
+    return config;
+}
+
+/// The Latva-Kokko segregation operator, at a density ratio it can hold.
+///
+/// It is unusable above a ratio of about 10 -- see docs/numerics.md -- so this
+/// runs at 2, where it is the better of the two operators. The point here is
+/// only that the code path conserves mass and keeps phi in range.
+CaseConfig latva_kokko_case(GradientStencil stencil) {
+    CaseConfig config = ba_case(stencil);
+    config.recolouring = cglbm::lbm::Recolouring::LatvaKokko;
+    config.physics.rho1 = 2.;
+    config.physics.rho2 = 1.;
+    config.physics.p1_inf = cglbm::lbm::matched_p1_inf(config.physics);
+    return config;
+}
+
 /// Check that this equilibrium already carries the "enhanced" third-order term.
 ///
 /// Leclaire et al. (2013) added a term to the colour-gradient equilibrium to
@@ -297,6 +321,12 @@ int main(int argc, char** argv) {
     try {
         report_case("periodic", small_case(Boundary::PeriodicY, stencil));
         report_case("wall", small_case(Boundary::WallY, GradientStencil::E4));
+        // The same invariants on the Ba et al. configuration the Laplace case
+        // runs, and on the Latva-Kokko segregation operator. Neither shares a
+        // code path with the two above: the tension is a body force rather than
+        // Omega^(2), and the recolouring reads rho rather than p.
+        report_case("csf", ba_case(stencil));
+        report_case("latva_kokko", latva_kokko_case(stencil));
         report_rest_state("rest_periodic", Boundary::PeriodicY);
         report_rest_state("rest_wall", Boundary::WallY);
         report_normalised_phase();
