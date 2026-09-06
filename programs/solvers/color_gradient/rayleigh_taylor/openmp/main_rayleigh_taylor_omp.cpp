@@ -4,6 +4,9 @@
 
 #include "omp/omp_environment.h"
 
+#include "lbm/equation_of_state.h"
+#include "lbm/isotropic_gradient.h"
+
 // In this version, all the intermediate variables are calculated for clarity. The code is not optimized for performance.
 // Periodic boundary conditions p170 of the book (Graduate Texts in Physics) Timm Krüger, Halim Kusumaatmaja, Alexandr Kuzmin, Orest Shardt, Goncalo Silva, Erlend Magnus Viggen (auth.) - The Lattice Boltzmann Method_ Principles and Practice-Springer
 // Initial conditions depend on the problem
@@ -90,6 +93,20 @@ const double w[Q] = {w1, w2, w2, w2, w2, w3, w3, w3, w3};
 
 
 
+// Isotropy order of the colour gradient, overridable from the command line
+// (e.g. `rayleigh_taylor_omp E6`). See src/lbm/isotropic_gradient.h.
+//
+// Leclaire, Reggio & Trepanier, Computers & Fluids 48, 98 (2011) show the
+// nearest-neighbour gradient is what limits the colour-gradient model at large
+// density contrast, and that a higher-order isotropic stencil lets Laplace's
+// law hold to O(10^4).
+//
+// E4 is the default here because this case has walls on y: it reaches a single
+// node and so reproduces the original scheme exactly, while a wider stencil
+// becomes one-sided over two nodes near the wall and has not been validated
+// against this case.
+cglbm::lbm::GradientStencil gradient_stencil = cglbm::lbm::GradientStencil::E4;
+
 void calEquilibrium() {
     #pragma omp parallel for collapse(2) // Parallelize over both i and j loops
     for (int i = 0; i < Lx; i++) {
@@ -150,6 +167,7 @@ void calMacroscopic() {
 
 // Function to calculate the phase field function
 void calPhaseField() {
+    const cglbm::lbm::ComponentPair components = {c1 * c1, c2 * c2, p1_inf, p2_inf};
     #pragma omp parallel for collapse(2) // Parallelize over both i and j loops
     for (int i = 0; i < Lx; i++) {
         for (int j = 0; j < Ly; j++) {
@@ -165,14 +183,16 @@ void calPhaseField() {
             // }
             double rho_local = rho[i][j];
             double phi_local = sum_g / sum_f;
-            double c_hat_squared = (c1_squared + c2_squared) * 0.5 + phi_local * (c1_squared - c2_squared) * 0.5;
-            double c_bar_squared = (c1_squared - c2_squared) * 0.5 + phi_local * (c1_squared + c2_squared) * 0.5;
-            double sqrt_term = sqrt(pow((p2_inf - p1_inf + rho_local * c_bar_squared), 2) + rho_local * rho_local * (1.0 - phi_local * phi_local) * c1_squared * c2_squared);
-            // if (abs(phi[i][j]) > 1.0) {
-            //     std::cout << "sqrt_term = " << sqrt_term << std::endl;
-            // }
-            double p_local = 0.5 * (rho_local * c_hat_squared - p1_inf - p2_inf + sqrt_term);
-            p_local = rho_local * cs2 - (1+phi_local)/2.*p1_inf - (1-phi_local)/2.*p2_inf;
+            // Two-component equation of state: each component keeps its own sound
+            // speed and pressure at infinity, which is what decouples the density
+            // ratio from the sound-speed ratio.
+            //   T. Lafarge, P. Boivin, N. Odier, B. Cuenot, Phys. Fluids 33, 082110
+            //   (2021), doi:10.1063/5.0061638 -- see src/lbm/equation_of_state.h.
+            //
+            // A linear mixing rule used to overwrite this value. On the Laplace
+            // case that cost 17 % of the pressure jump at a density ratio of 10 and
+            // 28 % at 20; it is kept as pressure_linear_mixing() for comparison.
+            const double p_local = cglbm::lbm::pressure(rho_local, phi_local, components);
             p[i][j] = p_local;
             }
     }
@@ -284,23 +304,10 @@ void collide_surface(){
     for (int i=0 ; i<Lx ; i++){
         for (int j=0 ; j<Ly ; j++){
             // Calculate color gradients Cx and Cy
+            // Colour gradient, already carrying the 1/c_s^2 factor. Terms that
+            // would cross a y wall are dropped, as they were inline here.
             double Cx = 0.0, Cy = 0.0;
-            for (int k = 0; k < Q; k++) {
-                int ip = (i + (int)xi[k][0] + Lx) % Lx;  // Periodic boundary conditions on x
-                int jp = j + (int)xi[k][1];
-                if (j==0 && (k==4 || k==7 || k==8)) {
-                    Cx += 0.;
-                }
-                else if (j==Ly-1 && (k==2 || k==5 || k==6)) {
-                    Cx += 0.;
-                }
-                else {
-                    Cx += w[k] * xi[k][0] * phi[ip][jp];
-                    Cy += w[k] * xi[k][1] * phi[ip][jp];
-                }
-            }
-            Cx *= 1./cs2; // Approximation of the spatial gradient
-            Cy *= 1./cs2; // Approximation of the spatial gradient
+            cglbm::lbm::gradient_wall_y(&phi[0][0], Lx, Ly, i, j, gradient_stencil, &Cx, &Cy);
 
             double norm_C = sqrt(Cx * Cx + Cy * Cy); // Magnitude of the color gradient vector
             for (int k = 0; k < Q; k++) {
@@ -328,23 +335,10 @@ void recolor(){
         for (int j=0 ; j<Ly ; j++){
             // Calculate the gradient of the phase field by calculating the color gradient firstly
             // Calculate color gradients Cx and Cy
+            // Colour gradient, already carrying the 1/c_s^2 factor. Terms that
+            // would cross a y wall are dropped, as they were inline here.
             double Cx = 0.0, Cy = 0.0;
-            for (int k = 0; k < Q; k++) {
-                int ip = (i + (int)xi[k][0] + Lx) % Lx;  // Periodic boundary conditions on x
-                int jp = j + (int)xi[k][1];
-                if (j==0 && (k==4 || k==7 || k==8)) {
-                    Cx += 0.;
-                }
-                else if (j==Ly-1 && (k==2 || k==5 || k==6)) {
-                    Cx += 0.;
-                }
-                else {
-                    Cx += w[k] * xi[k][0] * phi[ip][jp];
-                    Cy += w[k] * xi[k][1] * phi[ip][jp];
-                }
-            }
-            Cx *= 1./cs2; // Approximation of the spatial gradient
-            Cy *= 1./cs2; // Approximation of the spatial gradient
+            cglbm::lbm::gradient_wall_y(&phi[0][0], Lx, Ly, i, j, gradient_stencil, &Cx, &Cy);
             double grad_phi_x, grad_phi_y;
             grad_phi_x = Cx / dt; 
             grad_phi_y = Cy / dt; 
@@ -584,7 +578,15 @@ void runSimulation() {
 }
 
 
-int main() {
+int main(int argc, char** argv) {
+    // Optional first argument selects the colour-gradient stencil: E4, E6, E8.
+    if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &gradient_stencil)) {
+        std::cerr << "Unknown gradient stencil '" << argv[1]
+                  << "'; expected E4, E6 or E8." << std::endl;
+        return 2;
+    }
+    std::cout << "colour gradient stencil = " << cglbm::lbm::stencil_name(gradient_stencil)
+              << std::endl;
     // Thread count: OMP_NUM_THREADS when it is set, otherwise the historical
     // default of this case. Going through src/omp keeps the program linkable
     // in a build configured with WITH_OpenMP=OFF, where it runs serially.

@@ -127,41 +127,96 @@ places the resting wall halfway between the last fluid node and the ghost node.
 | `gravity_capillary` | Balance of the Laplace jump against the hydrostatic head |
 | `rayleigh_taylor` | Linear growth rate of the instability, $\sigma = 0$ |
 
-## Open point: the Laplace pressure jump
+## The equation of state and the density ratio
 
-The `laplace` program does **not** reproduce the Laplace law at steady state.
-Measured with `pycglbm` on the shipped configuration (128², R = 10, ρ₁/ρ₂ = 20,
-σ = 0.2768 in lattice units):
+The colour-gradient method is classically limited to modest density ratios
+because the density contrast is carried by the rest-particle weight of the
+equilibrium, which ties it to the ratio of the components' sound speeds.
+Lafarge et al. remove that coupling by giving each component its own ideal-gas
+branch — its own `c_k` and its own `p_k_inf` — and mixing them through the phase
+field. `src/lbm/equation_of_state.h` implements it, and `calPhaseField` calls it.
 
-| Timestep | Δp | Δp / (σ/R) | droplet radius |
+That equation of state used to be computed and then **overwritten** by a linear
+mixing rule, `p = rho cs2 - (1+phi)/2 p1_inf - (1-phi)/2 p2_inf`, which reads
+like a debugging substitution left in place. Because the cases set
+`c1 = c2 = cs`, the two forms agree in the bulk of each fluid and differ only
+across the interface — which is exactly where the pressure jump is set. The cost
+was a Laplace jump that degraded monotonically with the density ratio:
+
+| density ratio | Δp / (σ/R) with the linear mixing rule |
+|---|---|
+| 1 | 1.007 |
+| 2 | 0.986 |
+| 5 | 0.922 |
+| 10 | 0.832 |
+| 20 | 0.720 |
+| 50 | −3.07 (sign inverted) |
+| 100 | diverged at step 2000 |
+
+At ratio 1 the scheme reproduces Laplace's law to 0.7 %, so σ is calibrated
+correctly and Ω⁽²⁾ works; the error tracks the density contrast alone.
+
+## Isotropy of the colour gradient
+
+The colour gradient is differentiated twice per step, and Ω⁽²⁾ divides it by its
+own norm, so gradient anisotropy becomes an anisotropic surface tension.
+`src/lbm/isotropic_gradient.h` offers three stencils, selectable as the first
+argument of every solver:
+
+| Stencil | Neighbours | Reach | Isotropic to | Angular error on a tanh interface |
+|---|---|---|---|---|
+| `E4` | 8 | 1 | 4th order | 0.145° |
+| `E6` | 12 | 2 | 6th order | 0.038° |
+| `E8` | 24 | 2 | 8th order | 0.012° |
+
+All three are exact for a linear field (their normalisation is
+`Σ W c_α c_β = δ_αβ`); they differ in the higher lattice tensors. The angular
+error is the largest angle between −∇φ and the outward radius over the interface
+band of a radial tanh profile, and is measured by
+`programs/unit_testing/lbm/gradient`. Going from E4 to E8 reduces it twelvefold,
+which is the effect Leclaire et al. report.
+
+`laplace` defaults to E8. The other cases default to E4 because they bounce back
+on y: a stencil reaching two nodes becomes one-sided against the wall, which has
+not been validated here.
+
+## Where the Laplace case stands now
+
+With the equation of state restored and the E8 gradient, on the shipped case
+(128², prescribed R = 10, density ratio 20):
+
+| | Δp | R(ρ) | Δp / (σ/R(ρ)) | max &#124;u&#124; |
+|---|---|---|---|---|
+| linear mixing, E4 | 0.019806 | 10.06 | 0.720 | 1.44 × 10⁻³ |
+| restored EOS, E4 | 0.028662 | 9.42 | 0.962 | 1.22 × 10⁻³ |
+| restored EOS, E8 | 0.028294 | 9.42 | 0.962 | 1.11 × 10⁻³ |
+
+The jump error falls from 28 % to under 4 %, and the parasitic currents by 23 %.
+
+### Open issue: the two interfaces separate
+
+The radius above is the one the **density** field settles at. It has to be
+stated, because the restored equation of state introduces an artefact that the
+linear mixing rule did not have: the phase field and the density field come to
+rest at different radii.
+
+| | R(φ = 0) | R(ρ midpoint) | gap |
 |---|---|---|---|
-| 0 | 0.027684 | 1.0000 | 9.85 |
-| 1000 | 0.021959 | 0.7932 | 10.17 |
-| 10000 | 0.019806 | 0.7154 | 10.17 |
-| 30000 | 0.019806 | 0.7154 | 10.17 |
+| linear mixing | 10.06 | 10.07 | 0.00 |
+| restored EOS | 11.69 | 9.42 | 2.27 |
 
-The jump is exact at `t = 0` because `p1_inf` carries the `- sigma / radius`
-offset, so the equation of state and the initial condition are consistent. The
-solver then relaxes to a **stationary** state — the jump is constant to six
-digits from step 10000 on — holding only 72 % of the analytic jump, while the
-droplet radius, the interface profile and the phase bounds stay clean. So this
-is not a convergence, dissolution or sharpness problem: the surface tension
-effectively realised by $\Omega^{(2)}$ is smaller than the prescribed $\sigma$
-for this parameter set.
+Both start at 10.0, separate within the first ~3000 steps, and then hold to six
+digits — it is a converged state, not a drift, and the total mass of each colour
+is conserved exactly throughout. The consequence is that "the radius of the
+droplet" is ambiguous to about two lattice units, and the Laplace ratio reads
+0.962 against the density interface and 1.194 against the phase interface.
 
-The parasitic currents at the interface are small and stationary
-(max |u| = 1.44 × 10⁻³, i.e. Ma ≈ 2.5 × 10⁻³, unchanged between step 10000 and
-30000), so the deficit is not being sustained by an unresolved flow either.
-
-Worth checking, in order: the calibration between $\sigma$ and the amplitude of
-the $\Omega^{(2)}$ perturbation (a factor involving `ch_width_ope` or the
-relaxation time is the usual suspect), then the finite interface thickness,
-which makes the effective radius ambiguous by about one lattice unit — too small
-an effect to explain 28 %.
-
-`programs/solvers/color_gradient/laplace/tests/test_laplace_color_gradient.py`
-pins the measured ratio so that a change of behaviour is caught; it deliberately
-does not assert agreement with $\sigma/R$.
+`programs/solvers/color_gradient/laplace/tests/` pins the gap so that a scheme
+change closing it is visible. Closing it is the natural next piece of work, and
+the equilibrium is the place to look: the enhanced equilibria of Leclaire et al.
+(2013) and the third-order Hermite equilibrium of Ba et al. (2016) both target
+the interfacial momentum error that a truncated equilibrium leaves behind at
+high density contrast. See [`references.md`](references.md).
 
 ## Status of the modular library
 
