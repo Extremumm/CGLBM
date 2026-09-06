@@ -56,10 +56,19 @@ void print_usage(const std::string& program_name) {
               << "                      how rho and p are laid down at t = 0; `equilibrium`\n"
               << "                      starts the interface in mechanical equilibrium, which\n"
               << "                      is what a density ratio past ~100 needs\n"
+              << "  --initial-profile=colour|normalised\n"
+              << "                      field the initial tanh profile is prescribed in;\n"
+              << "                      `normalised` is what makes the droplet come out at\n"
+              << "                      the radius the case asked for\n"
               << "  --interface-field=colour|normalised\n"
               << "                      field the colour gradient is taken of; `normalised`\n"
-              << "                      divides each component by its bulk density, which is\n"
-              << "                      what a density ratio beyond a few tens needs\n"
+              << "                      divides each component by its bulk density, so its\n"
+              << "                      zero contour is the interface at any density ratio\n"
+              << "  --surface-tension=perturbation|csf\n"
+              << "                      capillary stress in Omega^(2), or a body force from\n"
+              << "                      an explicit curvature (Ba et al.); `csf` with\n"
+              << "                      `--interface-field=normalised` is what reaches a\n"
+              << "                      density ratio of 1000\n"
               << "  --nx=N, --ny=N      lattice size, overriding the case default\n"
               << "  --steps=N           number of time steps\n"
               << "  --interval=N        write the CSV grids every N steps\n"
@@ -121,6 +130,17 @@ double normalised_phase(double phi, double rho1, double rho2) {
     return (heavy - light) / (heavy + light);
 }
 
+double phase_from_normalised(double phi_n, double rho1, double rho2) {
+    if (phi_n > 1.0) {
+        phi_n = 1.0;
+    } else if (phi_n < -1.0) {
+        phi_n = -1.0;
+    }
+    const double sum = rho1 + rho2;
+    const double difference = rho2 - rho1;
+    return (sum * phi_n - difference) / (sum - difference * phi_n);
+}
+
 double matched_p1_inf(const Physics& physics) {
     return physics.rho1 * physics.c1 * physics.c1 - physics.rho2 * physics.c2 * physics.c2 -
            physics.sigma / physics.radius;
@@ -147,6 +167,23 @@ PhaseFieldInit cosine_layer(double amplitude, bool inverted) {
     };
 }
 
+namespace {
+
+/// Read "colour"/"color" or "normalised"/"normalized" into `field`.
+bool interface_field_from_name(const std::string& value, InterfaceField* field) {
+    if (value == "colour" || value == "color") {
+        *field = InterfaceField::Colour;
+        return true;
+    }
+    if (value == "normalised" || value == "normalized") {
+        *field = InterfaceField::BulkNormalised;
+        return true;
+    }
+    return false;
+}
+
+}  // namespace
+
 CommandLineResult
 parse_command_line(CaseConfig& config, int argc, char** argv, const std::string& program_name) {
     int threads = 0;
@@ -167,13 +204,29 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             continue;
         }
         if (option_value(argument, "interface-field", &value)) {
-            if (value == "colour" || value == "color") {
-                config.interface_field = InterfaceField::Colour;
-            } else if (value == "normalised" || value == "normalized") {
-                config.interface_field = InterfaceField::BulkNormalised;
-            } else {
+            if (!interface_field_from_name(value, &config.interface_field)) {
                 std::cerr << "Unknown interface field '" << value
                           << "'; expected colour or normalised." << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "initial-profile", &value)) {
+            if (!interface_field_from_name(value, &config.initial_profile_field)) {
+                std::cerr << "Unknown initial profile field '" << value
+                          << "'; expected colour or normalised." << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "surface-tension", &value)) {
+            if (value == "perturbation") {
+                config.surface_tension = SurfaceTension::Perturbation;
+            } else if (value == "csf") {
+                config.surface_tension = SurfaceTension::ContinuumSurfaceForce;
+            } else {
+                std::cerr << "Unknown surface tension form '" << value
+                          << "'; expected perturbation or csf." << std::endl;
                 return CommandLineResult::Error;
             }
             continue;
@@ -262,8 +315,16 @@ std::string describe(const CaseConfig& config) {
                 ? "equilibrium"
                 : (config.initial_state == InitialState::EquationOfStateP ? "eos" : "linear"))
         << "\n"
+        << "initial_profile = "
+        << (config.initial_profile_field == InterfaceField::BulkNormalised ? "normalised"
+                                                                           : "colour")
+        << "\n"
         << "interface_field = "
         << (config.interface_field == InterfaceField::BulkNormalised ? "normalised" : "colour")
+        << "\n"
+        << "surface_tension = "
+        << (config.surface_tension == SurfaceTension::ContinuumSurfaceForce ? "csf"
+                                                                            : "perturbation")
         << "\n"
         << "dx = " << config.units.dx << "\n"
         << "dt = " << config.units.dt << "\n"

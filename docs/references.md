@@ -33,23 +33,30 @@
    DOI: [10.1103/PhysRevE.94.023310](https://doi.org/10.1103/PhysRevE.94.023310)
 
    MRT collision plus a third-order Hermite equilibrium and a Chapman–Enskog
-   source term; validated to density ratio 1000.
+   source term; validated to density ratio 1000, at 0.74 % error on σ and
+   u_max = 1.3 × 10⁻⁴ for a static droplet of R = 25 in 100².
 
-   **Equation (21) is implemented here**, as `normalised_phase()` and the
-   `InterfaceField::BulkNormalised` option — but measured worse on this case
-   than the raw colour field, because Ω⁽²⁾ here carries its calibration in the
-   gradient magnitude rather than taking σ explicitly. See
-   [`numerics.md`](numerics.md#what-did-not-work). On the phase field used to
-   locate the interface:
+   The main source for the high-density-ratio work here. On the phase field
+   used to locate the interface:
 
    > Usually, ρᴺ is defined by ρᴺ = (ρᴿ − ρᴮ)/(ρᴿ + ρᴮ). This definition,
    > however, becomes increasingly incorrect in identifying the interface as
    > the density ratio increases.
 
-   Their replacement normalises each component by its own bulk density, so the
-   zero contour is the interface at any ratio. The MRT collision, the
-   continuum-surface-force perturbation operator and the parabolic
-   relaxation-time interpolation of their Eq. (22) are not implemented.
+   What is implemented, and where:
+
+   | Their equation | Here |
+   |---|---|
+   | (14) enhanced equilibrium | already present as the third-order Hermite term of `Solver::equilibrium()`; the two agree to 10⁻¹⁴ |
+   | (17)–(18) source correction | already present as `S_Sp` in `Solver::force()`, same two moments, same isotropic derivative |
+   | (20) nine-point derivative | `S_Sp` uses it |
+   | (21) normalised phase field | `normalised_phase()`, `InterfaceField::BulkNormalised`, and `CaseConfig::initial_profile_field` |
+   | (23)–(26) CSF perturbation | `Solver::surface_force()`, `SurfaceTension::ContinuumSurfaceForce` |
+   | (29) velocity redefinition | `Solver::macroscopic()` already forms ρu = Σξf + F dt/2 |
+   | (11)–(13) MRT collision | not implemented; the collision here is regularised |
+   | (22) relaxation interpolation | not needed; τ is already continuous in ρ and p |
+
+   See [`numerics.md`](numerics.md#reading-ba-et-al-2016-and-leclaire-et-al-2013).
 
 6. **S. Leclaire, N. Pellerin, M. Reggio, J.-Y. Trépanier.** *Enhanced
    equilibrium distribution functions for simulating immiscible multiphase

@@ -56,25 +56,28 @@ using PhaseFieldInit = std::function<double(const CaseConfig&, int i, int j)>;
 ///           = (rho2 (1 + phi) - rho1 (1 - phi)) / (rho2 (1 + phi) + rho1 (1 - phi))
 ///
 /// so that phi_N = 0 is the interface at any density ratio, and phi_N = phi
-/// when rho1 == rho2.
+/// when rho1 == rho2. Equivalently phi_N = 2c - 1, where c is the volume
+/// fraction of component 1: it is the volume-fraction indicator, and `phi_N = 0`
+/// is where the two components occupy equal volume.
 ///
-/// **Measured, and it does not help here.** On the Laplace case it degrades the
-/// pressure jump monotonically with the density ratio, and it neither closes
-/// the gap between the phase and density interfaces nor raises the ratio at
-/// which the case diverges:
+/// Which one to take the gradient of is not free: it decides *where* the
+/// surface-tension operator acts. With `Colour` the operator is centred on the
+/// zero of phi, five nodes outside the droplet at a ratio of 1000; with
+/// `BulkNormalised` it sits on the interface. The integrated tension is the
+/// same either way -- measured on one relaxed state, `sum |grad phi| = 2.00000`
+/// against `sum |grad phi_N| = 1.99939`.
 ///
-///     ratio            2      5     10     20     50    100
-///     colour       0.956  0.925  0.933  0.962  1.016  1.013
-///     normalised   0.983  0.905  0.809  0.696  0.554  0.445
+/// Moving it is only safe together with `SurfaceTension::ContinuumSurfaceForce`.
+/// The stress form of the operator carries a `1 / tau` (see `SurfaceTension`),
+/// and putting it where the heavy fluid is puts it where `tau` is largest: the
+/// jump falls to 6 % of `sigma / R` at a ratio of 1000. The two options belong
+/// together, and the shipped Laplace case sets both.
 ///
-/// The reason is that Ba et al. use the normalised field only for the interface
-/// *normal*, in a continuum-surface-force operator where sigma enters
-/// explicitly. The operator here, from Lafarge et al., carries its calibration
-/// in the *magnitude* of the gradient: swapping in a field with a different
-/// profile changes the surface tension it produces. Transferring Eq. (21) to
-/// this operator would mean recalibrating Omega^(2) with it, which has not been
-/// done. `Colour` is therefore the default; `BulkNormalised` is kept because it
-/// is what the literature specifies and is the starting point for that work.
+/// A note on an earlier measurement recorded here, which said the normalised
+/// field was simply worse. It was taken with `phi_n_` built once in
+/// `initialize()` and never refreshed -- so the gradient was of a field frozen
+/// at t = 0 -- and with the initial profile and the tension operator both left
+/// as they were. All three are fixed now.
 ///
 /// Reference
 ///  - Y. Ba, H. Liu, Q. Li, Q. Kang, J. Sun, "Multiple-relaxation-time
@@ -129,6 +132,42 @@ enum class InitialState {
     EquationOfStateP,
     /// Density solved so the interface starts in mechanical equilibrium.
     MechanicalEquilibrium
+};
+
+/// How the surface tension is applied to the populations.
+///
+/// Both forms produce the same force in the continuum limit and differ in how
+/// they reach the momentum equation.
+///
+/// `Perturbation` is the operator of Lafarge et al.: a capillary *stress*
+/// `sigma |grad phi| (nn - I)` injected into the second-order moment, with no
+/// curvature ever formed. Because a post-collision addition reaches the
+/// momentum flux multiplied by the relaxation time, the operator carries a
+/// `1 / tau` of its own so the two cancel. That cancellation is exact only
+/// where `tau` is uniform over the interface, and `tau = rho nu / (p dt) + 1/2`
+/// spans the whole density ratio: on the Laplace case at a ratio of 1000 it
+/// runs from 5.5 in the light fluid to 5.0e3 in the heavy one, three nodes
+/// apart. The stress the light side injects is then damped ~400x faster than
+/// it accumulates on the heavy side, and the tension collapses -- measured, the
+/// jump falls to 6 % of `sigma / R` once the interface is placed where the mass
+/// actually is.
+///
+/// `ContinuumSurfaceForce` is the operator of Ba et al.: the curvature is
+/// formed explicitly and the tension enters as a body force
+///
+///     F_s = -1/2 sigma K grad phi_N,   K = -div n,   n = -grad phi_N / |grad phi_N|
+///
+/// which reaches the momentum equation through Guo's forcing, whose factor
+/// `1 - 1/(2 tau)` stays in [1/2, 1] however large `tau` grows. It is what lets
+/// the density ratio reach 1000 here.
+///
+/// Reference
+///  - Y. Ba, H. Liu, Q. Li, Q. Kang, J. Sun, Phys. Rev. E 94, 023310 (2016),
+///    Eqs. (23)-(29): the perturbation operator in continuum-surface-force
+///    form, the curvature, and the velocity redefinition that goes with it.
+enum class SurfaceTension {
+    Perturbation,          ///< capillary stress in Omega^(2), Lafarge et al.
+    ContinuumSurfaceForce  ///< body force from an explicit curvature, Ba et al.
 };
 
 /// How the domain is closed along y. Both cases are periodic along x.
@@ -191,6 +230,16 @@ double density_at_pressure(
 /// positive on that range for any positive densities.
 double normalised_phase(double phi, double rho1, double rho2);
 
+/// Inverse of :func:`normalised_phase`: the colour field with a given `phi_n`.
+///
+///     phi = (S phi_N - D) / (S - D phi_N),   S = rho1 + rho2,  D = rho2 - rho1
+///
+/// The denominator is `rho1 (1 + phi_N) + rho2 (1 - phi_N)`, positive for any
+/// `phi_n` in [-1, 1] and any positive densities. Used to lay an interface down
+/// in the normalised field, which is the one whose zero contour is the
+/// interface; see `CaseConfig::initial_profile_field`.
+double phase_from_normalised(double phi_n, double rho1, double rho2);
+
 /// The `p1_inf` that makes the Laplace jump exact at t = 0.
 ///
 /// Matching the two ideal-gas branches across an interface of radius R while
@@ -226,12 +275,38 @@ struct CaseConfig {
     /// past about a hundred; `LinearDensity` reproduces the earlier runs.
     InitialState initial_state = InitialState::MechanicalEquilibrium;
 
-    /// Which field the colour gradient is taken of.
+    /// Which field `initial_phase` prescribes its profile in.
     ///
-    /// `Colour` is the default: the normalised field measures worse with the
-    /// surface-tension operator as it is currently calibrated. See
-    /// `InterfaceField`.
+    /// A case says where its interface starts by handing back a tanh profile of
+    /// a prescribed radius or height. The question this answers is *of which
+    /// field* -- and the two choices do not describe the same droplet.
+    ///
+    /// The volume fraction of the heavy component is
+    ///
+    ///     c = rho_1 / rho1 = rho (1 + phi) / (2 rho1)
+    ///
+    /// and the physical interface is c = 1/2, where the two components occupy
+    /// equal volume. In terms of the colour field that sits at
+    /// `phi = (rho1 - rho2) / (rho1 + rho2)`, not at `phi = 0`: at a density
+    /// ratio of 1000 the half-volume point is `phi = 0.998`. Prescribing the
+    /// tanh in `phi` therefore puts the *droplet* nowhere near the prescribed
+    /// radius -- measured on the Laplace case, a droplet asked for R = 10 is
+    /// born at R = 8.41 at a ratio of 20 and at R = 6.27 at 1000 -- while
+    /// `p1_inf` still carries the jump `sigma / R` for the radius that was
+    /// asked for. The case starts out of equilibrium by that mismatch, and the
+    /// mismatch grows with the density ratio.
+    ///
+    /// `BulkNormalised` prescribes the profile in `phi_N = 2c - 1` instead and
+    /// inverts it through :func:`phase_from_normalised`, so the interface
+    /// starts where the case asked for it at any density ratio. It is the
+    /// default. `Colour` reproduces the earlier behaviour.
+    InterfaceField initial_profile_field = InterfaceField::BulkNormalised;
+
+    /// Which field the colour gradient is taken of. See `InterfaceField`.
     InterfaceField interface_field = InterfaceField::Colour;
+
+    /// How the surface tension reaches the populations. See `SurfaceTension`.
+    SurfaceTension surface_tension = SurfaceTension::Perturbation;
 
     /// Isotropy order of the colour gradient.
     ///

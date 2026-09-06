@@ -44,6 +44,10 @@ Solver::Solver(CaseConfig config) : config_(std::move(config)), nx_(config_.nx),
     phi_ = Field(nx_, ny_);
     phi_n_ = Field(nx_, ny_);
     force_ = Field(nx_, ny_, 2);
+    force_surface_ = Field(nx_, ny_, 2);
+    normal_x_ = Field(nx_, ny_);
+    normal_y_ = Field(nx_, ny_);
+    gradient_norm_ = Field(nx_, ny_);
 
     f_ = Field(nx_, ny_, kQ);
     g_ = Field(nx_, ny_, kQ);
@@ -73,9 +77,7 @@ void Solver::update_interface_field() {
     }
 }
 
-void Solver::colour_gradient(int i, int j, double* grad_x, double* grad_y) const {
-    const double* field = normalise_interface_ ? phi_n_.data() : phi_.data();
-    // Both stencils already carry the 1 / cs^2 factor of the colour gradient.
+void Solver::gradient_at(const double* field, int i, int j, double* grad_x, double* grad_y) const {
     if (wall_y_) {
         // A neighbour beyond a y wall contributes nothing, so the gradient
         // becomes one-sided within `stencil_reach` nodes of it.
@@ -83,6 +85,10 @@ void Solver::colour_gradient(int i, int j, double* grad_x, double* grad_y) const
     } else {
         gradient_periodic(field, nx_, ny_, i, j, config_.stencil, grad_x, grad_y);
     }
+}
+
+void Solver::colour_gradient(int i, int j, double* grad_x, double* grad_y) const {
+    gradient_at(normalise_interface_ ? phi_n_.data() : phi_.data(), i, j, grad_x, grad_y);
 }
 
 void Solver::equilibrium() {
@@ -145,8 +151,11 @@ void Solver::macroscopic() {
                 sum_xi_y += f_local * kXi[k][1];
             }
             rho_(i, j) = sum_f;
-            force_(i, j, 0) = 0.0;
-            force_(i, j, 1) = has_gravity ? -sum_f * gravity : 0.0;
+            // The capillary force was built at the end of the previous step,
+            // from the phase field the collision operators of this step used;
+            // it is zero unless the case asks for the CSF form.
+            force_(i, j, 0) = force_surface_(i, j, 0);
+            force_(i, j, 1) = force_surface_(i, j, 1) + (has_gravity ? -sum_f * gravity : 0.0);
             // Guo's forcing: half the force acts on the velocity of this step.
             u_(i, j, 0) = (sum_xi_x + force_(i, j, 0) * dt_ * 0.5) / sum_f;
             u_(i, j, 1) = (sum_xi_y + force_(i, j, 1) * dt_ * 0.5) / sum_f;
@@ -316,7 +325,79 @@ void Solver::force() {
     }
 }
 
+void Solver::surface_force() {
+    if (config_.surface_tension != SurfaceTension::ContinuumSurfaceForce) {
+        return;
+    }
+    const bool parallel = parallel_;
+    const double sigma = config_.physics.sigma;
+
+    // Pass one: the interface normal, pointing out of component 1.
+    //
+    //     n = -grad phi_N / |grad phi_N|
+    //
+    // It is stored in two flat fields rather than one field of pairs because
+    // the gradient stencil below differentiates it again, and that takes a
+    // contiguous scalar lattice.
+#pragma omp parallel for collapse(2) if (parallel)
+    for (int i = 0; i < nx_; i++) {
+        for (int j = 0; j < ny_; j++) {
+            double gx = 0.0, gy = 0.0;
+            colour_gradient(i, j, &gx, &gy);
+            const double norm = std::sqrt(gx * gx + gy * gy);
+            gradient_norm_(i, j) = norm;
+            // `kInterfaceGradientFloor`, not `kGradientEpsilon`: a normal built
+            // from round-off is a unit vector like any other, and the curvature
+            // it feeds does not shrink with the gradient it came from.
+            if (norm > kInterfaceGradientFloor) {
+                normal_x_(i, j) = -gx / norm;
+                normal_y_(i, j) = -gy / norm;
+            } else {
+                normal_x_(i, j) = 0.0;
+                normal_y_(i, j) = 0.0;
+            }
+        }
+    }
+
+    // Pass two: the curvature, and the force it carries.
+    //
+    //     K   = n_x n_y (dn_x/dy + dn_y/dx) - n_x^2 dn_y/dy - n_y^2 dn_x/dx
+    //     F_s = -1/2 sigma K grad phi_N
+    //
+    // The curvature is Ba et al. Eq. (26), which is `-div n` rewritten so that
+    // it stays bounded where the discrete normal is not exactly a unit vector.
+    // The 1/2 makes |grad phi_N| / 2 an interface delta function: phi_N runs
+    // from -1 to +1, so it integrates to one across the interface and the force
+    // integrates to sigma K.
+#pragma omp parallel for collapse(2) if (parallel)
+    for (int i = 0; i < nx_; i++) {
+        for (int j = 0; j < ny_; j++) {
+            double dnx_dx = 0.0, dnx_dy = 0.0, dny_dx = 0.0, dny_dy = 0.0;
+            gradient_at(normal_x_.data(), i, j, &dnx_dx, &dnx_dy);
+            gradient_at(normal_y_.data(), i, j, &dny_dx, &dny_dy);
+
+            const double nx = normal_x_(i, j);
+            const double ny = normal_y_(i, j);
+            const double curvature =
+                nx * ny * (dnx_dy + dny_dx) - nx * nx * dny_dy - ny * ny * dnx_dx;
+
+            // grad phi_N = -n |grad phi_N|, so the force needs no second gradient.
+            // Off the interface the normal is zero by the floor above, and so
+            // is the curvature built from it; this only makes that explicit.
+            const double norm = gradient_norm_(i, j);
+            const double magnitude =
+                norm > kInterfaceGradientFloor ? 0.5 * sigma * curvature * norm : 0.0;
+            force_surface_(i, j, 0) = magnitude * nx;
+            force_surface_(i, j, 1) = magnitude * ny;
+        }
+    }
+}
+
 void Solver::collide_surface() {
+    if (config_.surface_tension == SurfaceTension::ContinuumSurfaceForce) {
+        // The tension is a body force there, already in `force_surface_`.
+        return;
+    }
     const bool parallel = parallel_;
     const double nu = config_.physics.nu;
     const double nu_b = config_.physics.nu_b;
@@ -424,7 +505,13 @@ void Solver::initialize() {
 
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
-            const double phi_local = config_.initial_phase(config_, i, j);
+            double phi_local = config_.initial_phase(config_, i, j);
+            if (config_.initial_profile_field == InterfaceField::BulkNormalised) {
+                // The case prescribed its profile in phi_N, whose zero contour
+                // is the interface at any density ratio; recover the colour
+                // field that carries it.
+                phi_local = phase_from_normalised(phi_local, physics.rho1, physics.rho2);
+            }
             phi_(i, j) = phi_local;
             u_(i, j, 0) = 0.0;  // the flow starts at rest
             u_(i, j, 1) = 0.0;
@@ -477,6 +564,8 @@ void Solver::initialize() {
     }
 
     update_interface_field();
+    // The first step reads a capillary force, so it has to exist by then.
+    surface_force();
 
     equilibrium();
     for (int i = 0; i < nx_; i++) {
@@ -502,6 +591,7 @@ void Solver::step() {
     // It used to be built once in initialize() and never again, which left the
     // BulkNormalised option taking its gradient of a field frozen at t = 0.
     update_interface_field();
+    surface_force();
     equilibrium();
 }
 

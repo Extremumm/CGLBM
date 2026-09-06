@@ -21,35 +21,44 @@ from pycglbm.testing import artifacts_dir, run_program
 # back. A constant duplicated in a test is a constant that drifts.
 
 # Measured baselines for the current scheme (restored equation of state, E8
-# colour gradient, interface started in mechanical equilibrium). They are what
-# the solver does, pinned to catch regressions. The history behind them, on this
-# same case at density ratio 20:
+# colour gradient, interface started in mechanical equilibrium, located and
+# driven through the bulk-normalised phase field, tension applied as a
+# continuum surface force). They are what the solver does, pinned to catch
+# regressions. The history behind them, on this same case at density ratio 20:
 #   linear-mixing pressure, E4 gradient      : 0.720 * sigma/R_rho   (28 % low)
 #   restored EOS, E4 gradient                : 0.962 * sigma/R_rho
 #   restored EOS, E8 gradient                : 0.962 * sigma/R_rho, fewer currents
 #   the above, started in mechanical equilib.: 0.895 * sigma/R_rho
-# The last step traded 7 % on this case for a scheme that runs at density ratios
-# up to 10^5 instead of diverging above 100 -- see docs/numerics.md. Run with
-# `--initial-state=linear` to reproduce the row above it.
-MEASURED_JUMP_RATIO = 0.895
+#   the above, Ba et al. phi_N + CSF tension : 1.021 * sigma/R_rho
+# The last step is what carries the density ratio to 1000 within a few per cent
+# rather than a factor of two, and it cut the spurious currents by 72x on this
+# case. `--initial-profile=colour --interface-field=colour
+# --surface-tension=perturbation` reproduces the row above it.
+MEASURED_JUMP_RATIO = 1.021
 MEASURED_JUMP_TOLERANCE = 0.03
 
 #: The phase and density interfaces settle this far apart, in lattice units.
-#: An artefact of the restored equation of state, tracked so that a scheme
-#: change which removes it shows up here rather than passing unnoticed. It is
-#: barely moved by the initialisation (2.270 linear, 2.284 equilibrium), which
-#: is part of the evidence that it belongs to the equation of state.
-MEASURED_INTERFACE_SPLIT = 2.28
+#: An artefact of the equation of state, tracked so that a scheme change which
+#: removes it shows up here rather than passing unnoticed. It is barely moved by
+#: the initialisation (2.270 linear, 2.284 equilibrium, 2.349 with the profile
+#: laid down in phi_N), which is the evidence that it belongs to the equation of
+#: state. The density radius is the physical one: rho = (rho1 + rho2) / 2 is
+#: exactly where the two components occupy equal volume, which is the surface
+#: the tension acts on. See docs/numerics.md.
+MEASURED_INTERFACE_SPLIT = 2.35
 INTERFACE_SPLIT_TOLERANCE = 0.4
 
 #: Spurious currents at steady state, in lattice units.
-MEASURED_MAX_VELOCITY = 1.19e-3
+#: The continuum-surface-force tension of Ba et al. dropped this from 1.19e-3,
+#: a factor of 72, which is the clearest single sign that the tension is now
+#: applied on the interface rather than beside it.
+MEASURED_MAX_VELOCITY = 1.66e-5
 
 #: Radius the density field starts at, in lattice units.
-#: The phase field starts exactly on the prescribed radius; the density does
-#: not, because mechanical equilibrium -- not a linear interpolation -- is what
-#: sets the density profile across the interface.
-MEASURED_INITIAL_DENSITY_RADIUS = 8.41
+#: The case asks for 10 and now gets it. It used to start at 8.41, because the
+#: tanh was laid down in the colour field, whose zero contour is not the
+#: interface once the two bulk densities differ -- Ba et al. Eq. (21).
+MEASURED_INITIAL_DENSITY_RADIUS = 10.06
 
 
 @pytest.fixture(scope="module")
@@ -81,13 +90,16 @@ def test_verification_laplace_color_gradient_initial_pressure_jump(laplace_run, 
     """At t = 0 the prescribed field must satisfy dp = sigma / R exactly."""
     jump = laplace_run.pressure_jump(0, inner=case["inner"], outer=case["outer"])
     assert jump == pytest.approx(case["jump"], rel=1.0e-3)
-    # The phase field starts exactly on the prescribed radius.
-    assert laplace_run.phase_interface_radius(0) == pytest.approx(case["radius"], abs=0.1)
-    # The density does not: its profile comes from solving the equation of
-    # state for mechanical equilibrium, which is not symmetric about phi = 0.
+    # The *density* field starts on the prescribed radius, because the profile
+    # is laid down in phi_N and rho = (rho1 + rho2) / 2 is exactly phi_N = 0.
+    # This is the point of `--initial-profile=normalised`: `sigma / radius` in
+    # `p1_inf` and the droplet it is applied to now mean the same radius.
     assert laplace_run.density_interface_radius(0) == pytest.approx(
         MEASURED_INITIAL_DENSITY_RADIUS, abs=0.1
     )
+    # The colour field's zero contour does not, and cannot: it sits at
+    # phi = (rho1 - rho2) / (rho1 + rho2), which is 0.905 at this density ratio.
+    assert laplace_run.phase_interface_radius(0) > case["radius"]
 
 
 @pytest.mark.long

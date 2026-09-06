@@ -63,6 +63,26 @@ inline constexpr double kW[kQ] = {
 /// which vanishes away from the interface -- everywhere except a few nodes.
 inline constexpr double kGradientEpsilon = 1.0e-10;
 
+/// Below this, a node is treated as carrying no interface at all.
+///
+/// `kGradientEpsilon` only keeps a division safe. The curvature is a harder
+/// case: it is built from the *unit* normal, so it does not shrink with the
+/// gradient it came from, and in the bulk -- where the gradient is nothing but
+/// round-off -- it is a large random number. The capillary force
+/// `sigma K |grad phi_N| / 2` then fails to vanish there.
+///
+/// This bites in proportion to the density ratio, because phi_N amplifies noise
+/// in phi by `d phi_N / d phi = rho1 / rho2` at `phi = +1`. Measured in the
+/// heavy bulk of the Laplace droplet, `|grad phi_N|` starts at 7e-12 and grows;
+/// at a density ratio of 10^4 it crosses 1e-10 by step 9000 and the run is
+/// destroyed by step 19000. The physical gradient at the interface is 0.66, so
+/// a floor of 1e-6 sits five orders below anything real and three above the
+/// noise at a ratio of 10^5.
+///
+/// Ba et al. state the same rule in words: the interfacial tension "is applied
+/// only at the lattice sites where two fluids coexist" (after their Eq. 24).
+inline constexpr double kInterfaceGradientFloor = 1.0e-6;
+
 /// Lattice spacing, time step, and the sound speed they imply.
 ///
 /// `dx` and `dt` are 1 in every case shipped here; they are kept explicit

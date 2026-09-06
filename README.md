@@ -82,8 +82,13 @@ command line, so a resolution or a run length is a flag rather than a rebuild:
 
 ```
   --stencil=E4|E6|E8  isotropy order of the colour gradient
+  --initial-profile=colour|normalised
+                      field the initial tanh profile is prescribed in
   --interface-field=colour|normalised
                       field the colour gradient is taken of
+  --surface-tension=perturbation|csf
+                      capillary stress in Omega^(2), or a body force from an
+                      explicit curvature (Ba et al. 2016)
   --initial-state=equilibrium|eos|linear
                       how rho and p are laid down at t = 0
   --nx=N, --ny=N      lattice size
@@ -238,20 +243,39 @@ a solver are additionally marked `long` and skipped unless `--runlong` is given.
 the resulting `CaseOutput`.
 
 > **Known gap.** The `laplace` case relaxes to a stationary pressure jump of
-> about 0.90 σ/R instead of σ/R, while the droplet radius and the interface stay
-> stable. The jump is exact at t = 0 by construction. The validation test pins
-> this measured value to catch regressions; it does not certify the Laplace law.
+> about 1.02 σ/R instead of σ/R, measured against the radius the density field
+> settles at, which is the surface where the two components occupy equal volume.
+> The jump is exact at t = 0 by construction. The validation test pins this
+> measured value to catch regressions; it does not certify the Laplace law.
 > See [`docs/numerics.md`](docs/numerics.md).
 
 ### Density ratio
 
-The scheme runs at density ratios up to 10⁵. It is quantitative to about 10 %
-in the Laplace jump up to a ratio of 100, and degrades to roughly a factor of
-two at 10⁵ — stability and accuracy are separate claims, and the second is the
-weaker one. Above a ratio of about 100 it used to diverge before step 200; what
-changed is that the interface now starts in mechanical equilibrium rather than
-from a density interpolated linearly in the phase field. The measurements, the
-failure mode it fixes, and where the literature stands are in
+The scheme is quantitative — a few per cent on the Laplace jump — up to a
+density ratio of 10³, which is where the colour-gradient literature stops. Two
+things carry it there, and both come from
+[Ba et al. (2016)](docs/references.md):
+
+- the interface is located by the bulk-normalised phase field φ_N = 2c − 1,
+  whose zero contour is the surface where the two components occupy equal
+  volume, rather than by the colour field, whose zero sits at φ = 0.998 at a
+  ratio of 10³ — well inside the light fluid;
+- the surface tension is applied as a body force built from an explicit
+  curvature, rather than as a capillary stress inside the collision, which
+  needs the relaxation time to be uniform across the interface and it is not.
+
+On the shipped `laplace` case that moved the jump from 0.895 to 1.021 σ/R and
+cut the spurious currents by a factor of 72, to 1.7 × 10⁻⁵; at Ba et al.'s own
+static-droplet settings it gives +0.20 % at a ratio of 20 and −4.94 % at 10³.
+The enhanced equilibrium of Leclaire et al. (2013) turned out to be already
+present — it is the same expression as the third-order Hermite term the scheme
+already had, agreeing to 10⁻¹⁴.
+
+Above 10³ this configuration diverges. The older stress-based operator does not
+and still runs at 10⁵, but reads 0.35 σ/R there, which is qualitative;
+`--surface-tension=perturbation --interface-field=colour
+--initial-profile=colour` selects it. The measurements, the derivations and what
+is still missing are in
 [`docs/numerics.md`](docs/numerics.md#how-far-the-density-ratio-goes).
 
 ## PyCGLBM

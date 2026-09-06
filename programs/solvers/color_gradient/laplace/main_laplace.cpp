@@ -58,6 +58,21 @@ CaseConfig laplace_case() {
     // nearest-neighbour gradient is what limits the model at large density
     // contrast, and that a higher-order isotropic one cuts spurious currents.
     config.stencil = cglbm::lbm::GradientStencil::E8;
+
+    // The interface is the surface where the two components occupy equal
+    // volume, and that is the zero of the bulk-normalised phase field, not of
+    // the colour field -- at a density ratio of 1000 the colour field's zero
+    // sits at phi = 0.998, deep inside the light fluid. Ba et al. Eq. (21).
+    // Both the initial profile and the gradient the tension rides on are
+    // therefore taken of phi_N.
+    config.interface_field = cglbm::lbm::InterfaceField::BulkNormalised;
+    // With the interface in the right place, the capillary stress of
+    // Omega^(2) has to be injected where tau is largest, and it is divided by
+    // tau: the tension collapses. Ba et al.'s continuum-surface-force operator
+    // reaches the momentum equation through Guo's forcing instead, whose
+    // factor stays bounded, and it is what holds Laplace's law to a few per
+    // cent at a density ratio of 1000. See docs/numerics.md.
+    config.surface_tension = cglbm::lbm::SurfaceTension::ContinuumSurfaceForce;
     config.warn_phase_out_of_range = true;
 
     return config;
