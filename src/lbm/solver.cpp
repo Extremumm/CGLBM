@@ -9,8 +9,7 @@
 namespace cglbm {
 namespace lbm {
 
-Solver::Solver(CaseConfig config)
-    : config_(std::move(config)), nx_(config_.nx), ny_(config_.ny) {
+Solver::Solver(CaseConfig config) : config_(std::move(config)), nx_(config_.nx), ny_(config_.ny) {
     if (nx_ <= 0 || ny_ <= 0) {
         throw std::invalid_argument("lattice must have at least one node on each axis");
     }
@@ -30,9 +29,11 @@ Solver::Solver(CaseConfig config)
     cs6_ = config_.units.cs6();
 
     wall_y_ = config_.boundary == Boundary::WallY;
+    normalise_interface_ = config_.interface_field == InterfaceField::BulkNormalised;
     parallel_ = config_.parallel;
     components_ = {config_.physics.c1 * config_.physics.c1,
-                   config_.physics.c2 * config_.physics.c2, config_.physics.p1_inf,
+                   config_.physics.c2 * config_.physics.c2,
+                   config_.physics.p1_inf,
                    config_.physics.p2_inf};
 
     rho_ = Field(nx_, ny_);
@@ -41,6 +42,7 @@ Solver::Solver(CaseConfig config)
     p_ = Field(nx_, ny_);
     p_mdt_ = Field(nx_, ny_);
     phi_ = Field(nx_, ny_);
+    phi_n_ = Field(nx_, ny_);
     force_ = Field(nx_, ny_, 2);
 
     f_ = Field(nx_, ny_, kQ);
@@ -56,14 +58,30 @@ MacroscopicState Solver::state() const {
     return MacroscopicState{&rho_, &u_, &phi_, &p_};
 }
 
+void Solver::update_interface_field() {
+    if (!normalise_interface_) {
+        return;
+    }
+    const bool parallel = parallel_;
+    const double rho1 = config_.physics.rho1;
+    const double rho2 = config_.physics.rho2;
+#pragma omp parallel for collapse(2) if (parallel)
+    for (int i = 0; i < nx_; i++) {
+        for (int j = 0; j < ny_; j++) {
+            phi_n_(i, j) = normalised_phase(phi_(i, j), rho1, rho2);
+        }
+    }
+}
+
 void Solver::colour_gradient(int i, int j, double* grad_x, double* grad_y) const {
+    const double* field = normalise_interface_ ? phi_n_.data() : phi_.data();
     // Both stencils already carry the 1 / cs^2 factor of the colour gradient.
     if (wall_y_) {
         // A neighbour beyond a y wall contributes nothing, so the gradient
         // becomes one-sided within `stencil_reach` nodes of it.
-        gradient_wall_y(phi_.data(), nx_, ny_, i, j, config_.stencil, grad_x, grad_y);
+        gradient_wall_y(field, nx_, ny_, i, j, config_.stencil, grad_x, grad_y);
     } else {
-        gradient_periodic(phi_.data(), nx_, ny_, i, j, config_.stencil, grad_x, grad_y);
+        gradient_periodic(field, nx_, ny_, i, j, config_.stencil, grad_x, grad_y);
     }
 }
 
@@ -102,9 +120,9 @@ void Solver::equilibrium() {
                     (H0 + u_x * Hx / cs2_ + u_y * Hy / cs2_ +
                      0.5 * (u_x * u_x * Hxx + u_x * u_y * Hxy * 2. + u_y * u_y * Hyy) / cs4_);
                 f_eq_(i, j, k) =
-                    term1 + (p_local - rho_local * cs2_) *
-                                (E + kW[k] * (u_x * (Hyyx + Hxxx) + u_y * (Hyyy + Hxxy)) /
-                                         (2. * cs6_));
+                    term1 +
+                    (p_local - rho_local * cs2_) *
+                        (E + kW[k] * (u_x * (Hyyx + Hxxx) + u_y * (Hyyy + Hxxy)) / (2. * cs6_));
             }
         }
     }
@@ -280,17 +298,15 @@ void Solver::force() {
             for (int k = 0; k < kQ; k++) {
                 const double H_nu = (kXi[k][0] * kXi[k][0] - kXi[k][1] * kXi[k][1]) / 2.;
                 const double H_b = (kXi[k][0] * kXi[k][0] + kXi[k][1] * kXi[k][1]) / 2. - cs2_;
-                S_Sp[k] =
-                    kW[k] * (derive_y * (3. * H_nu - H_b) + derive_x * (-3. * H_nu - H_b)) /
-                    (2. * cs4_);
+                S_Sp[k] = kW[k] * (derive_y * (3. * H_nu - H_b) + derive_x * (-3. * H_nu - H_b)) /
+                          (2. * cs4_);
             }
 
             for (int k = 0; k < kQ; k++) {
                 const double H_xx = kXi[k][0] * kXi[k][0] - cs2_;
                 const double H_yy = kXi[k][1] * kXi[k][1] - cs2_;
                 const double H_xxyy = kXi[k][0] * kXi[k][0] * kXi[k][1] * kXi[k][1] -
-                                      cs2_ * (kXi[k][0] * kXi[k][0] + kXi[k][1] * kXi[k][1]) +
-                                      cs4_;
+                                      cs2_ * (kXi[k][0] * kXi[k][0] + kXi[k][1] * kXi[k][1]) + cs4_;
                 const double E = kW[k] * ((H_xx + H_yy) / (2. * cs4_) - H_xxyy / (4. * cs6_));
                 S_t[k] = (p_(i, j) - p_mdt_(i, j) - (rho_(i, j) - rho_mdt_(i, j)) * cs2_) * E;
 
@@ -352,10 +368,9 @@ void Solver::recolor() {
                 // that holds the interface at ch_width_ope.
                 for (int k = 0; k < kQ; k++) {
                     const double xi_x = kXi[k][0], xi_y = kXi[k][1];
-                    omega_3_(i, j, k) = kW[k] * p_(i, j) * (1 - phi_(i, j) * phi_(i, j)) /
-                                        (2. * ch_width_ope) *
-                                        (xi_x * grad_phi_x + xi_y * grad_phi_y) /
-                                        (cs2_ * norm_grad_phi);
+                    omega_3_(i, j, k) =
+                        kW[k] * p_(i, j) * (1 - phi_(i, j) * phi_(i, j)) / (2. * ch_width_ope) *
+                        (xi_x * grad_phi_x + xi_y * grad_phi_y) / (cs2_ * norm_grad_phi);
                 }
             } else {
                 for (int k = 0; k < kQ; k++) {
@@ -389,8 +404,8 @@ void Solver::stream() {
                               : (j + static_cast<int>(kXi[k][1]) + ny_) % ny_;
                     kp = k;
                 }
-                f_(ip, jp, kp) = f_eq_(i, j, k) + omega_1_(i, j, k) + omega_2_(i, j, k) +
-                                 0.5 * source_(i, j, k);
+                f_(ip, jp, kp) =
+                    f_eq_(i, j, k) + omega_1_(i, j, k) + omega_2_(i, j, k) + 0.5 * source_(i, j, k);
                 // g is the colour carried by the population just written, so it
                 // reads back the same slot. On an interior node kp == k and the
                 // distinction is invisible; on a reflected direction it is not.
@@ -414,19 +429,45 @@ void Solver::initialize() {
             u_(i, j, 0) = 0.0;  // the flow starts at rest
             u_(i, j, 1) = 0.0;
 
-            const double rho_local =
+            double rho_local =
                 physics.rho1 * (0.5 + 0.5 * phi_local) + physics.rho2 * (0.5 - 0.5 * phi_local);
+            double p_local = 0.0;
+
+            switch (config_.initial_state) {
+            case InitialState::LinearDensity:
+                // The historical pair: density linear in phi, pressure from
+                // a linear mixing rule the time loop does not use.
+                p_local = rho_local * ((1 + phi_local) * 0.5 * physics.c1 * physics.c1 +
+                                       (1 - phi_local) * 0.5 * physics.c2 * physics.c2) -
+                          (1 + phi_local) * 0.5 * physics.p1_inf -
+                          (1 - phi_local) / 2. * physics.p2_inf;
+                break;
+            case InitialState::EquationOfStateP:
+                // Same density, but the pressure the solver will itself
+                // compute, so the first step introduces no discontinuity.
+                p_local = ::cglbm::lbm::pressure(rho_local, phi_local, components_);
+                break;
+            case InitialState::MechanicalEquilibrium: {
+                // Pick the density that puts the interface at the pressure
+                // it belongs at, instead of reading off whatever pressure a
+                // linearly interpolated density happens to imply. The
+                // target interpolates the two bulk pressures, which already
+                // differ by the Laplace jump through p1_inf.
+                const double p_heavy = physics.rho1 * physics.c1 * physics.c1 - physics.p1_inf;
+                const double p_light = physics.rho2 * physics.c2 * physics.c2 - physics.p2_inf;
+                const double target = p_light + (p_heavy - p_light) * 0.5 * (1.0 + phi_local);
+                rho_local =
+                    density_at_pressure(phi_local, target, physics.rho1, physics.rho2, components_);
+                // Report the pressure the solver will read back, so that
+                // t = 0 and step 1 agree to the bisection tolerance.
+                p_local = ::cglbm::lbm::pressure(rho_local, phi_local, components_);
+                break;
+            }
+            }
+
             rho_(i, j) = rho_local;
             // At t = 0 the previous step is this one.
             rho_mdt_(i, j) = rho_local;
-
-            // The pressure is laid down with the linear mixing rule rather than
-            // with the equation of state, which is what makes the Laplace jump
-            // exact at t = 0 given `matched_p1_inf`.
-            const double p_local = rho_local * ((1 + phi_local) * 0.5 * physics.c1 * physics.c1 +
-                                                (1 - phi_local) * 0.5 * physics.c2 * physics.c2) -
-                                   (1 + phi_local) * 0.5 * physics.p1_inf -
-                                   (1 - phi_local) / 2. * physics.p2_inf;
             p_(i, j) = p_local;
             p_mdt_(i, j) = p_local;
 
@@ -434,6 +475,8 @@ void Solver::initialize() {
             force_(i, j, 1) = has_gravity ? -rho_local * physics.gravity : 0.0;
         }
     }
+
+    update_interface_field();
 
     equilibrium();
     for (int i = 0; i < nx_; i++) {

@@ -26,7 +26,7 @@ namespace cglbm {
 namespace lbm {
 
 class Field {
-  public:
+public:
     Field() = default;
 
     /// `nx` by `ny` nodes, `depth` values each, all zero.
@@ -37,24 +37,42 @@ class Field {
                 0.0) {}
 
     /// Value at node (i, j) of a scalar field.
-    double& operator()(int i, int j) { return data_[index(i, j, 0)]; }
-    double operator()(int i, int j) const { return data_[index(i, j, 0)]; }
+    double& operator()(int i, int j) {
+        return data_[index(i, j, 0)];
+    }
+    double operator()(int i, int j) const {
+        return data_[index(i, j, 0)];
+    }
 
     /// Component k at node (i, j).
-    double& operator()(int i, int j, int k) { return data_[index(i, j, k)]; }
-    double operator()(int i, int j, int k) const { return data_[index(i, j, k)]; }
+    double& operator()(int i, int j, int k) {
+        return data_[index(i, j, k)];
+    }
+    double operator()(int i, int j, int k) const {
+        return data_[index(i, j, k)];
+    }
 
     /// Contiguous storage, laid out as `[nx][ny][depth]`.
     ///
     /// A scalar field's pointer is what the gradient stencils take.
-    double* data() { return data_.data(); }
-    const double* data() const { return data_.data(); }
+    double* data() {
+        return data_.data();
+    }
+    const double* data() const {
+        return data_.data();
+    }
 
-    int nx() const { return nx_; }
-    int ny() const { return ny_; }
-    int depth() const { return depth_; }
+    int nx() const {
+        return nx_;
+    }
+    int ny() const {
+        return ny_;
+    }
+    int depth() const {
+        return depth_;
+    }
 
-  private:
+private:
     std::size_t index(int i, int j, int k) const {
         return (static_cast<std::size_t>(i) * static_cast<std::size_t>(ny_) +
                 static_cast<std::size_t>(j)) *

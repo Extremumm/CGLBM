@@ -82,6 +82,10 @@ command line, so a resolution or a run length is a flag rather than a rebuild:
 
 ```
   --stencil=E4|E6|E8  isotropy order of the colour gradient
+  --interface-field=colour|normalised
+                      field the colour gradient is taken of
+  --initial-state=equilibrium|eos|linear
+                      how rho and p are laid down at t = 0
   --nx=N, --ny=N      lattice size
   --steps=N           number of time steps
   --interval=N        write the CSV grids every N steps
@@ -234,10 +238,21 @@ a solver are additionally marked `long` and skipped unless `--runlong` is given.
 the resulting `CaseOutput`.
 
 > **Known gap.** The `laplace` case relaxes to a stationary pressure jump of
-> about 0.72 σ/R instead of σ/R, while the droplet radius and the interface stay
+> about 0.90 σ/R instead of σ/R, while the droplet radius and the interface stay
 > stable. The jump is exact at t = 0 by construction. The validation test pins
 > this measured value to catch regressions; it does not certify the Laplace law.
 > See [`docs/numerics.md`](docs/numerics.md).
+
+### Density ratio
+
+The scheme runs at density ratios up to 10⁵. It is quantitative to about 10 %
+in the Laplace jump up to a ratio of 100, and degrades to roughly a factor of
+two at 10⁵ — stability and accuracy are separate claims, and the second is the
+weaker one. Above a ratio of about 100 it used to diverge before step 200; what
+changed is that the interface now starts in mechanical equilibrium rather than
+from a density interpolated linearly in the phase field. The measurements, the
+failure mode it fixes, and where the literature stands are in
+[`docs/numerics.md`](docs/numerics.md#how-far-the-density-ratio-goes).
 
 ## PyCGLBM
 

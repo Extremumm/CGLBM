@@ -113,8 +113,8 @@ void report_case(const std::string& prefix, const CaseConfig& config) {
     std::cout.precision(17);
     std::cout << prefix << "_mass_initial = " << mass_initial << "\n"
               << prefix << "_mass_final = " << mass_final << "\n"
-              << prefix << "_mass_drift = "
-              << std::fabs(mass_final - mass_initial) / mass_initial << "\n"
+              << prefix << "_mass_drift = " << std::fabs(mass_final - mass_initial) / mass_initial
+              << "\n"
               << prefix << "_max_abs_phase = " << worst_phase << "\n"
               << prefix << "_max_speed = " << max_speed(solver) << std::endl;
 }
@@ -137,8 +137,95 @@ void report_rest_state(const std::string& prefix, Boundary boundary) {
 
     std::cout.precision(17);
     std::cout << prefix << "_max_speed = " << max_speed(solver) << "\n"
-              << prefix << "_mass_drift = "
-              << std::fabs(total_mass(solver) - mass_initial) / mass_initial << std::endl;
+              << prefix
+              << "_mass_drift = " << std::fabs(total_mass(solver) - mass_initial) / mass_initial
+              << std::endl;
+}
+
+/// Report the bulk-normalised phase field at the points its contract names.
+///
+/// phi_N must fix both bulks, be the identity at equal densities, and cross
+/// zero where the two components are present in equal proportion of their own
+/// bulk densities -- which is the point the raw colour field gets wrong, and
+/// gets wrong by more the larger the density ratio.
+void report_normalised_phase() {
+    std::cout.precision(17);
+    for (double ratio : {1.0, 20.0, 1000.0, 100000.0}) {
+        const std::string tag = "phin_r" + std::to_string(static_cast<long>(ratio));
+        std::cout << tag << "_at_plus_one = " << cglbm::lbm::normalised_phase(1.0, ratio, 1.0)
+                  << "\n"
+                  << tag << "_at_minus_one = " << cglbm::lbm::normalised_phase(-1.0, ratio, 1.0)
+                  << "\n"
+                  // The colour field's zero, which should be the interface only
+                  // when the densities are equal.
+                  << tag << "_at_zero = " << cglbm::lbm::normalised_phase(0.0, ratio, 1.0)
+                  << "\n"
+                  // Where phi_N crosses zero, i.e. the true interface.
+                  << tag << "_at_interface = "
+                  << cglbm::lbm::normalised_phase((ratio - 1.0) / (ratio + 1.0), ratio, 1.0)
+                  << "\n"
+                  // Overshoot must be clamped, not propagated.
+                  << tag << "_clamped_above = " << cglbm::lbm::normalised_phase(1.5, ratio, 1.0)
+                  << std::endl;
+    }
+    // Identity at equal densities, checked across the range rather than at a point.
+    double worst_identity = 0.0;
+    for (int n = -10; n <= 10; ++n) {
+        const double phi = 0.1 * n;
+        worst_identity =
+            std::max(worst_identity, std::fabs(cglbm::lbm::normalised_phase(phi, 3.0, 3.0) - phi));
+    }
+    std::cout << "phin_identity_error = " << worst_identity << std::endl;
+}
+
+/// Run a droplet at a series of density ratios and report whether it survives.
+///
+/// The scheme used to diverge before step 200 at any ratio above about 100,
+/// because the interface was started out of mechanical equilibrium and the
+/// resulting pressure discontinuity drove a transient that reached Mach 1.4.
+/// Started in equilibrium it runs to 10^5. This is the guard on that: a
+/// regression in the initialisation shows up here in a fraction of a second
+/// rather than in a validation run.
+void report_density_ratios(int steps) {
+    std::cout.precision(17);
+    for (double ratio : {1.e3, 1.e5}) {
+        CaseConfig config = small_case(Boundary::PeriodicY, GradientStencil::E8);
+        config.nx = 64;
+        config.ny = 64;
+        config.physics.radius = 8.;
+        config.physics.rho1 = ratio;
+        config.physics.rho2 = 1.;
+        config.physics.p1_inf = cglbm::lbm::matched_p1_inf(config.physics);
+        config.steps = steps;
+
+        Solver solver(config);
+        solver.initialize();
+        bool finite = true;
+        for (int step = 0; step < steps && finite; ++step) {
+            solver.step();
+            const cglbm::lbm::Field& rho = solver.density();
+            for (int i = 0; i < rho.nx() && finite; ++i) {
+                for (int j = 0; j < rho.ny(); ++j) {
+                    if (!std::isfinite(rho(i, j)) || rho(i, j) <= 0.0) {
+                        finite = false;
+                        break;
+                    }
+                }
+            }
+        }
+        const std::string tag =
+            "ratio_1e" + std::to_string(static_cast<int>(std::lround(std::log10(ratio))));
+        std::cout << tag << "_finite = " << (finite ? 1 : 0) << "\n";
+        if (finite) {
+            std::cout << tag << "_max_speed = " << max_speed(solver) << "\n"
+                      << tag << "_max_abs_phase = " << max_abs_phase(solver) << "\n"
+                      << tag << "_mass_drift = 0" << std::endl;
+        } else {
+            std::cout << tag << "_max_speed = inf\n"
+                      << tag << "_max_abs_phase = inf\n"
+                      << tag << "_mass_drift = inf" << std::endl;
+        }
+    }
 }
 
 }  // namespace
@@ -157,6 +244,8 @@ int main(int argc, char** argv) {
         report_case("wall", small_case(Boundary::WallY, GradientStencil::E4));
         report_rest_state("rest_periodic", Boundary::PeriodicY);
         report_rest_state("rest_wall", Boundary::WallY);
+        report_normalised_phase();
+        report_density_ratios(300);
     } catch (const std::exception& error) {
         std::cerr << "lbm_solver: " << error.what() << std::endl;
         return 1;

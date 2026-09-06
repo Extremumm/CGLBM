@@ -1,5 +1,6 @@
 #include "lbm/case_config.h"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -51,6 +52,14 @@ void print_usage(const std::string& program_name) {
               << "of its own.\n"
               << "\n"
               << "  --stencil=E4|E6|E8  isotropy order of the colour gradient\n"
+              << "  --initial-state=equilibrium|eos|linear\n"
+              << "                      how rho and p are laid down at t = 0; `equilibrium`\n"
+              << "                      starts the interface in mechanical equilibrium, which\n"
+              << "                      is what a density ratio past ~100 needs\n"
+              << "  --interface-field=colour|normalised\n"
+              << "                      field the colour gradient is taken of; `normalised`\n"
+              << "                      divides each component by its bulk density, which is\n"
+              << "                      what a density ratio beyond a few tens needs\n"
               << "  --nx=N, --ny=N      lattice size, overriding the case default\n"
               << "  --steps=N           number of time steps\n"
               << "  --interval=N        write the CSV grids every N steps\n"
@@ -60,6 +69,57 @@ void print_usage(const std::string& program_name) {
 }
 
 }  // namespace
+
+double density_at_pressure(
+    double phi, double target_pressure, double rho1, double rho2, const ComponentPair& components) {
+    const double linear = rho1 * (0.5 + 0.5 * phi) + rho2 * (0.5 - 0.5 * phi);
+
+    // The root lies between the two bulk densities when the target lies between
+    // the two bulk pressures; the bracket is widened generously so that a case
+    // with a large surface-tension offset still encloses it.
+    double lo = 0.25 * std::min(rho1, rho2);
+    double hi = 4.0 * std::max(rho1, rho2);
+    double f_lo = pressure(lo, phi, components) - target_pressure;
+    double f_hi = pressure(hi, phi, components) - target_pressure;
+    if (f_lo * f_hi > 0.0) {
+        return linear;  // no sign change: leave the profile alone
+    }
+
+    // Bisection. The equation of state is a square root of a quadratic, so it
+    // is smooth and cheap; 100 halvings take the bracket below any tolerance
+    // that matters here, and this runs once per node at t = 0 only.
+    for (int iteration = 0; iteration < 100; ++iteration) {
+        const double mid = 0.5 * (lo + hi);
+        const double f_mid = pressure(mid, phi, components) - target_pressure;
+        if (f_mid == 0.0) {
+            return mid;
+        }
+        if (f_lo * f_mid < 0.0) {
+            hi = mid;
+            f_hi = f_mid;
+        } else {
+            lo = mid;
+            f_lo = f_mid;
+        }
+    }
+    (void) f_hi;
+    return 0.5 * (lo + hi);
+}
+
+double normalised_phase(double phi, double rho1, double rho2) {
+    // The recolouring step can overshoot |phi| = 1 by a rounding error, and the
+    // denominator below is only guaranteed positive on [-1, 1].
+    if (phi > 1.0) {
+        phi = 1.0;
+    } else if (phi < -1.0) {
+        phi = -1.0;
+    }
+    // Each component's density divided by its own bulk value. The common
+    // factor rho/2 cancels between numerator and denominator.
+    const double heavy = rho2 * (1.0 + phi);
+    const double light = rho1 * (1.0 - phi);
+    return (heavy - light) / (heavy + light);
+}
 
 double matched_p1_inf(const Physics& physics) {
     return physics.rho1 * physics.c1 * physics.c1 - physics.rho2 * physics.c2 * physics.c2 -
@@ -81,18 +141,14 @@ PhaseFieldInit cosine_layer(double amplitude, bool inverted) {
     return [amplitude, inverted](const CaseConfig& config, int i, int j) {
         // phi(x, y, 0) = tanh( (y - y0 - A L cos(-2 pi x / L)) / W )
         const int y0 = config.ny / 2;
-        const double displacement =
-            amplitude * config.nx * std::cos(-2. * kPi * i / config.nx);
-        const double profile =
-            std::tanh(((j - y0) - displacement) / config.physics.ch_width_ope);
+        const double displacement = amplitude * config.nx * std::cos(-2. * kPi * i / config.nx);
+        const double profile = std::tanh(((j - y0) - displacement) / config.physics.ch_width_ope);
         return inverted ? -profile : profile;
     };
 }
 
-CommandLineResult parse_command_line(CaseConfig& config,
-                                     int argc,
-                                     char** argv,
-                                     const std::string& program_name) {
+CommandLineResult
+parse_command_line(CaseConfig& config, int argc, char** argv, const std::string& program_name) {
     int threads = 0;
     for (int index = 1; index < argc; ++index) {
         const std::string argument = argv[index];
@@ -106,6 +162,32 @@ CommandLineResult parse_command_line(CaseConfig& config,
             if (!stencil_from_name(value.c_str(), &config.stencil)) {
                 std::cerr << "Unknown gradient stencil '" << value << "'; expected E4, E6 or E8."
                           << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "interface-field", &value)) {
+            if (value == "colour" || value == "color") {
+                config.interface_field = InterfaceField::Colour;
+            } else if (value == "normalised" || value == "normalized") {
+                config.interface_field = InterfaceField::BulkNormalised;
+            } else {
+                std::cerr << "Unknown interface field '" << value
+                          << "'; expected colour or normalised." << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "initial-state", &value)) {
+            if (value == "equilibrium") {
+                config.initial_state = InitialState::MechanicalEquilibrium;
+            } else if (value == "eos") {
+                config.initial_state = InitialState::EquationOfStateP;
+            } else if (value == "linear") {
+                config.initial_state = InitialState::LinearDensity;
+            } else {
+                std::cerr << "Unknown initial state '" << value
+                          << "'; expected equilibrium, eos or linear." << std::endl;
                 return CommandLineResult::Error;
             }
             continue;
@@ -175,6 +257,14 @@ std::string describe(const CaseConfig& config) {
         << "interval = " << config.interval << "\n"
         << "boundary = " << (config.boundary == Boundary::WallY ? "wall_y" : "periodic_y") << "\n"
         << "stencil = " << stencil_name(config.stencil) << "\n"
+        << "initial_state = "
+        << (config.initial_state == InitialState::MechanicalEquilibrium
+                ? "equilibrium"
+                : (config.initial_state == InitialState::EquationOfStateP ? "eos" : "linear"))
+        << "\n"
+        << "interface_field = "
+        << (config.interface_field == InterfaceField::BulkNormalised ? "normalised" : "colour")
+        << "\n"
         << "dx = " << config.units.dx << "\n"
         << "dt = " << config.units.dt << "\n"
         << "rho1 = " << physics.rho1 << "\n"

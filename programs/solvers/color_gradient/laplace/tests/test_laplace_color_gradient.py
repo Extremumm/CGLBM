@@ -21,22 +21,35 @@ from pycglbm.testing import artifacts_dir, run_program
 # back. A constant duplicated in a test is a constant that drifts.
 
 # Measured baselines for the current scheme (restored equation of state, E8
-# colour gradient). They are what the solver does, pinned to catch regressions.
-# The history behind them, on this same case at density ratio 20:
-#   linear-mixing pressure, E4 gradient : 0.720 * sigma/R_rho   (28 % low)
-#   restored EOS, E4 gradient           : 0.962 * sigma/R_rho
-#   restored EOS, E8 gradient           : 0.962 * sigma/R_rho, fewer spurious currents
-MEASURED_JUMP_RATIO = 0.962
+# colour gradient, interface started in mechanical equilibrium). They are what
+# the solver does, pinned to catch regressions. The history behind them, on this
+# same case at density ratio 20:
+#   linear-mixing pressure, E4 gradient      : 0.720 * sigma/R_rho   (28 % low)
+#   restored EOS, E4 gradient                : 0.962 * sigma/R_rho
+#   restored EOS, E8 gradient                : 0.962 * sigma/R_rho, fewer currents
+#   the above, started in mechanical equilib.: 0.895 * sigma/R_rho
+# The last step traded 7 % on this case for a scheme that runs at density ratios
+# up to 10^5 instead of diverging above 100 -- see docs/numerics.md. Run with
+# `--initial-state=linear` to reproduce the row above it.
+MEASURED_JUMP_RATIO = 0.895
 MEASURED_JUMP_TOLERANCE = 0.03
 
 #: The phase and density interfaces settle this far apart, in lattice units.
 #: An artefact of the restored equation of state, tracked so that a scheme
-#: change which removes it shows up here rather than passing unnoticed.
-MEASURED_INTERFACE_SPLIT = 2.27
+#: change which removes it shows up here rather than passing unnoticed. It is
+#: barely moved by the initialisation (2.270 linear, 2.284 equilibrium), which
+#: is part of the evidence that it belongs to the equation of state.
+MEASURED_INTERFACE_SPLIT = 2.28
 INTERFACE_SPLIT_TOLERANCE = 0.4
 
 #: Spurious currents at steady state, in lattice units.
-MEASURED_MAX_VELOCITY = 1.11e-3
+MEASURED_MAX_VELOCITY = 1.19e-3
+
+#: Radius the density field starts at, in lattice units.
+#: The phase field starts exactly on the prescribed radius; the density does
+#: not, because mechanical equilibrium -- not a linear interpolation -- is what
+#: sets the density profile across the interface.
+MEASURED_INITIAL_DENSITY_RADIUS = 8.41
 
 
 @pytest.fixture(scope="module")
@@ -68,9 +81,13 @@ def test_verification_laplace_color_gradient_initial_pressure_jump(laplace_run, 
     """At t = 0 the prescribed field must satisfy dp = sigma / R exactly."""
     jump = laplace_run.pressure_jump(0, inner=case["inner"], outer=case["outer"])
     assert jump == pytest.approx(case["jump"], rel=1.0e-3)
-    # and both interfaces start on the prescribed radius
+    # The phase field starts exactly on the prescribed radius.
     assert laplace_run.phase_interface_radius(0) == pytest.approx(case["radius"], abs=0.1)
-    assert laplace_run.density_interface_radius(0) == pytest.approx(case["radius"], abs=0.1)
+    # The density does not: its profile comes from solving the equation of
+    # state for mechanical equilibrium, which is not symmetric about phi = 0.
+    assert laplace_run.density_interface_radius(0) == pytest.approx(
+        MEASURED_INITIAL_DENSITY_RADIUS, abs=0.1
+    )
 
 
 @pytest.mark.long

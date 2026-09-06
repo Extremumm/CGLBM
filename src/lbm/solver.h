@@ -45,7 +45,7 @@ namespace cglbm {
 namespace lbm {
 
 class Solver {
-  public:
+public:
     /// Build the lattice described by `config` and allocate its fields.
     ///
     /// Throws `std::invalid_argument` when the configuration cannot be run --
@@ -68,15 +68,25 @@ class Solver {
     /// The macroscopic fields, for a writer or a test.
     MacroscopicState state() const;
 
-    const CaseConfig& config() const { return config_; }
+    const CaseConfig& config() const {
+        return config_;
+    }
 
     /// Read-only views of the state, for tests that check an invariant.
-    const Field& density() const { return rho_; }
-    const Field& velocity() const { return u_; }
-    const Field& phase() const { return phi_; }
-    const Field& pressure() const { return p_; }
+    const Field& density() const {
+        return rho_;
+    }
+    const Field& velocity() const {
+        return u_;
+    }
+    const Field& phase() const {
+        return phi_;
+    }
+    const Field& pressure() const {
+        return p_;
+    }
 
-  private:
+private:
     // The eight stages of a step, in the order `step()` applies them.
     void force();
     void collide();
@@ -88,7 +98,14 @@ class Solver {
     void equilibrium();
 
     /// Colour gradient at (i, j), following the case's boundary along y.
+    ///
+    /// Taken of whichever field `config.interface_field` selects, which is what
+    /// centres the surface-tension and recolouring operators on the interface
+    /// rather than on the zero of the raw colour field.
     void colour_gradient(int i, int j, double* grad_x, double* grad_y) const;
+
+    /// Refresh `phi_n_` from `phi_`, when the case asks for a normalised field.
+    void update_interface_field();
 
     CaseConfig config_;
     int nx_;
@@ -101,8 +118,9 @@ class Solver {
     double cs4_;
     double cs6_;
 
-    bool wall_y_;    ///< config_.boundary == Boundary::WallY
-    bool parallel_;  ///< config_.parallel, copied out for the OpenMP if clause
+    bool wall_y_;               ///< config_.boundary == Boundary::WallY
+    bool normalise_interface_;  ///< config_.interface_field == BulkNormalised
+    bool parallel_;             ///< config_.parallel, copied out for the OpenMP if clause
     ComponentPair components_;
 
     // Macroscopic fields.
@@ -112,6 +130,7 @@ class Solver {
     Field p_;        ///< pressure
     Field p_mdt_;    ///< pressure at the previous step
     Field phi_;      ///< phase field
+    Field phi_n_;    ///< phase field normalised by the bulk densities, Ba Eq. (21)
     Field force_;    ///< external volume force, two components per node
 
     // Populations and collision operators.

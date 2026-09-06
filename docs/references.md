@@ -33,7 +33,23 @@
    DOI: [10.1103/PhysRevE.94.023310](https://doi.org/10.1103/PhysRevE.94.023310)
 
    MRT collision plus a third-order Hermite equilibrium and a Chapman–Enskog
-   source term; validated to density ratio 1000. Not implemented here.
+   source term; validated to density ratio 1000.
+
+   **Equation (21) is implemented here**, as `normalised_phase()` and the
+   `InterfaceField::BulkNormalised` option — but measured worse on this case
+   than the raw colour field, because Ω⁽²⁾ here carries its calibration in the
+   gradient magnitude rather than taking σ explicitly. See
+   [`numerics.md`](numerics.md#what-did-not-work). On the phase field used to
+   locate the interface:
+
+   > Usually, ρᴺ is defined by ρᴺ = (ρᴿ − ρᴮ)/(ρᴿ + ρᴮ). This definition,
+   > however, becomes increasingly incorrect in identifying the interface as
+   > the density ratio increases.
+
+   Their replacement normalises each component by its own bulk density, so the
+   zero contour is the interface at any ratio. The MRT collision, the
+   continuum-surface-force perturbation operator and the parabolic
+   relaxation-time interpolation of their Eq. (22) are not implemented.
 
 6. **S. Leclaire, M. Reggio, J.-Y. Trépanier.** *Enhanced equilibrium
    distribution functions for simulating immiscible multiphase flows with
@@ -54,7 +70,25 @@
 
    Also the clearest recent survey of this model family.
 
-9. **M. Latva-Kokko, D. H. Rothman.** *Diffusion properties of gradient-based
+9. **S. Leclaire, M. Reggio, J.-Y. Trépanier.** *Progress and investigation on
+   lattice Boltzmann modeling of multiple immiscible fluids or components with
+   variable density and viscosity ratios.* Journal of Computational Physics
+   **246**, 318–342, 2013.
+   DOI: [10.1016/j.jcp.2013.03.039](https://doi.org/10.1016/j.jcp.2013.03.039)
+
+   The first replacement of the raw colour gradient by a density-weighted one,
+   which Ba et al. Eq. (21) simplifies.
+
+10. **A. Q. Zhang, et al.** *A quantitative comparison of physical accuracy and
+    numerical stability of lattice Boltzmann colour gradient and pseudopotential
+    multicomponent models for microfluidic applications.*
+    [arXiv:2110.05197](https://arxiv.org/abs/2110.05197)
+
+    Places the colour-gradient family against Shan–Chen: a wider accessible
+    range of density ratio, viscosity ratio and surface tension, and numerical
+    stability at O(1000).
+
+11. **M. Latva-Kokko, D. H. Rothman.** *Diffusion properties of gradient-based
    lattice Boltzmann models of immiscible fluids.* Physical Review E **71**,
    056702, 2005.
    DOI: [10.1103/PhysRevE.71.056702](https://doi.org/10.1103/PhysRevE.71.056702)

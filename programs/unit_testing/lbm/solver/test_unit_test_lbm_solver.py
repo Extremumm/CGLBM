@@ -71,3 +71,88 @@ def test_unit_test_lbm_solver_leaves_a_uniform_state_at_rest(solver_report, sten
     values = solver_report[stencil]
     assert float(values[f"{boundary}_max_speed"]) < REST_SPEED_TOLERANCE
     assert float(values[f"{boundary}_mass_drift"]) < MASS_DRIFT_TOLERANCE
+
+
+#: Density ratios the normalised phase field is reported at.
+RATIOS = (1, 20, 1000, 100000)
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("ratio", RATIOS)
+def test_unit_test_lbm_solver_normalised_phase_fixes_the_bulks(solver_report, ratio):
+    """phi_N must leave both bulks where they are, at any density ratio."""
+    values = solver_report["E8"]
+    assert float(values[f"phin_r{ratio}_at_plus_one"]) == pytest.approx(1.0, abs=1e-12)
+    assert float(values[f"phin_r{ratio}_at_minus_one"]) == pytest.approx(-1.0, abs=1e-12)
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("ratio", RATIOS)
+def test_unit_test_lbm_solver_normalised_phase_marks_the_interface(solver_report, ratio):
+    """phi_N must cross zero where the components balance, not where phi does.
+
+    The two coincide only at a density ratio of 1. This is the whole point of
+    the normalisation: the raw colour field's zero drifts into the light fluid
+    as the ratio grows, taking the surface-tension and recolouring operators
+    with it.
+    """
+    values = solver_report["E8"]
+    assert float(values[f"phin_r{ratio}_at_interface"]) == pytest.approx(0.0, abs=1e-12)
+
+    offset = abs(float(values[f"phin_r{ratio}_at_zero"]))
+    if ratio == 1:
+        assert offset == pytest.approx(0.0, abs=1e-12)
+    else:
+        # (rho1 - rho2) / (rho1 + rho2), i.e. how far phi = 0 sits from the
+        # interface once measured in the normalised field.
+        assert offset == pytest.approx((ratio - 1) / (ratio + 1), rel=1e-9)
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_solver_normalised_phase_is_the_identity_at_equal_densities(solver_report):
+    """With rho1 == rho2 the normalisation must change nothing."""
+    assert float(solver_report["E8"]["phin_identity_error"]) < 1.0e-14
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("ratio", RATIOS)
+def test_unit_test_lbm_solver_normalised_phase_clamps_overshoot(solver_report, ratio):
+    """A phase field past 1 must saturate, not run off."""
+    assert float(solver_report["E8"][f"phin_r{ratio}_clamped_above"]) == pytest.approx(1.0)
+
+
+#: Density ratios the solver must survive, as decimal exponents.
+#: The scheme diverged before step 200 above a ratio of about 100 while the
+#: interface was started out of mechanical equilibrium. See docs/numerics.md.
+HIGH_RATIOS = (3, 5)
+
+#: Peak spurious velocity tolerated on the short high-ratio runs, in lattice
+#: units. Measured: 3.3e-3 at 10^3 and 5.4e-3 at 10^5. The lattice sound speed
+#: is 0.577, so these are Mach 1e-2; the transient that used to break these runs
+#: reached Mach 1.4.
+HIGH_RATIO_MAX_SPEED = 2.0e-2
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("exponent", HIGH_RATIOS)
+def test_unit_test_lbm_solver_survives_high_density_ratio(solver_report, exponent):
+    """A droplet at a density ratio of 10^n must still be there after 300 steps."""
+    values = solver_report["E8"]
+    assert int(values[f"ratio_1e{exponent}_finite"]) == 1
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("exponent", HIGH_RATIOS)
+def test_unit_test_lbm_solver_high_density_ratio_stays_subsonic(solver_report, exponent):
+    """The start must not launch an acoustic transient, which is what used to
+    destroy these runs before they could relax."""
+    values = solver_report["E8"]
+    assert float(values[f"ratio_1e{exponent}_max_speed"]) < HIGH_RATIO_MAX_SPEED
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("exponent", HIGH_RATIOS)
+def test_unit_test_lbm_solver_high_density_ratio_keeps_phase_bounded(solver_report, exponent):
+    """phi must stay in [-1, 1] at high density ratio too."""
+    values = solver_report["E8"]
+    assert float(values[f"ratio_1e{exponent}_max_abs_phase"]) <= 1.0 + PHASE_TOLERANCE

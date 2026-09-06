@@ -31,7 +31,7 @@ struct MacroscopicState {
 /// A run that cannot record its result has failed, and a solver that keeps
 /// going wastes the hours it still has to run.
 class OutputError : public std::runtime_error {
-  public:
+public:
     explicit OutputError(const std::string& message) : std::runtime_error(message) {}
 };
 
@@ -42,7 +42,7 @@ class OutputError : public std::runtime_error {
 /// so `numpy` reads them as `array[y, x]`. Velocity interleaves its two
 /// components, giving `ny` rows of `2 * nx` values.
 class CsvWriter {
-  public:
+public:
     /// `precision` is the number of significant digits; 6 is the iostream
     /// default and what every run before this class wrote.
     explicit CsvWriter(int precision) : precision_(precision) {}
@@ -60,7 +60,7 @@ class CsvWriter {
     /// capillary cases measure an oscillation period from it.
     void write_interface(int timestep, const Field& phase);
 
-  private:
+private:
     std::ofstream open_checked(const std::string& filename) const;
 
     int precision_;
