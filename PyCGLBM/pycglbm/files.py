@@ -6,6 +6,11 @@ timestep: ``density_<t>.csv``, ``velocity_<t>.csv``, ``phase_<t>.csv`` and
 column per node ``i`` (x), so the arrays returned here are indexed ``[y, x]``.
 The velocity file stores the two components interleaved along the row, giving
 ``2 * Lx`` columns; :func:`load_velocity` folds them back into ``[y, x, 2]``.
+
+A run also leaves a ``run.log`` whose header is the case configuration, one
+``key = value`` per line. :attr:`CaseOutput.config` reads it back, so a test
+states a parameter by asking the run rather than by repeating a constant that
+lives in the solver.
 """
 
 from __future__ import annotations
@@ -56,6 +61,35 @@ class CaseOutput:
 
     def __repr__(self) -> str:
         return f"CaseOutput({str(self.rundir)!r}, {len(self.timesteps)} timesteps)"
+
+    @property
+    def config(self) -> dict[str, str]:
+        """The case configuration the solver reported, read back from ``run.log``.
+
+        Returns an empty mapping when there is no log, which is what a run
+        launched by hand without redirecting its output leaves behind.
+        """
+        logfile = self.rundir / "run.log"
+        if not logfile.is_file():
+            return {}
+        values: dict[str, str] = {}
+        for line in logfile.read_text(errors="replace").splitlines():
+            key, separator, value = line.partition("=")
+            if separator and key.strip() and " " not in key.strip():
+                values[key.strip()] = value.strip()
+        return values
+
+    def parameter(self, key: str, cast=float):
+        """One reported parameter, converted with ``cast``.
+
+        Raises ``KeyError`` naming the run when the solver did not report it,
+        which is the useful failure: it means the log is from an older binary,
+        not that the value is zero.
+        """
+        config = self.config
+        if key not in config:
+            raise KeyError(f"{key!r} not reported in {self.rundir / 'run.log'}")
+        return cast(config[key])
 
     @property
     def timesteps(self) -> list[int]:

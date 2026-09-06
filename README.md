@@ -77,18 +77,38 @@ mkdir -p artifacts/laplace && cd artifacts/laplace
 ../../bin/solvers/color_gradient/laplace/laplace_opt | tee run.log
 ```
 
-To change a configuration — lattice size, viscosities, surface tension, number
-of steps — edit the constants block at the top of the program's `main_*.cpp`
-and rebuild. Set the thread count of the OpenMP program with `OMP_NUM_THREADS`;
-without it that case falls back to eight threads.
+Every solver takes its case as built-in defaults and accepts overrides on the
+command line, so a resolution or a run length is a flag rather than a rebuild:
 
-Every solver takes one optional argument, the isotropy order of the colour
-gradient — `E4`, `E6` or `E8`:
+```
+  --stencil=E4|E6|E8  isotropy order of the colour gradient
+  --nx=N, --ny=N      lattice size
+  --steps=N           number of time steps
+  --interval=N        write the CSV grids every N steps
+  --precision=N       significant digits in the CSV output (default 6)
+  --threads=N         OpenMP threads; implies parallel execution
+  --help              the same list
+```
 
 ```bash
-utilities/run_case.sh laplace            # the program's own default
-../../bin/solvers/color_gradient/laplace/laplace_opt E4   # the original stencil
+utilities/run_case.sh laplace                    # the case as shipped
+bin/solvers/color_gradient/laplace/laplace_opt E4        # the original stencil
+bin/solvers/color_gradient/laplace/laplace_opt --nx=256 --steps=5000
 ```
+
+The bare stencil name is still accepted as the first argument, as before.
+
+The run log opens with the full configuration as `key = value` lines, which is
+what `pycglbm` reads back:
+
+```python
+CaseOutput("artifacts/laplace").parameter("sigma")
+```
+
+The physical constants of a case — densities, viscosities, surface tension, the
+unit conversion factors `c_dx` and `c_dt` — are in the `*_case()` function at
+the top of its `main_*.cpp`. Set the thread count of the OpenMP program with
+`OMP_NUM_THREADS` or `--threads`; without either it falls back to eight.
 
 ### About the generated files
 
@@ -104,8 +124,11 @@ timestep:
 
 One row per lattice row `j` (y), one column per node `i` (x), so `numpy` reads
 them as `array[y, x]`. `capillary` and `gravity_capillary` also append the
-interface position to `interface.csv`. A VTK writer (`outputVTK`) exists in
-every program for ParaView/VisIt, commented out of the time loop by default.
+interface position to `interface.csv`. `cglbm::lbm::write_vtk` produces a
+ParaView/VisIt file from the same state; no case calls it by default.
+
+Six significant digits is the default and loses about ten digits of a double.
+Pass `--precision=17` for output that round-trips.
 
 ### Programs
 
@@ -117,9 +140,9 @@ every program for ParaView/VisIt, commented out of the time loop by default.
 | `rayleigh_taylor` | 128×1028 | 5×10⁶ | 4/1 | yes | Rayleigh–Taylor instability, σ = 0, serial |
 | `rayleigh_taylor_omp` | 1024×4096 | 2×10⁶ | 4/1 | yes | same case, OpenMP, production resolution |
 
-> `rayleigh_taylor_omp` declares about 2 GB of static lattice arrays, which is
-> why `cmake/Exceptions.cmake` builds it with `-mcmodel=medium` on x86-64.
-> Check the available memory before launching it.
+> `rayleigh_taylor_omp` allocates several GB of lattice at its production
+> resolution. Check the available memory before launching it, or lower it with
+> `--nx` and `--ny`.
 
 ### Organization
 
@@ -140,16 +163,16 @@ Contains all the programs
 
 Contains all the sources for the library
 
-- `src/core` the constants
-- `src/lbm` the scheme itself: the two-component equation of state and the
-  isotropic colour-gradient stencils, each carrying its reference
+- `src/lbm` the scheme: the D2Q9 lattice, the solver and its time loop, the
+  two-component equation of state, the isotropic colour-gradient stencils, the
+  lattice storage and the output writers — each carrying its reference
 - `src/omp` thread-level parallelism: thread count, ids, timing
 - `src/mpi` distributed memory: environment, Cartesian decomposition, halo
   exchange, error checking
+- `src/cuda` GPU support: device query, error checking, device memory
 
-The time loop still lives inside each program's `main_*.cpp`, and
-`src/main_cglbm.cpp` is the entry point waiting for it to move into the library.
-`src/lbm`, `src/omp` and `src/mpi` are complete and tested; see
+The time loop lives in `cglbm::lbm::Solver` (`src/lbm/solver.cpp`), and a
+program under `programs/solvers` is a case definition handed to it. See
 [`docs/numerics.md`](docs/numerics.md) and [`docs/parallel.md`](docs/parallel.md).
 
 #### The `artifacts` folder
@@ -164,6 +187,21 @@ discovers it automatically and builds the target `<name>_opt` / `<name>_dbg`
 from every source in that directory, so adding a case means adding a directory —
 no CMake edit. Its tests are `test_*.py` files placed beside it, usually in a
 `tests` subdirectory.
+
+A solver program fills a `cglbm::lbm::CaseConfig` and hands it to
+`cglbm::lbm::Solver`; the scheme itself is in the library and is not repeated
+per case:
+
+```cpp
+CaseConfig config;
+config.nx = 128;
+config.ny = 128;
+config.steps = 10000;
+config.physics.rho1 = 4.;
+config.physics.rho2 = 1.;
+config.boundary = Boundary::WallY;
+config.initial_phase = cosine_layer(0.2, /*inverted=*/true);
+```
 
 ## Testing
 

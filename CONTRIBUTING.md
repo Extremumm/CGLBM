@@ -12,6 +12,15 @@ Work on a branch, keep `main` buildable. A branch is ready when
 `cmake --build --preset gnu` succeeds for both the `opt` and the `dbg` variants
 and `pytest` is green.
 
+### Changing the scheme
+
+`cmake/CompilerFlags.cmake` pins `-ffp-contract=off`, so a run is reproducible
+bit for bit across optimisation levels. Use that: record a short run of the
+cases you touch before a refactor, and compare the output files afterwards. A
+change meant to be behaviour-preserving that moves a single bit is a change that
+needs explaining, and a change meant to alter the physics should say by how
+much.
+
 ## Coding standards
 
 ### Linters
@@ -36,7 +45,10 @@ pre-commit run --all-files
 | program entry point | `main_<target>.cpp` | `main_gravity_capillary.cpp` |
 | library header | lower snake case, prefixed by its module | `src/mpi/mpi_topology.h` |
 | library symbol | `cglbm::<module>` namespace | `cglbm::mpi::CartesianTopology` |
-| function | lower camel case, as in the existing solvers | `calMacroscopic`, `collide_surface` |
+| function | lower snake case | `stencil_from_name`, `collide_surface` |
+| type | upper camel case | `CartesianTopology`, `CaseConfig` |
+| member variable | lower snake case, trailing underscore | `rho_mdt_`, `parallel_` |
+| compile-time constant | `k` and upper camel case | `kQ`, `kGradientEpsilon` |
 | lattice constant | as in the paper's notation | `cs2`, `w`, `xi`, `p1_inf` |
 | test file | `test_{marker}_{name}.py` | `test_unit_test_files.py` |
 
@@ -79,6 +91,12 @@ decomposition does not inherit the MPI include path.
 1. Create `programs/<group>/<name>/main_<name>.cpp`. CMake globs
    `programs/*/main_*.cpp`, so the targets `<name>_opt` and `<name>_dbg` appear
    with no CMake edit; every other source in that directory is compiled into it.
+
+   A new colour-gradient case is a `cglbm::lbm::CaseConfig` handed to
+   `cglbm::lbm::Solver` — copy the shape of `main_capillary.cpp`. Do not copy a
+   time loop: there is one, in `src/lbm/solver.cpp`, and a case that needs
+   something the scheme does not do yet belongs in the library behind a
+   `CaseConfig` field.
 2. Reconfigure (`cmake --preset gnu`) — the new program is listed at configure
    time.
 3. If the program needs a flag of its own, add it to `cmake/Exceptions.cmake`

@@ -25,17 +25,26 @@ $\Delta x = \Delta t = 1$ (lattice units).
 
 ## Fields
 
-| Symbol | Array | Meaning |
+All fields are members of `cglbm::lbm::Solver` and hold `cglbm::lbm::Field`,
+one heap allocation laid out as `[nx][ny][depth]` — the memory order the old
+`double f[Lx][Ly][Q]` arrays had, without fixing the lattice size at compile
+time.
+
+| Symbol | Member | Meaning |
 |---|---|---|
-| $f_i$ | `f[Lx][Ly][Q]` | sum (total) distribution function |
-| $g_i$ | `g[Lx][Ly][Q]` | difference (color) distribution function |
-| $f_i^{eq}$ | `f_eq[Lx][Ly][Q]` | equilibrium distribution |
-| $\rho$ | `rho`, `rho_mdt` | mixture density, current and previous step |
-| $p$ | `p`, `p_mdt` | pressure, current and previous step |
-| $\vec u$ | `u[Lx][Ly][2]` | velocity |
-| $\phi$ | `phi[Lx][Ly]` | phase field, $\phi = +1$ in fluid 1, $-1$ in fluid 2 |
-| $\Omega^{(1,2,3)}$ | `omega_1/2/3` | the three collision contributions |
-| $S_i$, $\vec F$ | `S`, `F` | forcing term and external body force |
+| $f_i$ | `f_` | sum (total) distribution function |
+| $g_i$ | `g_` | difference (color) distribution function |
+| $f_i^{eq}$ | `f_eq_` | equilibrium distribution |
+| $\rho$ | `rho_`, `rho_mdt_` | mixture density, current and previous step |
+| $p$ | `p_`, `p_mdt_` | pressure, current and previous step |
+| $\vec u$ | `u_` | velocity, two components per node |
+| $\phi$ | `phi_` | phase field, $\phi = +1$ in fluid 1, $-1$ in fluid 2 |
+| $\Omega^{(1,2,3)}$ | `omega_1_/2_/3_` | the three collision contributions |
+| $S_i$, $\vec F$ | `source_`, `force_` | forcing term and external body force |
+
+$S^F$, $S^{Sp}$ and $S^t$ are not fields: each is built and consumed within one
+node of `force()`, so they are local arrays of nine doubles. As lattice-sized
+arrays they cost about a gigabyte on the production Rayleigh-Taylor case.
 
 ## Collision
 
@@ -58,7 +67,7 @@ this order:
    division by the gradient norm; `ch_width_ope` sets the operating interface
    thickness (`ch_width_init` is used only when initialising).
 
-The forcing term assembled by `force()` is the sum of three parts:
+The forcing term assembled by `Solver::force()` is the sum of three parts:
 
 $$S_i = S_i^{F} + S_i^{Sp} + S_i^{t}$$
 
@@ -73,16 +82,15 @@ $$S_i = S_i^{F} + S_i^{Sp} + S_i^{t}$$
 
 Each component is an ideal gas with its own sound speed `c1`, `c2` and its own
 pressure at infinity `p1_inf`, `p2_inf`. The mixture pressure is recovered in
-`calPhaseField` by solving the quadratic mixing relation — the same expression
-implemented independently in `postprocessing/pressure_jump_lafarge.py`, which is
-therefore an analytic check on the initial pressure field.
+`Solver::phase_field()` by solving the quadratic mixing relation, implemented in
+`src/lbm/equation_of_state.cpp`.
 
 For the Laplace benchmark the initial `p1_inf` is offset by $-\sigma/R$ so that
 the initial condition already satisfies the pressure jump.
 
 ## Time loop
 
-`runSimulation()` executes, per step:
+`Solver::step()` executes, per step:
 
 ```
 force()            →  S_i from the external body force F
@@ -90,33 +98,39 @@ collide()          →  Ω(1)  relaxation towards f_eq
 collide_surface()  →  Ω(2)  surface-tension perturbation
 recolor()          →  Ω(3)  interface sharpening
 stream()           →  propagation along ξ_i
-calMacroscopic()   →  ρ, u from moments of f (force-corrected)
-calPhaseField()    →  φ and p from the equation of state
-calEquilibrium()   →  f_eq for the next step
+macroscopic()      →  ρ, u from moments of f (force-corrected)
+phase_field()      →  φ and p from the equation of state
+equilibrium()      →  f_eq for the next step
 ```
 
-Output is written every `interval` steps by `outputDataCSV` (and optionally
-`outputVTK`).
+`Solver::run()` initialises, then loops `config.steps` times, writing the CSV
+grids every `config.interval` steps through `cglbm::lbm::CsvWriter`.
+`cglbm::lbm::write_vtk` produces a ParaView/VisIt file from the same state.
 
 ## Boundary conditions
 
-Neighbour lookups in `collide_surface` and `recolor` (used for the color
-gradient) are periodic in both directions in every case: `(i + ξ_x + Lx) % Lx`,
-`(j + ξ_y + Ly) % Ly`. The propagation step differs per case:
+`CaseConfig::boundary` selects one of two policies, applied consistently by the
+colour gradient, by `force()` and by `stream()`:
 
-| Program | x | y (in `stream`) |
-|---|---|---|
-| `laplace` | periodic | periodic |
-| `capillary`, `gravity_capillary` | periodic | half-way bounce-back |
-| `rayleigh_taylor`, `..._omp` | periodic | half-way bounce-back |
+| Program | `boundary` | x | y |
+|---|---|---|---|
+| `laplace` | `PeriodicY` | periodic | periodic |
+| `capillary`, `gravity_capillary` | `WallY` | periodic | half-way bounce-back |
+| `rayleigh_taylor`, `..._omp` | `WallY` | periodic | half-way bounce-back |
+
+Under `WallY` the colour gradient goes through `gradient_wall_y`, which drops
+any neighbour beyond a wall and so becomes one-sided within `stencil_reach`
+nodes of it; `force()` drops the same neighbours from its lattice divergence.
 
 Half-way bounce-back is implemented inline: at `j == 0` the populations moving
 downwards (`k = 4, 7, 8`) stay on the node and are reflected into `k-2`, and at
 `j == Ly-1` the upward ones (`k = 2, 5, 6`) are reflected into `k+2`. This
 places the resting wall halfway between the last fluid node and the ghost node.
-- `applyAbsorbingBoundary()` damps acoustic waves on the outermost `numBoundary`
-  nodes. It is defined in every case but **commented out** of the time loop;
-  enable it if the initial pressure transient reflects back into the domain.
+
+An `applyAbsorbingBoundary()` that damped acoustic waves on the outermost nodes
+was defined in every solver and commented out of every time loop. It was removed
+with the rest of the duplication; recover it from the history if the initial
+pressure transient ever needs damping.
 
 ## Case-specific validation
 
@@ -134,7 +148,7 @@ because the density contrast is carried by the rest-particle weight of the
 equilibrium, which ties it to the ratio of the components' sound speeds.
 Lafarge et al. remove that coupling by giving each component its own ideal-gas
 branch — its own `c_k` and its own `p_k_inf` — and mixing them through the phase
-field. `src/lbm/equation_of_state.h` implements it, and `calPhaseField` calls it.
+field. `src/lbm/equation_of_state.h` implements it, and `Solver::phase_field()` calls it.
 
 That equation of state used to be computed and then **overwritten** by a linear
 mixing rule, `p = rho cs2 - (1+phi)/2 p1_inf - (1-phi)/2 p2_inf`, which reads
@@ -218,11 +232,72 @@ the equilibrium is the place to look: the enhanced equilibria of Leclaire et al.
 the interfacial momentum error that a truncated equilibrium leaves behind at
 high density contrast. See [`references.md`](references.md).
 
-## Status of the modular library
+## Structure of the solver
 
-`src/core/constants.h`, `src/lbm/lattice_boltzmann.h` and `src/main_cglbm.cpp`
-are an in-progress refactor that factors the shared algorithm out of the
-programs. The implementation units behind `lattice_boltzmann.h` do not exist
-yet, so the `cglbm` library is header-only and `src/main_cglbm.cpp` is not built
-into a target — it would compile but not link. The programs under
-`programs/solvers` are the working code.
+The scheme has one implementation, `cglbm::lbm::Solver` in `src/lbm/solver.cpp`.
+A program under `programs/solvers` is a *case definition*: it fills a
+`cglbm::lbm::CaseConfig` — lattice, `Physics`, boundary, initial phase field,
+stencil — and hands it to the solver.
+
+| Header | Holds |
+|---|---|
+| `src/lbm/d2q9.h` | the velocity set, the weights, $c_s$ and its powers |
+| `src/lbm/field.h` | `Field`, the heap-allocated lattice storage |
+| `src/lbm/case_config.h` | `CaseConfig`, `Physics`, the boundary and initial-condition choices, the command line |
+| `src/lbm/solver.h` | the scheme itself |
+| `src/lbm/output_writer.h` | the CSV and VTK writers |
+| `src/lbm/equation_of_state.h` | the two-component pressure |
+| `src/lbm/isotropic_gradient.h` | the E4/E6/E8 colour-gradient stencils |
+
+Before this, the five solvers were 566 to 610 line programs holding a copy each
+of the same scheme; `capillary` and `gravity_capillary` differed on seven lines
+out of 588. The case definitions are now 76 to 94 lines.
+
+Every parameter is a runtime value. The lattice size, the step count and the
+output interval are `--nx`, `--ny`, `--steps` and `--interval`, so a resolution
+study no longer means editing a `const int` and rebuilding, and a test can ask a
+run what it was configured with instead of repeating the constant.
+
+### Reproducibility
+
+`cmake/CompilerFlags.cmake` passes `-ffp-contract=off`. Fusing `a*b+c` into an
+FMA changes the result, and the compiler does it inconsistently: without the
+flag the same source gives different last bits at `-O2` and at `-O3`, and moving
+an expression into a function can move the answer. With it, a run is reproducible
+across optimisation levels, and a refactor can be checked against a recorded run
+bit for bit — which is how this one was checked, over 82 output files of four
+cases.
+
+## Known defects
+
+Two defects in the wall-bounded cases (`capillary`, `gravity_capillary`,
+`rayleigh_taylor`, `rayleigh_taylor_omp`). `laplace` is periodic and is affected
+by neither.
+
+### The colour distribution is rebuilt from the wrong population at a wall
+
+`Solver::stream()` writes the reflected population to `f_(ip, jp, kp)` and then
+reads `f_(ip, jp, k)` to build `g`:
+
+```cpp
+f_(ip, jp, kp) = f_eq_(i, j, k) + omega_1_(i, j, k) + omega_2_(i, j, k) + 0.5 * source_(i, j, k);
+g_(ip, jp, kp) = f_(ip, jp, k) * phi_(i, j) + omega_3_(i, j, k);
+```
+
+On an interior node `kp == k` and the two agree. On a bounce-back direction —
+`j == 0` with `k` in {4, 7, 8}, `j == ny-1` with `k` in {2, 5, 6} — they do not,
+so `g` is built from an unrelated direction of `f`. Since $\phi = \sum g / \sum f$,
+the phase field leaves $[-1, 1]$: `programs/unit_testing/lbm/solver` measures a
+peak of 1.29 against a wall, where the periodic case stays within $10^{-13}$ of 1.
+
+### The source term is never computed on the `j = 0` row
+
+`Solver::force()` runs `for (int j = j_start; j < ny_; j++)` with `j_start == 1`
+under `WallY`. Row `j = 0` therefore keeps a source term of zero for the whole
+run, while row `j = ny-1` gets a full one — the two walls are not treated alike.
+It also makes the `j == 0` branch inside the neighbour loop unreachable.
+
+Both are preserved as they were so that the extraction of the shared kernel
+could be verified bit for bit against the previous code. They are fixed in the
+commits that follow this one, each on its own, with the change in the results
+reported.

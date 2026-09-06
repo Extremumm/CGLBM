@@ -15,16 +15,11 @@ repos:
     hooks:
       - id: clang-format
         types_or: [c++, c]
-        # The solver programs and the two headers that came with them predate
-        # this style. Reformatting them would bury the physics under about 400
-        # lines of churn each, so they are left as they are; src/ and the
-        # unit-test programs are formatted.
+        # Everything under src/ and programs/ is formatted now that the solvers
+        # are case definitions rather than 600-line copies of one another.
+        # archive/ is kept as it was received.
         exclude: |
           (?x)^(
-            programs/solvers/.*|
-            src/core/constants\.h|
-            src/lbm/lattice_boltzmann\.h|
-            src/main_cglbm\.cpp|
             archive/.*
           )$
 
