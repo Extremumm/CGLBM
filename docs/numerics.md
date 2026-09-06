@@ -100,9 +100,16 @@ recolor()          →  Ω(3)  interface sharpening
 stream()           →  propagation along ξ_i
 macroscopic()      →  ρ, u from moments of f (force-corrected)
 phase_field()      →  φ and p from the equation of state
+colour gradient    →  ∇φ, evaluated once and reused by the three operators
 surface_force()    →  F_s, the capillary body force, when the case asks for it
 equilibrium()      →  f_eq for the next step
 ```
+
+The colour gradient is stored rather than recomputed: `collide_surface()`,
+`recolor()` and `surface_force()` all want the gradient of the phase field as it
+stood at the end of the previous step, and `phase_field()` is the only thing
+that changes it. Evaluating it once is the same number to the last bit and, with
+the E8 stencil's 24 neighbours, about a fifth of the run.
 
 A case chooses between two ways of applying the surface tension, and only one
 of `collide_surface()` and `surface_force()` does anything in a given run.
