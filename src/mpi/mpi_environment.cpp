@@ -61,7 +61,9 @@ int Environment::size() {
 #endif
 }
 
-bool Environment::is_root() { return rank() == 0; }
+bool Environment::is_root() {
+    return rank() == 0;
+}
 
 void Environment::barrier() {
 #ifdef CGLBM_WITH_MPI

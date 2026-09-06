@@ -7,8 +7,8 @@ if(WITH_Python)
         return()
     endif()
 
-    # Prefer the pytest of the interpreter we found; fall back to a pytest on
-    # PATH, so that a virtualenv and a system install both work.
+    # Prefer the pytest of the interpreter we found; fall back to a pytest on PATH, so that a
+    # virtualenv and a system install both work.
     execute_process(
         COMMAND ${Python3_EXECUTABLE} -c "import pytest"
         RESULT_VARIABLE Pytest_IMPORT_RESULT
@@ -19,17 +19,16 @@ if(WITH_Python)
     else()
         find_program(Pytest_EXECUTABLE pytest)
         if(NOT Pytest_EXECUTABLE)
-            message(
-                WARNING "pytest not found for ${Python3_EXECUTABLE}: "
-                        "Python tests will not be configured (pip install -r requirements.txt)."
+            message(WARNING "pytest not found for ${Python3_EXECUTABLE}: "
+                            "Python tests will not be configured (pip install -r requirements.txt)."
             )
             return()
         endif()
         set(PYTEST_COMMAND ${Pytest_EXECUTABLE})
     endif()
 
-    # pytest exits with 5 when a file collects no test for the selected marker,
-    # which is not a failure for us: every file is run once per marker.
+    # pytest exits with 5 when a file collects no test for the selected marker, which is not a
+    # failure for us: every file is run once per marker.
     string(
         CONCAT PYTEST_RUNNER
                "import subprocess\n"
@@ -53,9 +52,8 @@ if(WITH_Python)
         foreach(pytest_marker unit_test validation verification)
             add_test(
                 NAME "cglbm-${pytest_marker}-${pytest_stem}"
-                COMMAND
-                    ${Python3_EXECUTABLE} -c "${PYTEST_RUNNER}" ${PYTEST_COMMAND}
-                    "${PROJECT_SOURCE_DIR}/programs/${pytest_file}" -m "${pytest_marker}" -v
+                COMMAND ${Python3_EXECUTABLE} -c "${PYTEST_RUNNER}" ${PYTEST_COMMAND}
+                        "${PROJECT_SOURCE_DIR}/programs/${pytest_file}" -m "${pytest_marker}" -v
                 WORKING_DIRECTORY "${PROJECT_SOURCE_DIR}"
             )
             set_tests_properties(

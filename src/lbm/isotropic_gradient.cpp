@@ -87,22 +87,22 @@ int count_of(const StencilPoint* first, const StencilPoint* last) {
 
 const StencilPoint* stencil_points(GradientStencil stencil, int* count) {
     switch (stencil) {
-        case GradientStencil::E6:
-            if (count != nullptr) {
-                *count = count_of(kE6, kE6 + sizeof(kE6) / sizeof(kE6[0]));
-            }
-            return kE6;
-        case GradientStencil::E8:
-            if (count != nullptr) {
-                *count = count_of(kE8, kE8 + sizeof(kE8) / sizeof(kE8[0]));
-            }
-            return kE8;
-        case GradientStencil::E4:
-        default:
-            if (count != nullptr) {
-                *count = count_of(kE4, kE4 + sizeof(kE4) / sizeof(kE4[0]));
-            }
-            return kE4;
+    case GradientStencil::E6:
+        if (count != nullptr) {
+            *count = count_of(kE6, kE6 + sizeof(kE6) / sizeof(kE6[0]));
+        }
+        return kE6;
+    case GradientStencil::E8:
+        if (count != nullptr) {
+            *count = count_of(kE8, kE8 + sizeof(kE8) / sizeof(kE8[0]));
+        }
+        return kE8;
+    case GradientStencil::E4:
+    default:
+        if (count != nullptr) {
+            *count = count_of(kE4, kE4 + sizeof(kE4) / sizeof(kE4[0]));
+        }
+        return kE4;
     }
 }
 
@@ -112,13 +112,13 @@ int stencil_reach(GradientStencil stencil) {
 
 const char* stencil_name(GradientStencil stencil) {
     switch (stencil) {
-        case GradientStencil::E6:
-            return "E6";
-        case GradientStencil::E8:
-            return "E8";
-        case GradientStencil::E4:
-        default:
-            return "E4";
+    case GradientStencil::E6:
+        return "E6";
+    case GradientStencil::E8:
+        return "E8";
+    case GradientStencil::E4:
+    default:
+        return "E4";
     }
 }
 

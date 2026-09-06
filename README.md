@@ -172,8 +172,20 @@ ctest --preset gnu               # the same suite, through CTest
 ```
 
 The `src/omp` and `src/mpi` tests are part of `-m unit_test`: they run their
-programs directly, the MPI ones on 1 to 6 ranks through `mpirun`, and skip
-themselves when no launcher is available.
+programs directly, the MPI ones on 1 to 6 ranks through `mpirun`. They skip
+themselves when the dependency is missing — no launcher, or a build configured
+with `WITH_MPI=OFF` / `WITH_OpenMP=OFF` — so the same suite runs against any
+configuration.
+
+### Continuous integration
+
+| Workflow | Trigger | What it does |
+|---|---|---|
+| `.github/workflows/ci.yml` | push to `main`, pull requests, manual | builds with GCC and with Clang (MPI + OpenMP) and runs the CTest suite; builds again with both backends off and runs the tests that still apply; runs the formatters |
+| `.github/workflows/validation.yml` | Mondays 04:00 UTC, manual | runs the long Laplace tests and writes the measured jump, interface radii and spurious currents into the job summary |
+
+The formatters are the ones in `.pre-commit-config.yaml`, so
+`pre-commit run --all-files` locally is the same check CI runs.
 
 Tests are named `test_{marker}_{name}.py`, and each function carries the
 matching marker: `unit_test`, `validation` or `verification`. Tests that launch

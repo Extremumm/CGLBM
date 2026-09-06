@@ -25,7 +25,9 @@ double node_value(int gx, int gy, int q, int global_ny, int depth) {
 }
 
 /// Wrap a global index onto the lattice.
-int wrap(int index, int extent) { return (index % extent + extent) % extent; }
+int wrap(int index, int extent) {
+    return (index % extent + extent) % extent;
+}
 
 }  // namespace
 

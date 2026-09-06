@@ -28,11 +28,7 @@ void exchange_ghosts(const CartesianTopology& topology, double* field, int nx, i
 ///
 /// `field` holds `(nx + 2) * (ny + 2) * depth` values, indexed
 /// `field[(i * (ny + 2) + j) * depth + q]`.
-void exchange_ghosts(const CartesianTopology& topology,
-                     double* field,
-                     int nx,
-                     int ny,
-                     int depth);
+void exchange_ghosts(const CartesianTopology& topology, double* field, int nx, int ny, int depth);
 
 }  // namespace mpi
 }  // namespace cglbm

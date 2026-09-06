@@ -1,0 +1,119 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_dispatch:
+
+# A newer push to the same branch makes the running one pointless.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  # The lattice arrays are large; keep the runners from being surprised by an
+  # interactive prompt while installing the toolchain.
+  DEBIAN_FRONTEND: noninteractive
+
+jobs:
+  build-and-test:
+    name: ${{ matrix.compiler }} · MPI + OpenMP
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - compiler: gcc
+            preset: gnu
+            packages: g++
+          - compiler: clang
+            preset: clang
+            packages: clang libomp-dev
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake ninja-build libopenmpi-dev openmpi-bin ${{ matrix.packages }}
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the Python tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e PyCGLBM
+
+      - name: Configure
+        # Point CMake at the interpreter that has pytest, so Tests.cmake
+        # registers the suite instead of skipping it.
+        run: cmake --preset ${{ matrix.preset }} -DPython3_EXECUTABLE="$(which python)"
+
+      - name: Build
+        run: cmake --build --preset ${{ matrix.preset }}
+
+      - name: Test
+        # Every test file, once per marker, through CTest. The long tests that
+        # run a full simulation stay out of this: they are in validation.yml.
+        run: ctest --preset ${{ matrix.preset }}
+
+      - name: Show what was built
+        if: always()
+        run: find bin -type f | sort
+
+  serial-build:
+    name: gcc · no MPI, no OpenMP
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends cmake g++
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the Python tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e PyCGLBM
+
+      - name: Configure without either parallel backend
+        # src/omp and src/mpi are written to compile and behave sensibly with
+        # neither dependency present; this job is what keeps that true.
+        run: |
+          cmake -S . -B build-serial \
+            -DWITH_MPI=OFF -DWITH_OpenMP=OFF \
+            -DBIN_DIR="${GITHUB_WORKSPACE}/bin-serial" \
+            -DPython3_EXECUTABLE="$(which python)"
+
+      - name: Build
+        run: cmake --build build-serial --parallel
+
+      - name: Test
+        # The suite detects a serial build and skips what cannot apply.
+        env:
+          CGLBM_BIN_DIR: ${{ github.workspace }}/bin-serial
+        run: python -m pytest -m unit_test -v
+
+  lint:
+    name: Formatting and linters
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - uses: pre-commit/action@v3.0.1

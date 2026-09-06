@@ -1,7 +1,6 @@
 """Difference between two timesteps. Run it from inside a run directory."""
 
 import matplotlib.pyplot as plt
-
 from pycglbm import CaseOutput
 from pycglbm.plotter import plot_difference
 

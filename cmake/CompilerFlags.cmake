@@ -20,8 +20,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         "-Wshadow"
         "-pedantic"
     )
-    # The recoloring step divides by the norm of the colour gradient, which goes
-    # to zero away from the interface: keep IEEE semantics, never -ffast-math.
+    # The recoloring step divides by the norm of the colour gradient, which goes to zero away from
+    # the interface: keep IEEE semantics, never -ffast-math.
     set(RELEASE_FLAGS "-O3" "-fno-fast-math" "-fno-finite-math-only")
     set(DEBUG_FLAGS
         "-Og"

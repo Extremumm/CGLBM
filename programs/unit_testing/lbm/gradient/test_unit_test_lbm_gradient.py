@@ -8,7 +8,6 @@ becomes an anisotropic surface tension.
 """
 
 import pytest
-
 from pycglbm.testing import parse_key_values, run_unit_program
 
 PROGRAM = "lbm_gradient"

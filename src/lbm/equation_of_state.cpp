@@ -32,8 +32,8 @@ double pressure(double rho, double phi, const ComponentPair& components) {
     return 0.5 * (rho * c_hat_squared - p1_inf - p2_inf + std::sqrt(discriminant));
 }
 
-double pressure_linear_mixing(double rho, double phi, double cs_squared,
-                              const ComponentPair& components) {
+double
+pressure_linear_mixing(double rho, double phi, double cs_squared, const ComponentPair& components) {
     return rho * cs_squared - 0.5 * (1.0 + phi) * components.p1_inf -
            0.5 * (1.0 - phi) * components.p2_inf;
 }

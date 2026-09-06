@@ -9,7 +9,7 @@
 // Initial conditions depend on the problem
 
 // periodic boundary conditions on x directon
-// half-way bounce-back boundary conditions on y direction with resting wall 
+// half-way bounce-back boundary conditions on y direction with resting wall
 
 // Define your lattice dimensions and parameters
 const int Lx = 128; // Number of lattice nodes in the x-direction
@@ -26,7 +26,7 @@ const double c_dt = c_dx/347./sqrt(3.); // s : conversion factor from lattice un
 
 const int numSteps = 10000; // Number of simulation steps
 const int interval = 100; // Output interval
-const double epsilon = 1.0e-10; // Small number to avoid division by zero in recoloration step 
+const double epsilon = 1.0e-10; // Small number to avoid division by zero in recoloration step
 
 // Speed of sound and related constants
 const double cs = dx / sqrt(3.0) / dt; // Speed of sound in the lattice
@@ -35,7 +35,7 @@ const double cs4 = cs2 * cs2;
 const double cs6 = cs4 * cs2;
 
 //parameters
-const double rho1 = 4.; // kg * m-3 Density for component 1 
+const double rho1 = 4.; // kg * m-3 Density for component 1
 const double rho2 = 1.;  // kg * m-3 Density for component 2
 const double c1 = 347./(c_dx/c_dt);//dx / sqrt(3.0) / dt; // Speed of sound for component 1 in lattice units
 const double c2 = 347./(c_dx/c_dt);//dx / sqrt(3.0) / dt; // Speed of sound for component 2 in lattice units
@@ -149,7 +149,7 @@ void calMacroscopic() {
             F[i][j][0] = 0.0; // External force in lattice units on x direction
             //F[i][j][1] = rho[i][j] * 1.0e5/(3.*347.*347.); // External force in lattice units on y direction
             F[i][j][1] = 0.0; // External force in lattice units on y direction
-            u[i][j][0] = (sum_xi_x + F[i][j][0]*dt*0.5) / sum_f;//add force term Guo al. 
+            u[i][j][0] = (sum_xi_x + F[i][j][0]*dt*0.5) / sum_f;//add force term Guo al.
             //u[i][j][1] = sum_xi_y / sum_f;
             u[i][j][1] = (sum_xi_y + F[i][j][1]*dt*0.5) / sum_f;
 
@@ -222,7 +222,7 @@ void collide() {
                 double f_nu_neq = H_nu / cs4 * sum_nu_neq; //optimal way to calculate f_nu_neq without using vector, only using scalar
                 double f_b_neq  = H_b  / cs4 * sum_b_neq;
                 double f_xy_neq = H_xy / cs4 * sum_xy_neq;
-                omega_1[i][j][k] = w[k]*(1.0 - 1.0 / tau_nu) * (f_nu_neq + f_xy_neq) + w[k]*(1.0 - 1.0 / tau_b) * f_b_neq;            
+                omega_1[i][j][k] = w[k]*(1.0 - 1.0 / tau_nu) * (f_nu_neq + f_xy_neq) + w[k]*(1.0 - 1.0 / tau_b) * f_b_neq;
             }
         }
     }
@@ -238,7 +238,7 @@ void force() {
             double u_x = u[i][j][0];
             double u_y = u[i][j][1];
             double F_x = F[i][j][0];
-            double F_y = F[i][j][1];           
+            double F_y = F[i][j][1];
             for (int k = 0; k < Q; k++) {
                 double xik0 = xi[k][0];
                 double xik1 = xi[k][1];
@@ -250,7 +250,7 @@ void force() {
                 double term23 = (u_x * F_x * Hxxk + u_y * F_y * Hyyk + (u_x * F_y + u_y * F_x) * Hxyk) / cs4;
 
                 S_F[i][j][k] = w[k] * (term1 + term23);
-            }           
+            }
             double derive_x = 0., derive_y = 0.;
             for (int k = 0; k < Q; k++) {
                 int xi_x = (int)xi[k][0];
@@ -309,7 +309,7 @@ void collide_surface(){
                     omega_2[i][j][k] = sigma * w[k] / (4 * norm_C * cs4) * ((2 * Cx * Cy * H_xy + (Cx * Cx - Cy * Cy) * H_nu) / tau_nu -((Cx * Cx + Cy * Cy) * H_b) / tau_b);
                 }
                 else {
-                    omega_2[i][j][k] = 0.0; 
+                    omega_2[i][j][k] = 0.0;
                 }
             }
 
@@ -327,8 +327,8 @@ void recolor(){
             double Cx = 0.0, Cy = 0.0;
             cglbm::lbm::gradient_wall_y(&phi[0][0], Lx, Ly, i, j, gradient_stencil, &Cx, &Cy);
             double grad_phi_x, grad_phi_y;
-            grad_phi_x = Cx / dt; 
-            grad_phi_y = Cy / dt; 
+            grad_phi_x = Cx / dt;
+            grad_phi_y = Cy / dt;
             double norm_grad_phi = sqrt(grad_phi_x * grad_phi_x + grad_phi_y * grad_phi_y); // Magnitude of the gradient vector
             if (norm_grad_phi > epsilon) { // Prevent division by zero
                 for (int k = 0; k < Q; k++) {
@@ -370,9 +370,9 @@ void stream() {
                     else {
                         jp = j + (int)xi[k][1];
                         kp = k;
-                    } 
+                    }
                     f[ip][jp][kp] = f_eq[i][j][k] + omega_1[i][j][k] + omega_2[i][j][k] + 0.5*S[i][j][k];
-                    g[ip][jp][kp] = f[ip][jp][k] * phi[i][j] + omega_3[i][j][k]; 
+                    g[ip][jp][kp] = f[ip][jp][k] * phi[i][j] + omega_3[i][j][k];
                 }
             // Save the macroscopic variables at the previous time step for the force step
             rho_mdt[i][j] = rho[i][j];
@@ -494,7 +494,7 @@ void initialize() {
     int y0 = Ly / 2;
     // Define the radius of the droplet/bubble and the interface width
     double r =  radius * dx ; // Lx / 8. * dx; // 16 lattice units
-    
+
     // In order to get f_eq, we need to calculate the macroscopic variables rho(with rho1, rho2 at different nodes), u, p
     for (int i=0; i<Lx ; i++){
         for (int j=0; j<Ly ; j++){
@@ -506,13 +506,13 @@ void initialize() {
             double rho_local = rho1 * (0.5 + 0.5*phi_local) + rho2 * (0.5 - 0.5*phi_local);
             rho[i][j] = rho_local;  // Loc-al density
             rho_mdt[i][j] = rho_local; // At zero time step, the value of previous step is the one of current step
-            
+
             // // Calculate pressure from equation of state
-            double p_local = rho_local*((1+phi_local)*0.5*c1*c1 + (1-phi_local)*0.5*c2*c2)- (1+phi_local)*0.5 * p1_inf - (1-phi_local)/2.*p2_inf;          
+            double p_local = rho_local*((1+phi_local)*0.5*c1*c1 + (1-phi_local)*0.5*c2*c2)- (1+phi_local)*0.5 * p1_inf - (1-phi_local)/2.*p2_inf;
             p[i][j] = p_local;
             p_mdt[i][j] = p_local;
             F[i][j][0] = 0.0; // External force in lattice units on x direction
-            F[i][j][1] = 0.0; 
+            F[i][j][1] = 0.0;
             //F[i][j][1] = rho[i][j] * 1.0e-3/(3.*347.*347.); // External force in lattice units on y direction
         }
     }
@@ -561,7 +561,7 @@ void runSimulation() {
             fileInterface << i << ", " << phi_local << ", " << j << std::endl;
             }
         }
-        
+
         //Output or visualization code here
         if (i % interval == 0) {  // Output every 100 steps
             //outputVTK("lbm_output_", i);

@@ -24,13 +24,11 @@ int main(int argc, char** argv) {
     // One self-describing line per rank; the order between ranks is not
     // deterministic, so the test sorts them.
     std::cout << "rank = " << cglbm::mpi::Environment::rank()
-              << " size = " << cglbm::mpi::Environment::size()
-              << " dims = " << topology.dims(0) << "," << topology.dims(1)
-              << " coords = " << topology.coords(0) << "," << topology.coords(1)
-              << " nx = " << local.nx << " ny = " << local.ny
+              << " size = " << cglbm::mpi::Environment::size() << " dims = " << topology.dims(0)
+              << "," << topology.dims(1) << " coords = " << topology.coords(0) << ","
+              << topology.coords(1) << " nx = " << local.nx << " ny = " << local.ny
               << " x_offset = " << local.x_offset << " y_offset = " << local.y_offset
-              << " left = " << topology.neighbour(-1, 0)
-              << " right = " << topology.neighbour(+1, 0)
+              << " left = " << topology.neighbour(-1, 0) << " right = " << topology.neighbour(+1, 0)
               << " below = " << topology.neighbour(0, -1)
               << " above = " << topology.neighbour(0, +1)
               << " lower_left = " << topology.neighbour(-1, -1)

@@ -16,9 +16,9 @@ pip install -e PyCGLBM
 from pycglbm import CaseOutput
 
 case = CaseOutput("artifacts/laplace")
-case.timesteps          # every timestep with a complete set of fields
-case.pressure(30000)    # [y, x] array
-case.velocity(30000)    # [y, x, 2] array
+case.timesteps  # every timestep with a complete set of fields
+case.pressure(30000)  # [y, x] array
+case.velocity(30000)  # [y, x, 2] array
 case.droplet_radius(30000)
 case.pressure_jump(30000, inner=5, outer=30)
 ```

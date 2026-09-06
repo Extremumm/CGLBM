@@ -62,8 +62,8 @@ double pressure(double rho, double phi, const ComponentPair& components);
 /// across the interface, which is exactly where the pressure jump is set. On
 /// the shipped Laplace case it costs 17 % of the jump at a density ratio of 10
 /// and 28 % at 20.
-double pressure_linear_mixing(double rho, double phi, double cs_squared,
-                              const ComponentPair& components);
+double
+pressure_linear_mixing(double rho, double phi, double cs_squared, const ComponentPair& components);
 
 }  // namespace lbm
 }  // namespace cglbm

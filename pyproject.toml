@@ -13,6 +13,9 @@ markers = [
 [tool.ruff]
 line-length = 100
 target-version = "py39"
+# cmake-format.py is a cmake-format configuration file, not Python source: it is
+# evaluated with `section()` and friends already in scope.
+extend-exclude = ["cmake-format.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "UP", "B"]

@@ -69,12 +69,7 @@ if(NOT opt_versions)
     message(FATAL_ERROR "Nothing to build: enable at least one of RELEASE and DEBUG.")
 endif()
 
-file(
-    GLOB_RECURSE
-    program_paths
-    CONFIGURE_DEPENDS
-    "${PROJECT_SOURCE_DIR}/programs/*/main_*.cpp"
-)
+file(GLOB_RECURSE program_paths CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/programs/*/main_*.cpp")
 # append a fictive sourcefile for producing the library
 set(program_paths "${PROJECT_SOURCE_DIR}/src/main_cglbm.cpp" ${program_paths})
 list(REMOVE_DUPLICATES program_paths)
@@ -87,12 +82,7 @@ foreach(program_path IN LISTS program_paths)
     string(REGEX REPLACE "^main_" "" base_target_name ${base_target_name})
 
     # every non-main source living next to the main_*.cpp belongs to that program
-    file(
-        GLOB_RECURSE
-        SRC_FILES
-        CONFIGURE_DEPENDS
-        ${program_dir}/[!_]*.cpp
-    )
+    file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS ${program_dir}/[!_]*.cpp)
 
     add_custom_target(
         "${base_target_name}_all"
@@ -100,9 +90,8 @@ foreach(program_path IN LISTS program_paths)
     )
 
     if(base_target_name STREQUAL "cglbm")
-        # The library is the whole of src/ minus the fictive entry point. It is
-        # still header-only: the solver lives in the monolithic programs until
-        # src/lbm gains its implementation units.
+        # The library is the whole of src/ minus the fictive entry point. It is still header-only:
+        # the solver lives in the monolithic programs until src/lbm gains its implementation units.
         list(
             FILTER
             SRC_FILES
@@ -120,8 +109,8 @@ foreach(program_path IN LISTS program_paths)
             if(SRC_FILES)
                 add_library(${target_name} ${SRC_FILES})
                 target_include_directories(${target_name} PUBLIC "${PROJECT_SOURCE_DIR}/src")
-                # PUBLIC: a program including src/mpi needs the MPI headers
-                # and the CGLBM_WITH_MPI definition too.
+                # PUBLIC: a program including src/mpi needs the MPI headers and the CGLBM_WITH_MPI
+                # definition too.
                 target_link_libraries(${target_name} PUBLIC cglbm_dependencies)
                 target_link_libraries(${target_name} PRIVATE cglbm_options_${opt_version})
             else()
