@@ -12,8 +12,8 @@
 /// One time step is
 ///
 ///     force  ->  collide  ->  collide_surface  ->  recolor  ->  stream
-///            ->  macroscopic  ->  phase_field  ->  surface_force
-///            ->  equilibrium
+///            ->  macroscopic  ->  phase_field  ->  colour gradient
+///            ->  surface_force  ->  equilibrium
 ///
 /// carrying two distribution functions: `f`, the sum of the two components'
 /// populations, and `g`, their difference. `f` transports the mixture; `phi =
@@ -130,6 +130,16 @@ private:
     /// `surface_force` also differentiates the interface normal with it.
     void gradient_at(const double* field, int i, int j, double* grad_x, double* grad_y) const;
 
+    /// Refresh `grad_phi_` from the field `colour_gradient` selects.
+    ///
+    /// The gradient is wanted by `collide_surface`, `recolor` and
+    /// `surface_force`, which between them used to evaluate the stencil two to
+    /// four times per node per step on a field that does not change between
+    /// them: they all run on the phase field as it stood at the end of the
+    /// previous step. Computing it once is bit-for-bit the same number and, at
+    /// E8, about a fifth of the run time.
+    void update_colour_gradient();
+
     /// Refresh `phi_n_` from `phi_`, when the case asks for a normalised field.
     void update_interface_field();
 
@@ -162,6 +172,7 @@ private:
     Field normal_x_;       ///< interface normal, x, kept flat for the gradient stencil
     Field normal_y_;       ///< interface normal, y
     Field gradient_norm_;  ///< |grad phi_N|, the interface delta the force rides on
+    Field grad_phi_;       ///< colour gradient, evaluated once per step
 
     // Populations and collision operators.
     Field f_;        ///< sum of the two components' distributions

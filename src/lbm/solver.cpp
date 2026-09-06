@@ -48,6 +48,7 @@ Solver::Solver(CaseConfig config) : config_(std::move(config)), nx_(config_.nx),
     normal_x_ = Field(nx_, ny_);
     normal_y_ = Field(nx_, ny_);
     gradient_norm_ = Field(nx_, ny_);
+    grad_phi_ = Field(nx_, ny_, 2);
 
     f_ = Field(nx_, ny_, kQ);
     g_ = Field(nx_, ny_, kQ);
@@ -89,6 +90,19 @@ void Solver::gradient_at(const double* field, int i, int j, double* grad_x, doub
 
 void Solver::colour_gradient(int i, int j, double* grad_x, double* grad_y) const {
     gradient_at(normalise_interface_ ? phi_n_.data() : phi_.data(), i, j, grad_x, grad_y);
+}
+
+void Solver::update_colour_gradient() {
+    const bool parallel = parallel_;
+#pragma omp parallel for collapse(2) if (parallel)
+    for (int i = 0; i < nx_; i++) {
+        for (int j = 0; j < ny_; j++) {
+            double gx = 0.0, gy = 0.0;
+            colour_gradient(i, j, &gx, &gy);
+            grad_phi_(i, j, 0) = gx;
+            grad_phi_(i, j, 1) = gy;
+        }
+    }
 }
 
 void Solver::equilibrium() {
@@ -342,8 +356,8 @@ void Solver::surface_force() {
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
-            double gx = 0.0, gy = 0.0;
-            colour_gradient(i, j, &gx, &gy);
+            const double gx = grad_phi_(i, j, 0);
+            const double gy = grad_phi_(i, j, 1);
             const double norm = std::sqrt(gx * gx + gy * gy);
             gradient_norm_(i, j) = norm;
             // `kInterfaceGradientFloor`, not `kGradientEpsilon`: a normal built
@@ -405,27 +419,29 @@ void Solver::collide_surface() {
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
-            double Cx = 0.0, Cy = 0.0;
-            colour_gradient(i, j, &Cx, &Cy);
+            const double Cx = grad_phi_(i, j, 0);
+            const double Cy = grad_phi_(i, j, 1);
 
             const double norm_C = std::sqrt(Cx * Cx + Cy * Cy);
+            // The operator divides by the norm of the colour gradient, which
+            // vanishes away from the interface -- everywhere but a few nodes,
+            // so this is the branch that is nearly always taken.
+            if (norm_C <= kGradientEpsilon) {
+                for (int k = 0; k < kQ; k++) {
+                    omega_2_(i, j, k) = 0.0;
+                }
+                continue;
+            }
+            const double tau_nu = rho_(i, j) * nu / (p_(i, j) * dt_) + 0.5;
+            const double tau_b = rho_(i, j) * nu_b / (p_(i, j) * dt_) + 0.5;
             for (int k = 0; k < kQ; k++) {
                 const double xi_x = kXi[k][0], xi_y = kXi[k][1];
                 const double H_nu = 0.5 * (xi_x * xi_x - xi_y * xi_y);
                 const double H_b = 0.5 * (xi_x * xi_x + xi_y * xi_y) - cs2_;
                 const double H_xy = xi_x * xi_y;
-                const double tau_nu = rho_(i, j) * nu / (p_(i, j) * dt_) + 0.5;
-                const double tau_b = rho_(i, j) * nu_b / (p_(i, j) * dt_) + 0.5;
-                // The operator divides by the norm of the colour gradient,
-                // which vanishes away from the interface.
-                if (norm_C > kGradientEpsilon) {
-                    omega_2_(i, j, k) =
-                        sigma * kW[k] / (4 * norm_C * cs4_) *
-                        ((2 * Cx * Cy * H_xy + (Cx * Cx - Cy * Cy) * H_nu) / tau_nu -
-                         ((Cx * Cx + Cy * Cy) * H_b) / tau_b);
-                } else {
-                    omega_2_(i, j, k) = 0.0;
-                }
+                omega_2_(i, j, k) = sigma * kW[k] / (4 * norm_C * cs4_) *
+                                    ((2 * Cx * Cy * H_xy + (Cx * Cx - Cy * Cy) * H_nu) / tau_nu -
+                                     ((Cx * Cx + Cy * Cy) * H_b) / tau_b);
             }
         }
     }
@@ -439,8 +455,8 @@ void Solver::recolor() {
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
-            double Cx = 0.0, Cy = 0.0;
-            colour_gradient(i, j, &Cx, &Cy);
+            const double Cx = grad_phi_(i, j, 0);
+            const double Cy = grad_phi_(i, j, 1);
 
             const double grad_phi_x = Cx / dt_;
             const double grad_phi_y = Cy / dt_;
@@ -584,6 +600,7 @@ void Solver::initialize() {
     }
 
     update_interface_field();
+    update_colour_gradient();
     // The first step reads a capillary force, so it has to exist by then.
     surface_force();
 
@@ -611,6 +628,7 @@ void Solver::step() {
     // It used to be built once in initialize() and never again, which left the
     // BulkNormalised option taking its gradient of a field frozen at t = 0.
     update_interface_field();
+    update_colour_gradient();
     surface_force();
     equilibrium();
 }
