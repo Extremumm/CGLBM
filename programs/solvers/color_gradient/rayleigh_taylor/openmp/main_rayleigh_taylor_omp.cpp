@@ -1,6 +1,8 @@
 #include <iostream>
 #include <cmath>
-#include <omp.h>
+#include <cstdlib>
+
+#include "omp/omp_environment.h"
 
 // In this version, all the intermediate variables are calculated for clarity. The code is not optimized for performance.
 // Periodic boundary conditions p170 of the book (Graduate Texts in Physics) Timm Krüger, Halim Kusumaatmaja, Alexandr Kuzmin, Orest Shardt, Goncalo Silva, Erlend Magnus Viggen (auth.) - The Lattice Boltzmann Method_ Principles and Practice-Springer
@@ -583,16 +585,19 @@ void runSimulation() {
 
 
 int main() {
-    //Check for OpenMP Support
-    omp_set_num_threads(8);
-    if (omp_get_max_threads() == 1) {
-        std::cerr << "OpenMP is not supported!" << std::endl;
-        return 1;
+    // Thread count: OMP_NUM_THREADS when it is set, otherwise the historical
+    // default of this case. Going through src/omp keeps the program linkable
+    // in a build configured with WITH_OpenMP=OFF, where it runs serially.
+    const int default_threads = 8;
+    cglbm::omp::set_thread_count(std::getenv("OMP_NUM_THREADS") ? 0 : default_threads);
+    std::cout << cglbm::omp::describe() << std::endl;
+    if (!cglbm::omp::available()) {
+        std::cerr << "Warning: built without OpenMP, running serially." << std::endl;
     }
     #pragma omp parallel
     {
-        int thread_id = omp_get_thread_num();
-        int num_threads = omp_get_num_threads();
+        int thread_id = cglbm::omp::thread_id();
+        int num_threads = cglbm::omp::thread_count();
         #pragma omp critical
         {
             std::cout << "Thread " << thread_id << " out of " << num_threads << " threads." << std::endl;

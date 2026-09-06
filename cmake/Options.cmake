@@ -35,6 +35,13 @@ if(DEFINED ENV{WITH_OpenMP})
 endif()
 option(WITH_OpenMP "activate OpenMP" ${_with_openmp})
 
+set(_with_mpi_default ON)
+set(_with_mpi ${_with_mpi_default})
+if(DEFINED ENV{WITH_MPI})
+    set(_with_mpi "$ENV{WITH_MPI}")
+endif()
+option(WITH_MPI "activate MPI" ${_with_mpi})
+
 set(_with_ipo_default OFF)
 set(_with_ipo ${_with_ipo_default})
 if(DEFINED ENV{WITH_IPO})
@@ -100,6 +107,7 @@ set(cglbm_options
     "DEBUG|${_debug_default}|${DEBUG}|Build the debug version."
     "ARCH|${_arch_default}|${ARCH}|Processor architecture. If empty, the result is less optimized."
     "WITH_OpenMP|${_with_openmp_default}|${WITH_OpenMP}|Activate OpenMP."
+    "WITH_MPI|${_with_mpi_default}|${WITH_MPI}|Activate MPI."
     "WITH_IPO|${_with_ipo_default}|${WITH_IPO}|Enable link-time/interprocedural optimization."
     "WITH_Python|${_with_python_default}|${WITH_Python}|Register the pytest suite with CTest."
     "EXCEPT|${_except_default}|${EXCEPT}|Apply per-file exceptions."
