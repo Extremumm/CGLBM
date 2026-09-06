@@ -120,9 +120,10 @@ foreach(program_path IN LISTS program_paths)
             if(SRC_FILES)
                 add_library(${target_name} ${SRC_FILES})
                 target_include_directories(${target_name} PUBLIC "${PROJECT_SOURCE_DIR}/src")
-                target_link_libraries(
-                    ${target_name} PRIVATE cglbm_dependencies cglbm_options_${opt_version}
-                )
+                # PUBLIC: a program including src/mpi needs the MPI headers
+                # and the CGLBM_WITH_MPI definition too.
+                target_link_libraries(${target_name} PUBLIC cglbm_dependencies)
+                target_link_libraries(${target_name} PRIVATE cglbm_options_${opt_version})
             else()
                 # header-only for now: an INTERFACE target carries no build rule
                 set(target_is_interface TRUE)

@@ -16,7 +16,8 @@ build configuration under `cmake`, the Python tooling in `PyCGLBM`.
 
 - a C++17 compiler (GCC ≥ 9 or Clang ≥ 10),
 - CMake ≥ 3.23 (3.16 is enough without the presets),
-- OpenMP, for the `rayleigh_taylor_omp` program,
+- OpenMP, for `src/omp` and the `rayleigh_taylor_omp` program,
+- an MPI implementation (OpenMPI, MPICH), for `src/mpi`,
 - Python ≥ 3.9 for the post-processing and the test suite.
 
 ```bash
@@ -44,8 +45,9 @@ Useful targets:
 | `laplace_opt` | that one program |
 
 Configuration is driven by the options printed at configure time — `RELEASE`,
-`DEBUG`, `ARCH`, `WITH_OpenMP`, `WITH_IPO`, `WITH_Python`, `EXCEPT`, `BIN_DIR`,
-`ARTIFACTS_DIR`. Set them on the command line (`-DDEBUG=OFF`), through the
+`DEBUG`, `ARCH`, `WITH_OpenMP`, `WITH_MPI`, `WITH_IPO`, `WITH_Python`, `EXCEPT`,
+`BIN_DIR`, `ARTIFACTS_DIR`. `WITH_OpenMP=OFF` and `WITH_MPI=OFF` still build
+everything: the parallel modules fall back to one thread and one rank. Set them on the command line (`-DDEBUG=OFF`), through the
 environment, or in a `CMakeUserPresets.json` — see
 `cmake/CMakeUserPresets.example.json`.
 
@@ -75,7 +77,8 @@ mkdir -p artifacts/laplace && cd artifacts/laplace
 
 To change a configuration — lattice size, viscosities, surface tension, number
 of steps — edit the constants block at the top of the program's `main_*.cpp`
-and rebuild. Set the thread count of the OpenMP program with `OMP_NUM_THREADS`.
+and rebuild. Set the thread count of the OpenMP program with `OMP_NUM_THREADS`;
+without it that case falls back to eight threads.
 
 ### About the generated files
 
@@ -125,11 +128,18 @@ Contains all the programs
 
 #### The `src` folder
 
-Contains all the sources for the library: `src/core` for the constants and
-`src/lbm` for the lattice Boltzmann declarations. It is still header-only —
-the algorithm currently lives inside each program's `main_*.cpp`, and
-`src/main_cglbm.cpp` is the entry point waiting for `src/lbm` to gain its
-implementation units.
+Contains all the sources for the library
+
+- `src/core` the constants
+- `src/lbm` the lattice Boltzmann declarations
+- `src/omp` thread-level parallelism: thread count, ids, timing
+- `src/mpi` distributed memory: environment, Cartesian decomposition, halo
+  exchange, error checking
+
+`src/lbm` is still header-only — the algorithm lives inside each program's
+`main_*.cpp`, and `src/main_cglbm.cpp` is the entry point waiting for it to gain
+its implementation units. `src/omp` and `src/mpi` are complete and tested; see
+[`docs/parallel.md`](docs/parallel.md).
 
 #### The `artifacts` folder
 
@@ -151,6 +161,10 @@ pytest -m unit_test              # fast, no simulation
 pytest --runlong                 # includes the tests that run a full case
 ctest --preset gnu               # the same suite, through CTest
 ```
+
+The `src/omp` and `src/mpi` tests are part of `-m unit_test`: they run their
+programs directly, the MPI ones on 1 to 6 ranks through `mpirun`, and skip
+themselves when no launcher is available.
 
 Tests are named `test_{marker}_{name}.py`, and each function carries the
 matching marker: `unit_test`, `validation` or `verification`. Tests that launch
@@ -180,6 +194,7 @@ case.pressure_jump(30000, inner=5, outer=30)
 
 - [`docs/numerics.md`](docs/numerics.md) — the discretisation, the collision
   operators, the time loop, and where each step lives in the code
+- [`docs/parallel.md`](docs/parallel.md) — the OpenMP and MPI modules
 - [`docs/references.md`](docs/references.md) — bibliography and unit conversion
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — coding standards and workflow
 - [`AUTHORS.md`](AUTHORS.md) — credits
