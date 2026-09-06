@@ -1,4 +1,4 @@
-#include "LatticeBoltzmann.h"
+#include "lbm/lattice_boltzmann.h"
 
 int main() {
     runSimulation();

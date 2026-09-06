@@ -1,0 +1,18 @@
+{
+  "version": 4,
+  "configurePresets": [
+    {
+      "name": "base",
+      "hidden": true,
+      "binaryDir": "${sourceDir}/build",
+      "cacheVariables": {
+        "WITH_OpenMP": "ON",
+        "WITH_IPO": "OFF",
+        "WITH_Python": "ON",
+        "EXCEPT": "ON",
+        "BIN_DIR": "${sourceDir}/bin",
+        "ARTIFACTS_DIR": "${sourceDir}/artifacts"
+      }
+    }
+  ]
+}
