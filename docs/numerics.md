@@ -274,21 +274,34 @@ Two defects in the wall-bounded cases (`capillary`, `gravity_capillary`,
 `rayleigh_taylor`, `rayleigh_taylor_omp`). `laplace` is periodic and is affected
 by neither.
 
-### The colour distribution is rebuilt from the wrong population at a wall
+### Fixed: the colour distribution was rebuilt from the wrong population at a wall
 
-`Solver::stream()` writes the reflected population to `f_(ip, jp, kp)` and then
-reads `f_(ip, jp, k)` to build `g`:
+`Solver::stream()` wrote the reflected population to `f_(ip, jp, kp)` and then
+read `f_(ip, jp, k)` to build `g`:
 
 ```cpp
 f_(ip, jp, kp) = f_eq_(i, j, k) + omega_1_(i, j, k) + omega_2_(i, j, k) + 0.5 * source_(i, j, k);
-g_(ip, jp, kp) = f_(ip, jp, k) * phi_(i, j) + omega_3_(i, j, k);
+g_(ip, jp, kp) = f_(ip, jp, k) * phi_(i, j) + omega_3_(i, j, k);   // k, not kp
 ```
 
 On an interior node `kp == k` and the two agree. On a bounce-back direction —
 `j == 0` with `k` in {4, 7, 8}, `j == ny-1` with `k` in {2, 5, 6} — they do not,
-so `g` is built from an unrelated direction of `f`. Since $\phi = \sum g / \sum f$,
-the phase field leaves $[-1, 1]$: `programs/unit_testing/lbm/solver` measures a
-peak of 1.29 against a wall, where the periodic case stays within $10^{-13}$ of 1.
+so `g` was built from an unrelated direction of `f`. Since
+$\phi = \sum g / \sum f$, the phase field left $[-1, 1]$:
+`programs/unit_testing/lbm/solver` measured a peak of **1.29** against a wall,
+where the periodic case stays within $10^{-13}$ of 1. With `kp` on both lines
+the wall case matches the periodic one to the same $10^{-13}$.
+
+The fix changes the wall-bounded cases. After 200 steps of the shipped
+configurations, relative to the peak of each field:
+
+| Case | ρ | φ | p | u |
+|---|---|---|---|---|
+| `capillary` | 6.5 % | 4.1 % | 4.8 % | 14.1 % |
+| `gravity_capillary` | 11.1 % | 6.0 % | 10.0 % | 11.5 % |
+| `rayleigh_taylor` | 1.3 % | 3.4 % | 1.2 % | 5.4 % |
+
+`laplace` is periodic and its output is unchanged, byte for byte.
 
 ### The source term is never computed on the `j = 0` row
 

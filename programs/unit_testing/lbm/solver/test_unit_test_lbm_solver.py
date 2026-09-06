@@ -51,27 +51,16 @@ def test_unit_test_lbm_solver_conserves_mass(solver_report, stencil, boundary):
 
 @pytest.mark.unit_test
 @pytest.mark.parametrize("stencil", STENCILS)
-def test_unit_test_lbm_solver_keeps_the_phase_field_bounded(solver_report, stencil):
-    """phi must stay in [-1, 1] on a periodic domain."""
-    values = solver_report[stencil]
-    assert float(values["periodic_max_abs_phase"]) <= 1.0 + PHASE_TOLERANCE
+@pytest.mark.parametrize("boundary", ["periodic", "wall"])
+def test_unit_test_lbm_solver_keeps_the_phase_field_bounded(solver_report, stencil, boundary):
+    """phi must stay in [-1, 1], against a bounce-back wall as well as away from one.
 
-
-@pytest.mark.unit_test
-@pytest.mark.xfail(
-    reason=(
-        "Known defect in the bounce-back streaming step: g is rebuilt from "
-        "f[ip][jp][k] while f was written to f[ip][jp][kp], so on a reflected "
-        "direction it reads an unrelated population and phi leaves [-1, 1]. "
-        "Measured peak is 1.29. See docs/numerics.md."
-    ),
-    strict=True,
-)
-@pytest.mark.parametrize("stencil", STENCILS)
-def test_unit_test_lbm_solver_keeps_the_phase_field_bounded_at_a_wall(solver_report, stencil):
-    """phi must stay in [-1, 1] against a bounce-back wall too."""
+    The wall case is the one with history: the streaming step used to rebuild g
+    from a population other than the one it had just written, and phi reached
+    1.29 there while the periodic case stayed within 1e-13 of 1.
+    """
     values = solver_report[stencil]
-    assert float(values["wall_max_abs_phase"]) <= 1.0 + PHASE_TOLERANCE
+    assert float(values[f"{boundary}_max_abs_phase"]) <= 1.0 + PHASE_TOLERANCE
 
 
 @pytest.mark.unit_test

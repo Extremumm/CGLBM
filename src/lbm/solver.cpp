@@ -392,7 +392,10 @@ void Solver::stream() {
                 }
                 f_(ip, jp, kp) = f_eq_(i, j, k) + omega_1_(i, j, k) + omega_2_(i, j, k) +
                                  0.5 * source_(i, j, k);
-                g_(ip, jp, kp) = f_(ip, jp, k) * phi_(i, j) + omega_3_(i, j, k);
+                // g is the colour carried by the population just written, so it
+                // reads back the same slot. On an interior node kp == k and the
+                // distinction is invisible; on a reflected direction it is not.
+                g_(ip, jp, kp) = f_(ip, jp, kp) * phi_(i, j) + omega_3_(i, j, k);
             }
             // The temporal correction of the next step needs this step's state.
             rho_mdt_(i, j) = rho_(i, j);
