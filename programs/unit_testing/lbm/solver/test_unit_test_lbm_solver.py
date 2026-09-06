@@ -121,6 +121,22 @@ def test_unit_test_lbm_solver_normalised_phase_clamps_overshoot(solver_report, r
     assert float(solver_report["E8"][f"phin_r{ratio}_clamped_above"]) == pytest.approx(1.0)
 
 
+@pytest.mark.unit_test
+def test_unit_test_lbm_solver_equilibrium_carries_the_enhanced_third_order_term(solver_report):
+    """The equilibrium here must equal Ba et al. Eq. (14), term for term.
+
+    Leclaire et al. (2013) fixed the third-order velocity moment of the
+    colour-gradient equilibrium, and Ba et al. (2016) build their
+    high-density-ratio model on that correction. The equilibrium in
+    ``Solver::equilibrium`` is a Hermite expansion and never names their
+    parameter ``alpha``, so the two look unrelated; they are the same
+    expression. Pinning it here means a change to the equilibrium that quietly
+    drops the correction fails a fast test rather than a validation run.
+    """
+    difference = float(solver_report["E8"]["enhanced_equilibrium_difference"])
+    assert difference < 1.0e-12
+
+
 #: Density ratios the solver must survive, as decimal exponents.
 #: The scheme diverged before step 200 above a ratio of about 100 while the
 #: interface was started out of mechanical equilibrium. See docs/numerics.md.

@@ -51,10 +51,22 @@
    continuum-surface-force perturbation operator and the parabolic
    relaxation-time interpolation of their Eq. (22) are not implemented.
 
-6. **S. Leclaire, M. Reggio, J.-Y. Trépanier.** *Enhanced equilibrium
-   distribution functions for simulating immiscible multiphase flows with
-   variable density ratios.* International Journal of Multiphase Flow, 2013.
+6. **S. Leclaire, N. Pellerin, M. Reggio, J.-Y. Trépanier.** *Enhanced
+   equilibrium distribution functions for simulating immiscible multiphase
+   flows with variable density ratios in a class of lattice Boltzmann models.*
+   International Journal of Multiphase Flow **57**, 159–168, 2013.
    DOI: [10.1016/j.ijmultiphaseflow.2013.05.009](https://doi.org/10.1016/j.ijmultiphaseflow.2013.05.009)
+
+   The third-order correction to the colour-gradient equilibrium, which repairs
+   the third-order velocity moment when the components' sound speeds differ.
+   Reached density ratio 1000 on two-layered Couette flow.
+
+   **Already present here**, though not by that name: the equilibrium in
+   `Solver::equilibrium()` is a Hermite expansion and its third-order term is
+   the same expression, restated by Ba et al. as their Eq. (14).
+   `report_enhanced_equilibrium` in `programs/unit_testing/lbm/solver` checks
+   the two against each other over a sweep of sound speed, density and
+   velocity; they agree to 1.1 × 10⁻¹⁴.
 
 7. **A. Subhedar.** *Color-gradient lattice Boltzmann model for immiscible
    fluids with density contrast.* Physical Review E **106**, 045308, 2022.

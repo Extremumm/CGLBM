@@ -178,6 +178,61 @@ void report_normalised_phase() {
     std::cout << "phin_identity_error = " << worst_identity << std::endl;
 }
 
+/// Check that this equilibrium already carries the "enhanced" third-order term.
+///
+/// Leclaire et al. (2013) added a term to the colour-gradient equilibrium to
+/// fix the third-order velocity moment, which a two-component lattice gets
+/// wrong whenever the components' sound speeds differ; Ba et al. (2016) restate
+/// it as their Eq. (14) and build their high-density-ratio model on it. The
+/// equilibrium here comes from a Hermite expansion instead and never mentions
+/// alpha, so whether it contains the same correction is not obvious by
+/// inspection. It does, identically. Writing Ba's parameters as
+///
+///     (c_s^k)^2 = 3/5 (1 - alpha_k),   p_k = rho_k (c_s^k)^2
+///
+/// their extra term over the standard equilibrium is
+///
+///     rho_k W_i (3 e_i.u) 1/2 (3 (c_s^k)^2 - 1) (3 |e_i|^2 - 4)
+///       = (p_k - rho_k cs^2) W_i (e_i.u) 4.5 (3 |e_i|^2 - 4)
+///
+/// and the third-order Hermite term of `Solver::equilibrium` reduces to the
+/// same thing, because `H_xxx + H_yyx = e_x (|e|^2 - 4 cs^2)` and
+/// `1 / (2 cs^6) = 13.5`. This reports the largest disagreement over a sweep of
+/// sound speed, density and velocity; it is a round-off number or the two have
+/// diverged.
+void report_enhanced_equilibrium() {
+    const double cs2 = 1. / 3.;
+    const double cs6 = cs2 * cs2 * cs2;
+    double worst = 0.;
+    for (double csk_squared : {0.05, 0.16, 1. / 3., 0.45, 0.58}) {
+        for (double rho : {1., 7.3, 1000.}) {
+            for (double u_x : {-0.11, 0., 0.07}) {
+                for (double u_y : {0.03, -0.19}) {
+                    const double p = rho * csk_squared;
+                    const double alpha = 1. - (5. / 3.) * csk_squared;
+                    for (int k = 0; k < cglbm::lbm::kQ; k++) {
+                        const double x = cglbm::lbm::kXi[k][0];
+                        const double y = cglbm::lbm::kXi[k][1];
+                        const double Hxxy = x * x * y - cs2 * y;
+                        const double Hyyx = y * y * x - cs2 * x;
+                        const double Hxxx = std::pow(x, 3) - cs2 * 3. * x;
+                        const double Hyyy = std::pow(y, 3) - cs2 * 3. * y;
+                        const double ours = (p - rho * cs2) * cglbm::lbm::kW[k] *
+                                            (u_x * (Hyyx + Hxxx) + u_y * (Hyyy + Hxxy)) /
+                                            (2. * cs6);
+                        const double theirs = rho * cglbm::lbm::kW[k] * 3. * (x * u_x + y * u_y) *
+                                              0.5 * (3. * (0.6 * (1. - alpha)) - 1.) *
+                                              (3. * (x * x + y * y) - 4.);
+                        worst = std::max(worst, std::fabs(ours - theirs));
+                    }
+                }
+            }
+        }
+    }
+    std::cout.precision(17);
+    std::cout << "enhanced_equilibrium_difference = " << worst << std::endl;
+}
+
 /// Run a droplet at a series of density ratios and report whether it survives.
 ///
 /// The scheme used to diverge before step 200 at any ratio above about 100,
@@ -245,6 +300,7 @@ int main(int argc, char** argv) {
         report_rest_state("rest_periodic", Boundary::PeriodicY);
         report_rest_state("rest_wall", Boundary::WallY);
         report_normalised_phase();
+        report_enhanced_equilibrium();
         report_density_ratios(300);
     } catch (const std::exception& error) {
         std::cerr << "lbm_solver: " << error.what() << std::endl;
