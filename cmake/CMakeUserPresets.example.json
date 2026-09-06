@@ -1,0 +1,34 @@
+{
+  "version": 4,
+  "configurePresets": [
+    {
+      "name": "gnu_no_native",
+      "displayName": "Configure GCC without -march=native",
+      "inherits": "gnu",
+      "cacheVariables": {
+        "ARCH": "",
+        "DEBUG": "OFF"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "gnu_no_native",
+      "configurePreset": "gnu_no_native",
+      "jobs": 9
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "gnu_no_native",
+      "configurePreset": "gnu_no_native",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 4,
+        "noTestsAction": "error"
+      }
+    }
+  ]
+}

@@ -1,0 +1,2 @@
+# Python tooling for CGLBM: post-processing (PyCGLBM) and the test suite.
+-r PyCGLBM/requirements.txt

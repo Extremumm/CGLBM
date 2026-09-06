@@ -1,0 +1,40 @@
+{
+  "version": 4,
+  "include": [
+    "base.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "gnu",
+      "displayName": "Configure for GCC",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build-gnu",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "g++",
+        "ARCH": "native"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "gnu",
+      "displayName": "Build GCC",
+      "configurePreset": "gnu",
+      "jobs": 9
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "gnu",
+      "displayName": "Test GCC",
+      "configurePreset": "gnu",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 4,
+        "noTestsAction": "error"
+      }
+    }
+  ]
+}

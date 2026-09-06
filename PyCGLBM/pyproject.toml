@@ -1,0 +1,23 @@
+[build-system]
+requires = ["setuptools>=64"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "pycglbm"
+description = "Python tooling for the CGLBM color-gradient lattice Boltzmann solver"
+readme = "README.md"
+requires-python = ">=3.9"
+dynamic = ["version"]
+dependencies = ["numpy>=1.21", "matplotlib>=3.5"]
+
+[project.optional-dependencies]
+test = ["pytest>=7.0"]
+
+[project.scripts]
+pycglbm = "pycglbm.console:main"
+
+[tool.setuptools]
+packages = ["pycglbm"]
+
+[tool.setuptools.dynamic]
+version = { attr = "pycglbm.version.__version__" }

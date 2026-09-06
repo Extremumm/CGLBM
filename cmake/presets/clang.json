@@ -1,0 +1,40 @@
+{
+  "version": 4,
+  "include": [
+    "base.json"
+  ],
+  "configurePresets": [
+    {
+      "name": "clang",
+      "displayName": "Configure for Clang",
+      "inherits": "base",
+      "binaryDir": "${sourceDir}/build-clang",
+      "cacheVariables": {
+        "CMAKE_CXX_COMPILER": "clang++",
+        "ARCH": "native"
+      }
+    }
+  ],
+  "buildPresets": [
+    {
+      "name": "clang",
+      "displayName": "Build Clang",
+      "configurePreset": "clang",
+      "jobs": 9
+    }
+  ],
+  "testPresets": [
+    {
+      "name": "clang",
+      "displayName": "Test Clang",
+      "configurePreset": "clang",
+      "output": {
+        "outputOnFailure": true
+      },
+      "execution": {
+        "jobs": 4,
+        "noTestsAction": "error"
+      }
+    }
+  ]
+}

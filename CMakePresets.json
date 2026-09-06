@@ -1,0 +1,12 @@
+{
+  "version": 4,
+  "cmakeMinimumRequired": {
+    "major": 3,
+    "minor": 23,
+    "patch": 0
+  },
+  "include": [
+    "cmake/presets/gnu.json",
+    "cmake/presets/clang.json"
+  ]
+}

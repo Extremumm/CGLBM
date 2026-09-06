@@ -1,7 +1,7 @@
 #ifndef LATTICE_BOLTZMANN_H
 #define LATTICE_BOLTZMANN_H
 
-#include "Constants.h"
+#include "core/constants.h"
 
 // Define your lattice data structures
 // Discrete velocities:

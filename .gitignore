@@ -1,0 +1,34 @@
+/bin
+/build
+/build-*
+/artifacts/*
+!/artifacts/.gitkeep
+/venv
+/.venv
+compile_commands.json
+# user config file
+CMakeUserPresets.json
+# simulation output, wherever a run was launched
+*.vtk
+*.csv
+*.log
+# Python
+__pycache__
+*.py[cod]
+*.egg-info/
+.cache
+.pytest_cache/
+.ruff_cache/
+# Temporary files
+*.bkp
+*.bak
+*.orig
+*.swp
+# OS / editor
+.DS_Store
+.vscode/.ropeproject
+.idea/
+# Emacs
+*~
+\#*\#
+.\#*
