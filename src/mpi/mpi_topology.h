@@ -17,14 +17,22 @@ struct Decomposition {
     int y_offset = 0;  ///< global y index of the first interior node
 
     /// Nodes owned by this rank, ghost layer excluded.
-    int size() const { return nx * ny; }
+    int size() const {
+        return nx * ny;
+    }
 
     /// Extent of the array including one ghost layer on each side.
-    int padded_nx() const { return nx + 2; }
-    int padded_ny() const { return ny + 2; }
+    int padded_nx() const {
+        return nx + 2;
+    }
+    int padded_ny() const {
+        return ny + 2;
+    }
 
     /// Elements of a field stored with one ghost layer.
-    int padded_size() const { return padded_nx() * padded_ny(); }
+    int padded_size() const {
+        return padded_nx() * padded_ny();
+    }
 };
 
 /// A two-dimensional Cartesian decomposition of the lattice.
@@ -37,7 +45,7 @@ struct Decomposition {
 /// Without MPI the object still exists: one rank, the whole lattice, and every
 /// neighbour is the rank itself.
 class CartesianTopology {
-  public:
+public:
     /// Split `global_nx x global_ny` over every rank of `MPI_COMM_WORLD`.
     ///
     /// The rank grid is chosen by MPI (`MPI_Dims_create`) unless `dims_x` and
@@ -71,20 +79,28 @@ class CartesianTopology {
     int neighbour(int step_x, int step_y) const;
 
     /// The block owned by this rank.
-    const Decomposition& local() const { return local_; }
+    const Decomposition& local() const {
+        return local_;
+    }
 
     /// Global lattice size along x and y.
-    int global_nx() const { return global_nx_; }
-    int global_ny() const { return global_ny_; }
+    int global_nx() const {
+        return global_nx_;
+    }
+    int global_ny() const {
+        return global_ny_;
+    }
 
     /// The Cartesian communicator, as a `void*` so that this header stays free
     /// of `mpi.h`. Null without MPI. Cast it back to `MPI_Comm*` to use it.
-    void* communicator() const { return communicator_; }
+    void* communicator() const {
+        return communicator_;
+    }
 
     /// One line for the run log.
     std::string describe() const;
 
-  private:
+private:
     int global_nx_ = 0;
     int global_ny_ = 0;
     int dims_[2] = {1, 1};

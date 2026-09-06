@@ -7,7 +7,6 @@ they are filled by the two-pass exchange without any diagonal message.
 """
 
 import pytest
-
 from pycglbm.testing import mpi_launcher, parse_key_values, run_unit_program
 
 PROGRAM = "mpi_exchange_ghosts"
@@ -22,6 +21,11 @@ def _run(nprocs, global_nx=64, global_ny=64, depth=1, periodic_y=1):
     values = parse_key_values(result.stdout)
     values["returncode"] = result.returncode
     values["stderr"] = result.stderr
+
+    # Built with WITH_MPI=OFF the launcher gives N independent serial runs, each
+    # reporting a single rank; there is no halo exchange to check.
+    if nprocs > 1 and int(values.get("ranks", 1)) == 1:
+        pytest.skip("built without MPI")
     return values
 
 

@@ -51,8 +51,8 @@ void exchange_ghosts(const CartesianTopology& topology, double* field, int nx, i
 #ifdef CGLBM_WITH_MPI
     MPI_Comm comm = *static_cast<MPI_Comm*>(topology.communicator());
 
-    const int stride_j = depth;                // one node along y
-    const int stride_i = (ny + 2) * depth;     // one column along x
+    const int stride_j = depth;             // one node along y
+    const int stride_i = (ny + 2) * depth;  // one column along x
     const int tag_x = 0;
     const int tag_y = 1;
 
@@ -65,13 +65,31 @@ void exchange_ghosts(const CartesianTopology& topology, double* field, int nx, i
     const int column = (ny + 2) * depth;
 
     // last interior column -> left ghost column of the right neighbour
-    CGLBM_MPI_CHECK(MPI_Sendrecv(field + nx * stride_i, column, MPI_DOUBLE, right, tag_x,
-                                 field + 0 * stride_i, column, MPI_DOUBLE, left, tag_x, comm,
+    CGLBM_MPI_CHECK(MPI_Sendrecv(field + nx * stride_i,
+                                 column,
+                                 MPI_DOUBLE,
+                                 right,
+                                 tag_x,
+                                 field + 0 * stride_i,
+                                 column,
+                                 MPI_DOUBLE,
+                                 left,
+                                 tag_x,
+                                 comm,
                                  MPI_STATUS_IGNORE));
     // first interior column -> right ghost column of the left neighbour
-    CGLBM_MPI_CHECK(MPI_Sendrecv(field + 1 * stride_i, column, MPI_DOUBLE, left, tag_x,
-                                 field + (nx + 1) * stride_i, column, MPI_DOUBLE, right, tag_x,
-                                 comm, MPI_STATUS_IGNORE));
+    CGLBM_MPI_CHECK(MPI_Sendrecv(field + 1 * stride_i,
+                                 column,
+                                 MPI_DOUBLE,
+                                 left,
+                                 tag_x,
+                                 field + (nx + 1) * stride_i,
+                                 column,
+                                 MPI_DOUBLE,
+                                 right,
+                                 tag_x,
+                                 comm,
+                                 MPI_STATUS_IGNORE));
 
     // --- y direction -------------------------------------------------------
     // A row j = const is strided: (nx + 2) blocks of `depth` values, every
@@ -84,11 +102,29 @@ void exchange_ghosts(const CartesianTopology& topology, double* field, int nx, i
     const int below = topology.neighbour(0, -1);
     const int above = topology.neighbour(0, +1);
 
-    CGLBM_MPI_CHECK(MPI_Sendrecv(field + ny * stride_j, 1, row_type, above, tag_y,
-                                 field + 0 * stride_j, 1, row_type, below, tag_y, comm,
+    CGLBM_MPI_CHECK(MPI_Sendrecv(field + ny * stride_j,
+                                 1,
+                                 row_type,
+                                 above,
+                                 tag_y,
+                                 field + 0 * stride_j,
+                                 1,
+                                 row_type,
+                                 below,
+                                 tag_y,
+                                 comm,
                                  MPI_STATUS_IGNORE));
-    CGLBM_MPI_CHECK(MPI_Sendrecv(field + 1 * stride_j, 1, row_type, below, tag_y,
-                                 field + (ny + 1) * stride_j, 1, row_type, above, tag_y, comm,
+    CGLBM_MPI_CHECK(MPI_Sendrecv(field + 1 * stride_j,
+                                 1,
+                                 row_type,
+                                 below,
+                                 tag_y,
+                                 field + (ny + 1) * stride_j,
+                                 1,
+                                 row_type,
+                                 above,
+                                 tag_y,
+                                 comm,
                                  MPI_STATUS_IGNORE));
 
     CGLBM_MPI_CHECK(MPI_Type_free(&row_type));

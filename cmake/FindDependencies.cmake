@@ -23,10 +23,13 @@ if(WITH_OpenMP AND OpenMP_CXX_FOUND)
     target_link_libraries(cglbm_dependencies INTERFACE OpenMP::OpenMP_CXX)
 endif()
 
-# CGLBM_WITH_MPI guards every use of <mpi.h>: without it src/mpi still compiles
-# and behaves as a single rank, so the same sources build either way.
+# CGLBM_WITH_MPI guards every use of <mpi.h>: without it src/mpi still compiles and behaves as a
+# single rank, so the same sources build either way.
 if(WITH_MPI AND MPI_CXX_FOUND)
     target_link_libraries(cglbm_dependencies INTERFACE MPI::MPI_CXX)
     target_compile_definitions(cglbm_dependencies INTERFACE CGLBM_WITH_MPI)
-    set(CGLBM_MPI_LAUNCHER "${MPIEXEC_EXECUTABLE}" CACHE FILEPATH "mpirun used by the tests")
+    set(CGLBM_MPI_LAUNCHER
+        "${MPIEXEC_EXECUTABLE}"
+        CACHE FILEPATH "mpirun used by the tests"
+    )
 endif()

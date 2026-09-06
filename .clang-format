@@ -7,6 +7,11 @@ TabWidth: 4
 UseTab: Never
 AccessModifierOffset: -4
 AllowShortFunctionsOnASingleLine: Empty
+# Signatures in src/ are written one parameter per line, and trailing doc
+# comments are aligned two spaces out; keep both rather than repacking them.
+BinPackParameters: false
+BinPackArguments: false
+SpacesBeforeTrailingComments: 2
 AllowShortIfStatementsOnASingleLine: false
 AllowShortLoopsOnASingleLine: false
 BreakBeforeBraces: Attach

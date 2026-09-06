@@ -17,7 +17,7 @@ namespace mpi {
 /// last: the destructor finalises MPI. Copying is forbidden, since finalising
 /// twice is an error.
 class Environment {
-  public:
+public:
     Environment(int& argc, char**& argv);
     ~Environment();
 

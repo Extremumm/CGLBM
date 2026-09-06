@@ -24,12 +24,8 @@ int block_size(int total, int parts, int index, int* offset) {
     return size;
 }
 
-CartesianTopology::CartesianTopology(int global_nx,
-                                     int global_ny,
-                                     bool periodic_x,
-                                     bool periodic_y,
-                                     int dims_x,
-                                     int dims_y)
+CartesianTopology::CartesianTopology(
+    int global_nx, int global_ny, bool periodic_x, bool periodic_y, int dims_x, int dims_y)
     : global_nx_(global_nx), global_ny_(global_ny) {
     if (global_nx < 1 || global_ny < 1) {
         throw std::invalid_argument("CartesianTopology: the lattice must not be empty");
@@ -96,11 +92,17 @@ CartesianTopology::~CartesianTopology() {
 #endif
 }
 
-int CartesianTopology::dims(int axis) const { return dims_[axis]; }
+int CartesianTopology::dims(int axis) const {
+    return dims_[axis];
+}
 
-int CartesianTopology::coords(int axis) const { return coords_[axis]; }
+int CartesianTopology::coords(int axis) const {
+    return coords_[axis];
+}
 
-bool CartesianTopology::periodic(int axis) const { return periodic_[axis]; }
+bool CartesianTopology::periodic(int axis) const {
+    return periodic_[axis];
+}
 
 int CartesianTopology::neighbour(int step_x, int step_y) const {
 #ifdef CGLBM_WITH_MPI
@@ -133,9 +135,8 @@ std::string CartesianTopology::describe() const {
     return "lattice " + std::to_string(global_nx_) + "x" + std::to_string(global_ny_) +
            " over ranks " + std::to_string(dims_[0]) + "x" + std::to_string(dims_[1]) +
            ", this rank at (" + std::to_string(coords_[0]) + "," + std::to_string(coords_[1]) +
-           ") owns " + std::to_string(local_.nx) + "x" + std::to_string(local_.ny) +
-           " from (" + std::to_string(local_.x_offset) + "," +
-           std::to_string(local_.y_offset) + ")";
+           ") owns " + std::to_string(local_.nx) + "x" + std::to_string(local_.ny) + " from (" +
+           std::to_string(local_.x_offset) + "," + std::to_string(local_.y_offset) + ")";
 }
 
 }  // namespace mpi

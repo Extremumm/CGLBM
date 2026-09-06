@@ -2,7 +2,6 @@
 
 import numpy as np
 import pytest
-
 from pycglbm import CaseOutput
 from pycglbm.files import load_velocity
 

@@ -6,7 +6,6 @@ Run it from inside a run directory.
 import matplotlib.pyplot as plt
 from matplotlib.animation import FuncAnimation
 from matplotlib.widgets import Button, TextBox
-
 from pycglbm import CaseOutput
 from pycglbm.plotter import plot_fields
 

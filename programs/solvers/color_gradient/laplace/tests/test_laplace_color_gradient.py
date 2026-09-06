@@ -16,7 +16,6 @@ use.
 import math
 
 import pytest
-
 from pycglbm.testing import artifacts_dir, run_program
 
 # Compile-time constants of programs/solvers/color_gradient/laplace/main_laplace.cpp.
@@ -128,9 +127,8 @@ def test_validation_laplace_color_gradient_higher_isotropy_helps(laplace_run):
     gradient cutting spurious currents; this checks the direction of that claim
     on the real case rather than on the stencil alone.
     """
-    coarse = run_program(
-        "laplace", artifacts_dir() / "laplace_e4", args=("E4",), timeout=1800
-    )
+    coarse = run_program("laplace", artifacts_dir() / "laplace_e4", args=("E4",), timeout=1800)
+
     def peak(case):
         v = case.velocity(NUM_STEPS)
         return float(((v[..., 0] ** 2 + v[..., 1] ** 2) ** 0.5).max())

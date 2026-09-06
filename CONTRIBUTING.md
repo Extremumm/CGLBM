@@ -120,6 +120,19 @@ pytest --runlong             # everything, simulations included
 ctest --preset gnu           # through CTest: one entry per file and marker
 ```
 
+`ctest --preset gnu` needs the build to have been configured with an
+interpreter that has pytest, otherwise `cmake/Tests.cmake` registers nothing and
+the preset's `noTestsAction: error` fails the run:
+
+```bash
+cmake --preset gnu -DPython3_EXECUTABLE="$(which python)"
+```
+
+CI runs exactly this, plus the same suite against a build with
+`WITH_MPI=OFF WITH_OpenMP=OFF`. A test that depends on either backend must skip
+rather than fail there — see how the MPI tests detect a serial binary from the
+rank count it reports.
+
 CTest registers each test file once per marker; a file with no test for a marker
 exits 5, which the runner maps to success.
 

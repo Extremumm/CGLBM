@@ -2,7 +2,6 @@
 exactly once, and the neighbours must agree with the rank grid."""
 
 import pytest
-
 from pycglbm.testing import mpi_launcher, run_unit_program
 
 PROGRAM = "mpi_topology"
@@ -26,6 +25,11 @@ def _ranks(nprocs, global_nx=128, global_ny=128, periodic_x=1, periodic_y=1):
             key, _, value = token.partition("=")
             entry[key] = tuple(int(v) for v in value.split(",")) if "," in value else int(value)
         ranks[entry["rank"]] = entry
+
+    # Built with WITH_MPI=OFF, every process is its own MPI_COMM_WORLD: they all
+    # report rank 0 of 1, so the launcher gave us N independent serial runs.
+    if nprocs > 1 and all(entry["size"] == 1 for entry in ranks.values()):
+        pytest.skip("built without MPI")
     return ranks
 
 
