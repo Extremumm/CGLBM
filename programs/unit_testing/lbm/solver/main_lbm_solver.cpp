@@ -202,6 +202,19 @@ CaseConfig latva_kokko_case(GradientStencil stencil) {
     return config;
 }
 
+/// A case whose two components have different kinematic viscosities.
+///
+/// `nu2 = nu * rho1 / rho2` matches the *dynamic* viscosities, which is what
+/// makes tau uniform across the interface instead of spanning the density
+/// ratio. The point of running it here is that it takes the interpolation
+/// branch in `Solver::viscosity_at`, which no other case does.
+CaseConfig viscosity_ratio_case(GradientStencil stencil) {
+    CaseConfig config = ba_case(stencil);
+    config.physics.nu2 = config.physics.nu * config.physics.rho1 / config.physics.rho2;
+    config.physics.nu_b2 = config.physics.nu_b * config.physics.rho1 / config.physics.rho2;
+    return config;
+}
+
 /// Check that this equilibrium already carries the "enhanced" third-order term.
 ///
 /// Leclaire et al. (2013) added a term to the colour-gradient equilibrium to
@@ -327,6 +340,7 @@ int main(int argc, char** argv) {
         // Omega^(2), and the recolouring reads rho rather than p.
         report_case("csf", ba_case(stencil));
         report_case("latva_kokko", latva_kokko_case(stencil));
+        report_case("viscosity_ratio", viscosity_ratio_case(stencil));
         report_rest_state("rest_periodic", Boundary::PeriodicY);
         report_rest_state("rest_wall", Boundary::WallY);
         report_normalised_phase();

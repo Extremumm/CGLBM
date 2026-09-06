@@ -154,9 +154,18 @@ private:
     double cs4_;
     double cs6_;
 
+    /// Kinematic viscosities at (i, j), interpolated on the volume fraction.
+    ///
+    /// Returns `config_.physics.nu` and `nu_b` unchanged when the two
+    /// components share them, which is every case shipped here.
+    void viscosity_at(int i, int j, double* nu, double* nu_b) const;
+
     bool wall_y_;               ///< config_.boundary == Boundary::WallY
     bool normalise_interface_;  ///< config_.interface_field == BulkNormalised
     bool parallel_;             ///< config_.parallel, copied out for the OpenMP if clause
+    bool uniform_viscosity_;    ///< the two components share nu and nu_b
+    double nu2_;                ///< component 2's shear viscosity, resolved
+    double nu_b2_;              ///< component 2's bulk viscosity, resolved
     ComponentPair components_;
 
     // Macroscopic fields.

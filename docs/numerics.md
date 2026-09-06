@@ -328,14 +328,16 @@ and it is the subject of the next section.
 **Not present, and needed: how the tension is applied.** Ba et al. Eqs.
 (23)–(29), the section after that.
 
-Two further ingredients of Ba et al. are *not* implemented, deliberately. Their
-MRT collision is there for stability; the collision here is regularised, which
-discards the ghost moments outright rather than relaxing them at a chosen rate,
-and no stability problem was observed that MRT would address. Their Eq. (22)
-interpolates the relaxation parameter across the interface because their $s_\nu$
-is defined per fluid; here $\tau = \rho\nu/(p\,\mathrm dt) + 1/2$ is already a
-continuous function of the local ρ and p, so there is no discontinuity to
-smooth.
+**Not present, and now added: two viscosities.** Ba et al. Eq. (22) interpolates
+the relaxation parameter across the interface because their $s_\nu$ is defined
+per fluid. This code had no per-fluid viscosity at all: `Physics::nu` was one
+number for the mixture, so the viscosity *ratio* was not a parameter a case
+could set. `Physics::nu2` and `nu_b2` add it, interpolated on the volume
+fraction; see [Two viscosities](#two-viscosities-ba-et-al-eq-22).
+
+One ingredient of Ba et al. is still not implemented. Their MRT collision is
+there for stability; the collision here is regularised, which discards the ghost
+moments outright rather than relaxing them at a chosen rate.
 
 ### Locating the interface: Ba et al. Eq. (21)
 
@@ -534,6 +536,39 @@ kept, defaulting off, because it is the better operator below a ratio of about
 
 That leaves MRT as the only untried ingredient of Ba et al., and it is the one
 aimed at stability — which is what the CSF configuration lacks above 10³.
+
+### Two viscosities: Ba et al. Eq. (22)
+
+The relaxation time is
+
+$$\tau = \frac{\rho\,\nu}{p\,\mathrm dt} + \frac12,$$
+
+so with a single kinematic viscosity for both components the *dynamic*
+viscosity ρν — and with it τ — spans the whole density ratio. On the Laplace
+case at a ratio of 1000 that is τ = 5.5 in the light fluid against 5.0 × 10³ in
+the heavy one, three nodes apart, which is what breaks the stress form of the
+tension operator (above). It is also, on its own, a missing capability: with one
+`nu`, the viscosity *ratio* of the two fluids is not something a case could set,
+and it was pinned at exactly the density ratio.
+
+`Physics::nu2` and `nu_b2` give component 2 its own viscosities, negative
+meaning "the same as component 1". Where they differ the kinematic viscosity at
+a node is interpolated on the volume fraction of component 1, c = (1 + φ_N)/2:
+
+    nu(x) = c nu_1 + (1 - c) nu_2
+
+which is exactly ν₁ and ν₂ in the two bulks. Ba et al. instead blend the
+relaxation *rate* parabolically over a band around the interface; both are
+smooth and agree in the bulks. The volume fraction is used here because it is
+the quantity φ_N already measures, and because when the two viscosities are
+equal the solver skips the interpolation entirely — so every case shipped here
+is unaffected to the last bit, which is checked.
+
+Setting ν₂ = ν₁ ρ₁/ρ₂ matches the dynamic viscosities and makes τ uniform across
+the interface. **That does not by itself rescue the density ratio.** Measured at
+10⁴, with τ = 5.49 on both sides instead of 5.5 against 5 × 10⁴, the run still
+diverges. The τ span is what makes Ω⁽²⁾'s `1/τ` cancellation fail; it is not
+what limits the CSF configuration.
 
 ### Where the literature is
 

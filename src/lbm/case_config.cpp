@@ -73,6 +73,11 @@ void print_usage(const std::string& program_name) {
               << "                      segregation strength from the pressure and an\n"
               << "                      interface width, or from the density and beta\n"
               << "  --beta=X            segregation strength of `latva-kokko`, in (0, 1]\n"
+              << "  --nu=X, --nu-b=X    kinematic shear and bulk viscosity of component 1\n"
+              << "  --nu2=X, --nu-b2=X  the same for component 2; unset means equal to\n"
+              << "                      component 1's. Setting nu2 = nu rho1/rho2 matches\n"
+              << "                      the dynamic viscosities, which makes tau uniform\n"
+              << "                      across the interface\n"
               << "  --nx=N, --ny=N      lattice size, overriding the case default\n"
               << "  --steps=N           number of time steps\n"
               << "  --interval=N        write the CSV grids every N steps\n"
@@ -173,6 +178,24 @@ PhaseFieldInit cosine_layer(double amplitude, bool inverted) {
 
 namespace {
 
+/// Parse a viscosity: a finite, non-negative number.
+bool nonnegative_double(const std::string& value, const char* name, double* out) {
+    try {
+        size_t consumed = 0;
+        const double parsed = std::stod(value, &consumed);
+        if (consumed != value.size() || !std::isfinite(parsed) || parsed < 0.0) {
+            std::cerr << name << " must be a non-negative number; got '" << value << "'."
+                      << std::endl;
+            return false;
+        }
+        *out = parsed;
+        return true;
+    } catch (const std::exception&) {
+        std::cerr << name << " must be a non-negative number; got '" << value << "'." << std::endl;
+        return false;
+    }
+}
+
 /// Read "colour"/"color" or "normalised"/"normalized" into `field`.
 bool interface_field_from_name(const std::string& value, InterfaceField* field) {
     if (value == "colour" || value == "color") {
@@ -244,6 +267,30 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             } else {
                 std::cerr << "Unknown recolouring '" << value << "'; expected width or latva-kokko."
                           << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "nu", &value)) {
+            if (!nonnegative_double(value, "nu", &config.physics.nu)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "nu2", &value)) {
+            if (!nonnegative_double(value, "nu2", &config.physics.nu2)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "nu-b", &value)) {
+            if (!nonnegative_double(value, "nu-b", &config.physics.nu_b)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "nu-b2", &value)) {
+            if (!nonnegative_double(value, "nu-b2", &config.physics.nu_b2)) {
                 return CommandLineResult::Error;
             }
             continue;
@@ -362,6 +409,8 @@ std::string describe(const CaseConfig& config) {
         << "c2 = " << physics.c2 << "\n"
         << "nu = " << physics.nu << "\n"
         << "nu_b = " << physics.nu_b << "\n"
+        << "nu2 = " << (physics.nu2 < 0.0 ? physics.nu : physics.nu2) << "\n"
+        << "nu_b2 = " << (physics.nu_b2 < 0.0 ? physics.nu_b : physics.nu_b2) << "\n"
         << "sigma = " << physics.sigma << "\n"
         << "radius = " << physics.radius << "\n"
         << "gravity = " << physics.gravity << "\n"

@@ -42,14 +42,15 @@ def test_unit_test_lbm_solver_reports_its_stencil(solver_report, stencil):
 
 @pytest.mark.unit_test
 @pytest.mark.parametrize("stencil", STENCILS)
-@pytest.mark.parametrize("boundary", ["periodic", "wall", "csf", "latva_kokko"])
+@pytest.mark.parametrize("boundary", ["periodic", "wall", "csf", "latva_kokko", "viscosity_ratio"])
 def test_unit_test_lbm_solver_conserves_mass(solver_report, stencil, boundary):
     """Streaming moves populations; none of the collision operators creates them.
 
-    `csf` and `latva_kokko` are the configurations added for high density ratio:
-    the tension applied as a body force rather than through Omega^(2), and the
-    Latva-Kokko segregation operator. Neither shares a code path with the two
-    above, so both are checked against the same invariants.
+    `csf`, `latva_kokko` and `viscosity_ratio` are the configurations added for
+    high density ratio: the tension applied as a body force rather than through
+    Omega^(2), the Latva-Kokko segregation operator, and two components with
+    different kinematic viscosities. None shares a code path with the two above,
+    so all are checked against the same invariants.
     """
     values = solver_report[stencil]
     assert float(values[f"{boundary}_mass_drift"]) < MASS_DRIFT_TOLERANCE
@@ -57,7 +58,7 @@ def test_unit_test_lbm_solver_conserves_mass(solver_report, stencil, boundary):
 
 @pytest.mark.unit_test
 @pytest.mark.parametrize("stencil", STENCILS)
-@pytest.mark.parametrize("boundary", ["periodic", "wall", "csf"])
+@pytest.mark.parametrize("boundary", ["periodic", "wall", "csf", "viscosity_ratio"])
 def test_unit_test_lbm_solver_keeps_the_phase_field_bounded(solver_report, stencil, boundary):
     """phi must stay in [-1, 1], against a bounce-back wall as well as away from one.
 

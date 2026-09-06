@@ -28,6 +28,11 @@ Solver::Solver(CaseConfig config) : config_(std::move(config)), nx_(config_.nx),
     cs4_ = config_.units.cs4();
     cs6_ = config_.units.cs6();
 
+    // A negative viscosity for component 2 means "the same as component 1".
+    nu2_ = config_.physics.nu2 < 0.0 ? config_.physics.nu : config_.physics.nu2;
+    nu_b2_ = config_.physics.nu_b2 < 0.0 ? config_.physics.nu_b : config_.physics.nu_b2;
+    uniform_viscosity_ = nu2_ == config_.physics.nu && nu_b2_ == config_.physics.nu_b;
+
     wall_y_ = config_.boundary == Boundary::WallY;
     normalise_interface_ = config_.interface_field == InterfaceField::BulkNormalised;
     parallel_ = config_.parallel;
@@ -90,6 +95,22 @@ void Solver::gradient_at(const double* field, int i, int j, double* grad_x, doub
 
 void Solver::colour_gradient(int i, int j, double* grad_x, double* grad_y) const {
     gradient_at(normalise_interface_ ? phi_n_.data() : phi_.data(), i, j, grad_x, grad_y);
+}
+
+void Solver::viscosity_at(int i, int j, double* nu, double* nu_b) const {
+    if (uniform_viscosity_) {
+        // Not `c * nu + (1 - c) * nu`, which is not `nu` to the last bit.
+        *nu = config_.physics.nu;
+        *nu_b = config_.physics.nu_b;
+        return;
+    }
+    // phi_N is the volume-fraction indicator, 2c - 1, whatever field the
+    // colour gradient is taken of; it is recomputed here rather than read from
+    // `phi_n_` because that one only exists for `InterfaceField::BulkNormalised`.
+    const double fraction =
+        0.5 * (1.0 + normalised_phase(phi_(i, j), config_.physics.rho1, config_.physics.rho2));
+    *nu = fraction * config_.physics.nu + (1.0 - fraction) * nu2_;
+    *nu_b = fraction * config_.physics.nu_b + (1.0 - fraction) * nu_b2_;
 }
 
 void Solver::update_colour_gradient() {
@@ -211,16 +232,16 @@ void Solver::phase_field() {
 
 void Solver::collide() {
     const bool parallel = parallel_;
-    const double nu = config_.physics.nu;
-    const double nu_b = config_.physics.nu_b;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
             const double rho_local = rho_(i, j);
             const double p_local = p_(i, j);
+            double nu_local = 0.0, nu_b_local = 0.0;
+            viscosity_at(i, j, &nu_local, &nu_b_local);
             // Relaxation times from the viscosities, p. 284 of Kruger et al.
-            const double tau_nu = rho_local * nu / (p_local * dt_) + 0.5;
-            const double tau_b = rho_local * nu_b / (p_local * dt_) + 0.5;
+            const double tau_nu = rho_local * nu_local / (p_local * dt_) + 0.5;
+            const double tau_b = rho_local * nu_b_local / (p_local * dt_) + 0.5;
             double sum_nu_neq = 0.0, sum_b_neq = 0.0, sum_xy_neq = 0.0;
 
             // Project the non-equilibrium part onto the shear, bulk and
@@ -413,8 +434,6 @@ void Solver::collide_surface() {
         return;
     }
     const bool parallel = parallel_;
-    const double nu = config_.physics.nu;
-    const double nu_b = config_.physics.nu_b;
     const double sigma = config_.physics.sigma;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
@@ -432,8 +451,10 @@ void Solver::collide_surface() {
                 }
                 continue;
             }
-            const double tau_nu = rho_(i, j) * nu / (p_(i, j) * dt_) + 0.5;
-            const double tau_b = rho_(i, j) * nu_b / (p_(i, j) * dt_) + 0.5;
+            double nu_local = 0.0, nu_b_local = 0.0;
+            viscosity_at(i, j, &nu_local, &nu_b_local);
+            const double tau_nu = rho_(i, j) * nu_local / (p_(i, j) * dt_) + 0.5;
+            const double tau_b = rho_(i, j) * nu_b_local / (p_(i, j) * dt_) + 0.5;
             for (int k = 0; k < kQ; k++) {
                 const double xi_x = kXi[k][0], xi_y = kXi[k][1];
                 const double H_nu = 0.5 * (xi_x * xi_x - xi_y * xi_y);

@@ -93,6 +93,9 @@ command line, so a resolution or a run length is a flag rather than a rebuild:
                       segregation strength from the pressure and an interface
                       width, or from the density and beta
   --beta=X            segregation strength of `latva-kokko`, in (0, 1]
+  --nu=X, --nu-b=X    kinematic shear and bulk viscosity of component 1
+  --nu2=X, --nu-b2=X  the same for component 2; unset means equal to
+                      component 1's
   --initial-state=equilibrium|eos|linear
                       how rho and p are laid down at t = 0
   --nx=N, --ny=N      lattice size

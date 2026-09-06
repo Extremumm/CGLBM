@@ -233,8 +233,39 @@ struct Physics {
     double c1 = 1.0;    ///< sound speed of component 1
     double c2 = 1.0;    ///< sound speed of component 2
 
-    double nu = 0.0;    ///< kinematic shear viscosity
-    double nu_b = 0.0;  ///< kinematic bulk viscosity
+    /// Kinematic shear viscosity of component 1 (phi = +1).
+    ///
+    /// The relaxation time is `tau = rho nu / (p dt) + 1/2`, so with one
+    /// viscosity for both components the *dynamic* viscosity `rho nu` -- and
+    /// with it tau -- spans the whole density ratio: 5.5 in the light fluid
+    /// against 5.0e3 in the heavy one at a ratio of 1000 on the Laplace case.
+    /// That is what makes the capillary stress of `SurfaceTension::Perturbation`
+    /// fail to cancel its own `1 / tau`, and it is the reason a case at high
+    /// density contrast may want to set the two separately. Choosing
+    /// `nu2 = nu * rho1 / rho2` matches the dynamic viscosities and makes tau
+    /// uniform across the interface.
+    double nu = 0.0;
+    double nu_b = 0.0;  ///< kinematic bulk viscosity of component 1
+
+    /// Kinematic viscosities of component 2 (phi = -1).
+    ///
+    /// Negative means "the same as component 1", which is what every case
+    /// shipped here uses and what the solver takes as a fast path: the
+    /// interpolation below is skipped entirely, so a single-viscosity case is
+    /// unaffected to the last bit.
+    ///
+    /// Where they differ, the kinematic viscosity at a node is interpolated on
+    /// the volume fraction of component 1, `c = (1 + phi_N) / 2`:
+    ///
+    ///     nu(x) = c nu_1 + (1 - c) nu_2
+    ///
+    /// which is `nu_1` and `nu_2` exactly in the two bulks. Ba et al. Eq. (22)
+    /// instead blends the relaxation *rate* parabolically over a band around
+    /// the interface; both are smooth and agree in the bulks, and the volume
+    /// fraction is used here because it is the same quantity `phi_N` already
+    /// measures and because it reduces to the single-viscosity case exactly.
+    double nu2 = -1.0;
+    double nu_b2 = -1.0;
 
     double sigma = 0.0;   ///< surface tension
     double radius = 0.0;  ///< prescribed interface radius, for sigma / R

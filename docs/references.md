@@ -55,7 +55,7 @@
    | (29) velocity redefinition | `Solver::macroscopic()` already forms ρu = Σξf + F dt/2 |
    | (30) Latva-Kokko recolouring | `Recolouring::LatvaKokko`, off by default — measured better below a density ratio of 2 and unusable above 10 |
    | (11)–(13) MRT collision | not implemented; the collision here is regularised |
-   | (22) relaxation interpolation | not needed; τ is already continuous in ρ and p |
+   | (22) relaxation interpolation | `Physics::nu2` / `nu_b2`, interpolated on the volume fraction |
 
    See [`numerics.md`](numerics.md#reading-ba-et-al-2016-and-leclaire-et-al-2013).
 
