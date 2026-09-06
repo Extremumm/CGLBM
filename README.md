@@ -18,6 +18,7 @@ build configuration under `cmake`, the Python tooling in `PyCGLBM`.
 - CMake ≥ 3.23 (3.16 is enough without the presets),
 - OpenMP, for `src/omp` and the `rayleigh_taylor_omp` program,
 - an MPI implementation (OpenMPI, MPICH), for `src/mpi`,
+- CUDA Toolkit ≥ 11.0 (optional), for GPU acceleration with `src/cuda` and `rayleigh_taylor_cuda`,
 - Python ≥ 3.9 for the post-processing and the test suite.
 
 ```bash
@@ -43,11 +44,12 @@ Useful targets:
 | `dbg` | every debug program |
 | `laplace_all` | `laplace_opt` and `laplace_dbg` |
 | `laplace_opt` | that one program |
+| `rayleigh_taylor_cuda_opt` | CUDA-accelerated Rayleigh-Taylor simulation |
 
 Configuration is driven by the options printed at configure time — `RELEASE`,
-`DEBUG`, `ARCH`, `WITH_OpenMP`, `WITH_MPI`, `WITH_IPO`, `WITH_Python`, `EXCEPT`,
-`BIN_DIR`, `ARTIFACTS_DIR`. `WITH_OpenMP=OFF` and `WITH_MPI=OFF` still build
-everything: the parallel modules fall back to one thread and one rank. Set them on the command line (`-DDEBUG=OFF`), through the
+`DEBUG`, `ARCH`, `WITH_OpenMP`, `WITH_MPI`, `WITH_CUDA`, `WITH_IPO`, `WITH_Python`, `EXCEPT`,
+`BIN_DIR`, `ARTIFACTS_DIR`. `WITH_OpenMP=OFF`, `WITH_MPI=OFF`, and `WITH_CUDA=OFF` still build
+everything: the parallel modules fall back to one thread, one rank, or host execution. Set them on the command line (`-DDEBUG=OFF`), through the
 environment, or in a `CMakeUserPresets.json` — see
 `cmake/CMakeUserPresets.example.json`.
 

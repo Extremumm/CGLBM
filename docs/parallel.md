@@ -10,9 +10,11 @@ lattice. A solver written against these interfaces needs no `#ifdef` of its own.
 |---|---|
 | `WITH_OpenMP` | `cglbm::omp` reports one thread; `#pragma omp` is ignored by the compiler |
 | `WITH_MPI` | `cglbm::mpi` reports rank 0 of 1; the halo exchange wraps periodically in place |
+| `WITH_CUDA` | `cglbm::cuda` reports no devices; device queries fall back to host |
 
-`CGLBM_WITH_MPI` is the guard macro, defined by `cmake/FindDependencies.cmake`
-when MPI is both requested and found. OpenMP uses the standard `_OPENMP`.
+`CGLBM_WITH_MPI` and `CGLBM_WITH_CUDA` are the guard macros, defined by
+`cmake/FindDependencies.cmake` when the backend is requested and found. OpenMP
+uses the standard `_OPENMP`.
 
 ## `src/omp` — thread-level parallelism
 
@@ -106,6 +108,44 @@ pytest programs/unit_testing/mpi -m unit_test
 
 `pycglbm.testing.run_unit_program(..., nprocs=4)` wraps the launcher for the
 test suite, and `run_program(..., nprocs=4)` does the same for a solver.
+
+## `src/cuda` — GPU acceleration
+
+Three units encapsulate CUDA runtime interaction, error handling, and device memory:
+
+| Unit | Role |
+|---|---|
+| `cuda_environment` | Device discovery, capabilities, memory queries, device selection, synchronization |
+| `cuda_error` | `CGLBM_CUDA_CHECK`, reporting failing CUDA API call, file, line, and runtime error string |
+| `cuda_memory` | Templated device allocation/copy helpers and RAII `DeviceBuffer<T>` container |
+
+### Device query and initialization
+
+```cpp
+#include "cuda/cuda_environment.h"
+
+if (cglbm::cuda::available()) {
+    cglbm::cuda::set_device(0);
+}
+std::cout << cglbm::cuda::describe() << "\n";
+// e.g.: "CUDA enabled, 1 device: NVIDIA GeForce RTX 3060 (sm_86, 12288 MiB VRAM)"
+```
+
+### Device buffers and memory transfers
+
+```cpp
+#include "cuda/cuda_memory.h"
+
+cglbm::cuda::DeviceBuffer<double> d_field(Lx * Ly);
+d_field.copy_from_host(h_field.data());
+
+// ... launch CUDA kernels ...
+
+cglbm::cuda::synchronize();
+d_field.copy_to_host(h_field.data());
+```
+
+`rayleigh_taylor_cuda` uses this module to execute the entire 2D lattice Boltzmann solver on the GPU, outputting CSV grids identical in format to the serial and OpenMP solvers.
 
 ## Status
 

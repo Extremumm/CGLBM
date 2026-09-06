@@ -69,9 +69,14 @@ if(NOT opt_versions)
     message(FATAL_ERROR "Nothing to build: enable at least one of RELEASE and DEBUG.")
 endif()
 
-file(GLOB_RECURSE program_paths CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/programs/*/main_*.cpp")
+file(GLOB_RECURSE cpp_program_paths CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/programs/*/main_*.cpp")
+if(WITH_CUDA AND CUDA_FOUND)
+    file(GLOB_RECURSE cu_program_paths CONFIGURE_DEPENDS "${PROJECT_SOURCE_DIR}/programs/*/main_*.cu")
+else()
+    set(cu_program_paths "")
+endif()
 # append a fictive sourcefile for producing the library
-set(program_paths "${PROJECT_SOURCE_DIR}/src/main_cglbm.cpp" ${program_paths})
+set(program_paths "${PROJECT_SOURCE_DIR}/src/main_cglbm.cpp" ${cpp_program_paths} ${cu_program_paths})
 list(REMOVE_DUPLICATES program_paths)
 
 message(STATUS "")
@@ -81,8 +86,12 @@ foreach(program_path IN LISTS program_paths)
     get_filename_component(base_target_name ${program_path} NAME_WE)
     string(REGEX REPLACE "^main_" "" base_target_name ${base_target_name})
 
-    # every non-main source living next to the main_*.cpp belongs to that program
-    file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS ${program_dir}/[!_]*.cpp)
+    # every non-main source living next to the main_* belongs to that program
+    if(WITH_CUDA AND CUDA_FOUND)
+        file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS ${program_dir}/[!_]*.cpp ${program_dir}/[!_]*.cu)
+    else()
+        file(GLOB_RECURSE SRC_FILES CONFIGURE_DEPENDS ${program_dir}/[!_]*.cpp)
+    endif()
 
     add_custom_target(
         "${base_target_name}_all"

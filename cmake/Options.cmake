@@ -42,6 +42,13 @@ if(DEFINED ENV{WITH_MPI})
 endif()
 option(WITH_MPI "activate MPI" ${_with_mpi})
 
+set(_with_cuda_default ON)
+set(_with_cuda ${_with_cuda_default})
+if(DEFINED ENV{WITH_CUDA})
+    set(_with_cuda "$ENV{WITH_CUDA}")
+endif()
+option(WITH_CUDA "activate CUDA" ${_with_cuda})
+
 set(_with_ipo_default OFF)
 set(_with_ipo ${_with_ipo_default})
 if(DEFINED ENV{WITH_IPO})
@@ -108,6 +115,7 @@ set(cglbm_options
     "ARCH|${_arch_default}|${ARCH}|Processor architecture. If empty, the result is less optimized."
     "WITH_OpenMP|${_with_openmp_default}|${WITH_OpenMP}|Activate OpenMP."
     "WITH_MPI|${_with_mpi_default}|${WITH_MPI}|Activate MPI."
+    "WITH_CUDA|${_with_cuda_default}|${WITH_CUDA}|Activate CUDA."
     "WITH_IPO|${_with_ipo_default}|${WITH_IPO}|Enable link-time/interprocedural optimization."
     "WITH_Python|${_with_python_default}|${WITH_Python}|Register the pytest suite with CTest."
     "EXCEPT|${_except_default}|${EXCEPT}|Apply per-file exceptions."

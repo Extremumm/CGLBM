@@ -72,13 +72,27 @@ string(REPLACE ";" " " DEBUG_FLAGS_STR "${DEBUG_FLAGS}")
 
 if(RELEASE)
     message(STATUS "Release Flags: ${CMAKE_CXX_COMPILER} ${COMMON_FLAGS_STR} ${RELEASE_FLAGS_STR}")
-    target_compile_options(cglbm_options_opt INTERFACE ${COMMON_FLAGS} ${RELEASE_FLAGS})
+    target_compile_options(
+        cglbm_options_opt INTERFACE
+        $<$<COMPILE_LANGUAGE:CXX>:${COMMON_FLAGS} ${RELEASE_FLAGS}>
+        $<$<COMPILE_LANGUAGE:CUDA>:-O3>
+    )
     target_compile_definitions(cglbm_options_opt INTERFACE NDEBUG)
-    target_link_options(cglbm_options_opt INTERFACE ${COMMON_FLAGS} ${RELEASE_FLAGS})
+    target_link_options(
+        cglbm_options_opt INTERFACE
+        $<$<COMPILE_LANGUAGE:CXX>:${COMMON_FLAGS} ${RELEASE_FLAGS}>
+    )
 endif()
 if(DEBUG)
     message(STATUS "Debug Flags: ${CMAKE_CXX_COMPILER} ${COMMON_FLAGS_STR} ${DEBUG_FLAGS_STR}")
-    target_compile_options(cglbm_options_dbg INTERFACE ${COMMON_FLAGS} ${DEBUG_FLAGS})
+    target_compile_options(
+        cglbm_options_dbg INTERFACE
+        $<$<COMPILE_LANGUAGE:CXX>:${COMMON_FLAGS} ${DEBUG_FLAGS}>
+        $<$<COMPILE_LANGUAGE:CUDA>:-O0 -g -G>
+    )
     target_compile_definitions(cglbm_options_dbg INTERFACE DEBUG_CGLBM)
-    target_link_options(cglbm_options_dbg INTERFACE ${COMMON_FLAGS} ${DEBUG_FLAGS})
+    target_link_options(
+        cglbm_options_dbg INTERFACE
+        $<$<COMPILE_LANGUAGE:CXX>:${COMMON_FLAGS} ${DEBUG_FLAGS}>
+    )
 endif()
