@@ -325,6 +325,10 @@ case.pressure_jump(30000, inner=5, outer=30)
 
 ## Documentation
 
+- [`docs/report/report.tex`](docs/report/) — the reference document: user
+  guide, command-line and configuration reference, the derivation of both
+  schemes with proofs, and the validation results with figures. `make` in that
+  directory builds `report.pdf`
 - [`docs/numerics.md`](docs/numerics.md) — the discretisation, the collision
   operators, the time loop, and where each step lives in the code
 - [`docs/parallel.md`](docs/parallel.md) — the OpenMP and MPI modules
