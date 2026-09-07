@@ -12,7 +12,13 @@
 //     how the density ratio enters;
 //  3. the curvature of a sphere comes out as -2/R, not -1/R. Laplace's law
 //     reads 2 sigma / R in three dimensions, and getting this wrong would show
-//     up only as a factor of two in a validation run.
+//     up only as a factor of two in a validation run;
+//  4. the spheroid `oscillation_3d` starts from is the one it asks for, and the
+//     semi-axes it measures back are the ones that were laid down;
+//  5. a wall holds, and a fluid at rest between two of them goes hydrostatic
+//     under gravity. `rayleigh_taylor_3d` uses the wall and the body force
+//     together, where the flow itself is past anything analytic; here they are
+//     separated and each is checked exactly.
 //
 //   main_two_population_3d [stencil]
 
@@ -287,6 +293,133 @@ void report_droplet(const std::string& prefix, double ratio, GradientStencil3D s
               << prefix << "_max_speed = " << max_speed(solver) << std::endl;
 }
 
+/// `oscillating_droplet_3d` lays down the spheroid it claims, and
+/// `interface_axes` measures it back.
+///
+/// Both are new, and each could hide the other's error: a deformation that came
+/// out at the wrong amplitude would look like a measurement that did, and the
+/// oscillation case would then be validating a shape nobody prescribed. The
+/// analytic surface is `r(theta) = R' [1 + eps P_2(cos theta)]` with
+/// `R' = R (1 + 3 eps^2/5)^(-1/3)`, so the poles sit at `R'(1 + eps)`, the
+/// equator at `R'(1 - eps/2)`, and `(2 r_x + r_z)/3` is `R'` exactly.
+void report_spheroid_axes() {
+    const double deformation = 0.1;
+    const double radius = 12.0;
+    CaseConfig config = droplet_case(10.0, GradientStencil3D::E6);
+    config.nx = config.ny = config.nz = 48;
+    config.physics.radius = radius;
+    config.initial_phase_3d = cglbm::lbm::oscillating_droplet_3d(deformation);
+
+    TwoPopulationSolver3D solver(config);
+    solver.initialize();
+    double axes[3];
+    solver.interface_axes(axes);
+
+    const double equivalent = radius / std::cbrt(1.0 + 0.6 * deformation * deformation);
+    std::cout.precision(17);
+    std::cout << "spheroid_rx = " << axes[0] << "\n"
+              << "spheroid_ry = " << axes[1] << "\n"
+              << "spheroid_rz = " << axes[2] << "\n"
+              << "spheroid_polar_exact = " << equivalent * (1.0 + deformation) << "\n"
+              << "spheroid_equatorial_exact = " << equivalent * (1.0 - 0.5 * deformation) << "\n"
+              << "spheroid_equal_volume_radius = " << (2.0 * axes[0] + axes[2]) / 3.0 << "\n"
+              << "spheroid_equal_volume_exact = " << equivalent << std::endl;
+}
+
+/// A single fluid at rest between walls, under gravity, must go hydrostatic.
+///
+/// The wall and the body force are the two ingredients `laplace_3d` and
+/// `oscillation_3d` never touch, and `rayleigh_taylor_3d` uses both at once
+/// where nothing analytic is left to check them against. Here they are checked
+/// separately and exactly: mass may not cross a wall, the fluid must come to
+/// rest, and `dp/dy` must settle at `-rho g`.
+void report_wall_hydrostatic() {
+    CaseConfig config = droplet_case(1.0, GradientStencil3D::E4);
+    config.nx = 16;
+    config.ny = 32;
+    config.nz = 16;
+    config.steps = 4000;
+    config.physics.sigma = 0.0;
+    config.physics.gravity = 1.0e-4;
+    config.boundary = Boundary::WallY;
+    config.initial_phase_3d = [](const CaseConfig&, int, int, int) { return 1.0; };
+
+    TwoPopulationSolver3D solver(config);
+    solver.initialize();
+    const double mass = component_mass(solver, 0);
+    for (int step = 0; step < config.steps; ++step) {
+        solver.step();
+    }
+    solver.refresh();
+
+    // Away from the walls, where the bounce-back's own half-node offset would
+    // otherwise be measured instead of the balance.
+    const Field3D& pressure = solver.pressure();
+    const Field3D& density = solver.density();
+    double worst = 0.0;
+    for (int j = 4; j < config.ny - 4; ++j) {
+        const double slope = 0.5 * (pressure(8, j + 1, 8) - pressure(8, j - 1, 8));
+        const double expected = -density(8, j, 8) * config.physics.gravity;
+        worst = std::max(worst, std::fabs(slope - expected) / std::fabs(expected));
+    }
+    std::cout.precision(17);
+    std::cout << "wall_mass_drift = " << std::fabs(component_mass(solver, 0) - mass) / mass << "\n"
+              << "wall_max_speed = " << max_speed(solver) << "\n"
+              << "wall_hydrostatic_error = " << worst << std::endl;
+}
+
+/// The Rayleigh-Taylor arrangement: two components, walls, gravity, no tension.
+///
+/// Short, because what is checked here is not where the instability goes but
+/// that the machinery carrying it is sound -- both masses held between the
+/// walls, populations non-negative, the phase field inside [-1, 1] -- and one
+/// thing the two-dimensional case could not check at all: that x and z are
+/// treated alike. The initial layer is symmetric under swapping them, so the
+/// field must stay so, to round-off.
+void report_wall_layer() {
+    CaseConfig config = droplet_case(3.0, GradientStencil3D::E4);
+    config.nx = 16;
+    config.ny = 48;
+    config.nz = 16;
+    config.steps = 300;
+    config.physics.sigma = 0.0;
+    config.physics.gravity = 1.0e-4;
+    config.physics.ch_width_ope = 1.6;
+    config.boundary = Boundary::WallY;
+    config.initial_phase_3d = cglbm::lbm::cosine_layer_3d(0.1, /*inverted=*/false);
+
+    TwoPopulationSolver3D solver(config);
+    solver.initialize();
+    const double mass1 = component_mass(solver, 0);
+    const double mass2 = component_mass(solver, 1);
+    double worst_phase = max_abs_phase(solver);
+    double worst_population = min_population(solver);
+    for (int step = 0; step < config.steps; ++step) {
+        solver.step();
+        solver.refresh();
+        worst_phase = std::max(worst_phase, max_abs_phase(solver));
+        worst_population = std::min(worst_population, min_population(solver));
+    }
+
+    const Field3D& phase = solver.phase();
+    double asymmetry = 0.0;
+    for (int i = 0; i < config.nx; ++i) {
+        for (int j = 0; j < config.ny; ++j) {
+            for (int k = 0; k < config.nz; ++k) {
+                asymmetry = std::max(asymmetry, std::fabs(phase(i, j, k) - phase(k, j, i)));
+            }
+        }
+    }
+    std::cout.precision(17);
+    std::cout << "layer_mass1_drift = " << std::fabs(component_mass(solver, 0) - mass1) / mass1
+              << "\n"
+              << "layer_mass2_drift = " << std::fabs(component_mass(solver, 1) - mass2) / mass2
+              << "\n"
+              << "layer_min_population = " << worst_population << "\n"
+              << "layer_max_abs_phase = " << worst_phase << "\n"
+              << "layer_xz_asymmetry = " << asymmetry << std::endl;
+}
+
 void report_rest_state() {
     CaseConfig config = droplet_case(20.0, GradientStencil3D::E6);
     config.initial_phase_3d = [](const CaseConfig&, int, int, int) { return 1.0; };
@@ -318,6 +451,9 @@ int main(int argc, char** argv) {
         report_droplet("r20", 20.0, stencil);
         report_droplet("r1000", 1000.0, stencil);
         report_rest_state();
+        report_spheroid_axes();
+        report_wall_hydrostatic();
+        report_wall_layer();
     } catch (const std::exception& error) {
         std::cerr << "two_population_3d: " << error.what() << std::endl;
         return 1;

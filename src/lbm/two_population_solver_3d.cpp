@@ -3,6 +3,7 @@
 #include <cmath>
 #include <fstream>
 #include <iostream>
+#include <limits>
 #include <stdexcept>
 #include <string>
 
@@ -386,6 +387,28 @@ void TwoPopulationSolver3D::step() {
     stream();
 }
 
+void TwoPopulationSolver3D::interface_axes(double* radii) const {
+    const int centre[3] = {nx_ / 2, ny_ / 2, nz_ / 2};
+    const int extent[3] = {nx_, ny_, nz_};
+    for (int axis = 0; axis < 3; axis++) {
+        radii[axis] = std::numeric_limits<double>::quiet_NaN();
+        const int reach = extent[axis] - centre[axis] - 1;
+        double previous = phi_n_(centre[0], centre[1], centre[2]);
+        for (int m = 1; m <= reach; m++) {
+            int node[3] = {centre[0], centre[1], centre[2]};
+            node[axis] += m;
+            const double value = phi_n_(node[0], node[1], node[2]);
+            if (previous >= 0.0 && value < 0.0) {
+                // The crossing sits between m - 1 and m, at the linear
+                // interpolant of the two values bracketing it.
+                radii[axis] = (m - 1) + previous / (previous - value);
+                break;
+            }
+            previous = value;
+        }
+    }
+}
+
 void TwoPopulationSolver3D::write_midplane(CsvWriter& writer, int timestep) const {
     const int k = nz_ / 2;
     Field density(nx_, ny_), phase(nx_, ny_), pressure(nx_, ny_), velocity(nx_, ny_, 2);
@@ -448,14 +471,38 @@ void write_vtk_3d(const std::string& prefix,
 
 void TwoPopulationSolver3D::run() {
     CsvWriter writer(config_.output_precision);
+    const bool track = config_.track_interface;
+    double radii[3];
+
     initialize();
     write_midplane(writer, 0);
+    if (config_.write_vtk_field) {
+        write_vtk_3d("field", 0, rho_, u_, phi_n_, p_);
+    }
+    if (track) {
+        writer.open_droplet_track();
+        interface_axes(radii);
+        writer.write_axes(0, radii);
+    }
+
     for (int timestep = 1; timestep <= config_.steps; timestep++) {
         step();
+        if (track) {
+            // `step()` leaves phi_n_ as it stood before the collision it
+            // performed, so the fields are recovered from the streamed
+            // populations before the track is taken: the line written against
+            // `timestep` is then the state at `timestep`, not one step behind.
+            densities();
+            interface_axes(radii);
+            writer.write_axes(timestep, radii);
+        }
         if (timestep % config_.interval == 0) {
             std::cout << "Step " << timestep << std::endl;
             refresh();
             write_midplane(writer, timestep);
+            if (config_.write_vtk_field) {
+                write_vtk_3d("field", timestep, rho_, u_, phi_n_, p_);
+            }
         }
     }
 }

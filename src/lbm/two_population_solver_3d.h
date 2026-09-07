@@ -101,6 +101,19 @@ public:
         return alpha2_;
     }
 
+    /// Distance from the domain centre to the interface along +x, +y and +z.
+    ///
+    /// The `phi_N = 0` crossing, linearly interpolated between the two nodes
+    /// that bracket it -- the same estimate `pycglbm` takes of the mid-plane
+    /// slice, in three directions instead of one. `nan` for an axis along which
+    /// the phase field never changes sign.
+    ///
+    /// For a droplet these are its three semi-axes, and the mode-2 oscillation
+    /// `oscillation_3d` measures is the difference between the polar one and
+    /// the equatorial ones. `run()` appends them to `interface.csv` every step
+    /// when `config.track_interface` is set.
+    void interface_axes(double* radii) const;
+
     /// The equilibrium of one fluid, for the unit tests to take moments of.
     void equilibrium_for_test(int fluid, double rho_k, const double* u, double* out) const {
         equilibrium(fluid, rho_k, u[0], u[1], u[2], out);

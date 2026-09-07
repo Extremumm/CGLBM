@@ -134,6 +134,30 @@ class CaseOutput:
             "pressure": self.pressure(timestep),
         }
 
+    def droplet_axes(self) -> np.ndarray:
+        """The droplet's three semi-axes at every step, as an ``[n, 4]`` array.
+
+        Columns are ``timestep, rx, ry, rz``: the distance from the domain
+        centre to the interface along each axis, which a three-dimensional run
+        appends to ``interface.csv`` every step when the case asks it to. For a
+        spheroid oscillating in the second harmonic the signal is ``rz - rx``,
+        and ``rx`` and ``ry`` are equal by symmetry -- which is worth asserting,
+        because a lattice that broke that symmetry would still oscillate.
+
+        A two-dimensional run writes a different track into the same file, one
+        line per interface node rather than one per step; the header says which,
+        and this raises ``ValueError`` rather than returning nonsense when the
+        file holds the other one.
+        """
+        path = self.rundir / "interface.csv"
+        if not path.is_file():
+            raise FileNotFoundError(f"No interface track in {self.rundir}: {path}")
+        header = path.read_text(errors="replace").partition("\n")[0]
+        columns = [name.strip() for name in header.split(",")]
+        if columns != ["Timestep", "rx", "ry", "rz"]:
+            raise ValueError(f"{path} is not a droplet track; its header reads {header!r}")
+        return np.loadtxt(path, delimiter=",", skiprows=1, ndmin=2)
+
     def droplet_radius(self, timestep: int) -> float:
         """Effective radius of the ``phi > 0`` region, from its area."""
         area = float((self.phase(timestep) > 0).sum())

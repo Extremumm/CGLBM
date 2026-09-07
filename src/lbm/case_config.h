@@ -457,6 +457,17 @@ struct CaseConfig {
     /// Report a phase field that has left [-1, 1] on stdout.
     bool warn_phase_out_of_range = false;
 
+    /// Also write the whole field as `field_<t>.vtk`, every `interval` steps.
+    ///
+    /// Only the three-dimensional solver reads this, and it is off by default
+    /// because of what it costs: a 48^3 run writes 14 MB per dump against
+    /// 300 kB for the four CSV slices, and the slices are what the shipped
+    /// post-processing reads. It is here because without it a three-dimensional
+    /// run has no way at all to show what happens off the mid-plane -- CSV is
+    /// not offered for a whole field, at these sizes it would be gigabytes --
+    /// so a case that needs ParaView asks for `--vtk`.
+    bool write_vtk_field = false;
+
     /// Significant digits in the CSV output.
     ///
     /// Six is the iostream default and what every run so far has written; it
@@ -482,13 +493,46 @@ PhaseFieldInit droplet_interface();
 /// A flat interface at mid-height, perturbed by one cosine wavelength across
 /// the domain with amplitude `amplitude * nx`.
 ///
-/// `inverted` puts the dense component on top, which is what makes the
-/// Rayleigh-Taylor case unstable.
+/// `inverted` flips the profile, so that component 2 -- the light one in every
+/// case shipped here -- is the one above the interface. It is therefore
+/// `inverted = false` that puts the dense component on top and makes the
+/// Rayleigh-Taylor case unstable, which is what that case passes.
 PhaseFieldInit cosine_layer(double amplitude, bool inverted);
 
 /// A spherical droplet of `physics.radius` centred in the domain, component 1
 /// inside, as a profile in the bulk-normalised phase field.
 PhaseFieldInit3D droplet_interface_3d();
+
+/// The same droplet, deformed into the second spherical harmonic.
+///
+/// The surface is `r(theta) = R [1 + eps P_2(cos theta)]` with theta measured
+/// from the z axis and `P_2(x) = (3x^2 - 1)/2`, so the droplet starts as a
+/// spheroid: prolate along z for `deformation > 0`, oblate for negative. It is
+/// the shape whose free oscillation Lamb's mode-2 frequency describes, and
+/// releasing it from rest is how `oscillation_3d` measures that frequency.
+///
+/// `R` is scaled by `(1 + 3 eps^2/5)^(-1/3)` so the spheroid encloses the
+/// volume of a sphere of `physics.radius`. That correction is second order in
+/// eps -- 0.2 % at eps = 0.1 -- but it is the difference between a droplet that
+/// relaxes to the radius the case asked for and one that does not, and the
+/// frequency goes as `R^(-3/2)`.
+///
+/// Reference
+///  - H. Lamb, *Hydrodynamics*, 6th ed., Cambridge (1932), art. 275. The
+///    frequency of the free oscillations of a liquid globe.
+PhaseFieldInit3D oscillating_droplet_3d(double deformation);
+
+/// A flat interface at mid-height, perturbed by one cosine wavelength along
+/// both x and z.
+///
+/// The three-dimensional counterpart of `cosine_layer`, with the same
+/// displacement `amplitude * nx` and the same meaning for `inverted`. The
+/// perturbation is the product `cos(2 pi x / nx) cos(2 pi z / nz)`, the single
+/// mode of a square cell: the interface is displaced upward by the full
+/// amplitude at the cell's four corners and at its centre, downward by it at
+/// the midpoint of each edge, and not at all along the lines between. With the
+/// dense component on top those are the bubbles and the spikes respectively.
+PhaseFieldInit3D cosine_layer_3d(double amplitude, bool inverted);
 
 /// Outcome of reading the command line.
 enum class CommandLineResult {

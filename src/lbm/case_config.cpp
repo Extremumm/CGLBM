@@ -91,6 +91,9 @@ void print_usage(const std::string& program_name) {
               << "  --steps=N           number of time steps\n"
               << "  --interval=N        write the CSV grids every N steps\n"
               << "  --precision=N       significant digits in the CSV output (default 6)\n"
+              << "  --vtk               also write the whole field as field_<t>.vtk, for\n"
+              << "                      ParaView or VisIt. Three-dimensional runs only; the\n"
+              << "                      CSV output is the mid-plane slice either way\n"
               << "  --threads=N         OpenMP threads; implies parallel execution\n"
               << "  --help              show this message\n";
 }
@@ -186,11 +189,43 @@ PhaseFieldInit3D droplet_interface_3d() {
     };
 }
 
+PhaseFieldInit3D oscillating_droplet_3d(double deformation) {
+    // r(theta) = R [1 + eps P_2(cos theta)], theta from the z axis. The volume
+    // that surface encloses is (4 pi / 3) R^3 (1 + 3 eps^2 / 5), so R is shrunk
+    // by the cube root of that factor and the droplet holds the volume of a
+    // sphere of `physics.radius` whatever eps is.
+    const double volume_factor = std::cbrt(1.0 + 0.6 * deformation * deformation);
+    return [deformation, volume_factor](const CaseConfig& config, int i, int j, int k) {
+        const double x = i - config.nx / 2;
+        const double y = j - config.ny / 2;
+        const double z = k - config.nz / 2;
+        const double distance = std::sqrt(x * x + y * y + z * z);
+        const double radius = config.physics.radius * config.units.dx / volume_factor;
+        // On the axis the direction is degenerate; cos theta = 1 there picks
+        // the pole, which is the limit of every ray reaching it.
+        const double cos_theta = distance > 0.0 ? z / distance : 1.0;
+        const double legendre = 0.5 * (3.0 * cos_theta * cos_theta - 1.0);
+        const double surface = radius * (1.0 + deformation * legendre);
+        return -std::tanh((distance - surface) / config.physics.ch_width_init);
+    };
+}
+
 PhaseFieldInit cosine_layer(double amplitude, bool inverted) {
     return [amplitude, inverted](const CaseConfig& config, int i, int j) {
         // phi(x, y, 0) = tanh( (y - y0 - A L cos(-2 pi x / L)) / W )
         const int y0 = config.ny / 2;
         const double displacement = amplitude * config.nx * std::cos(-2. * kPi * i / config.nx);
+        const double profile = std::tanh(((j - y0) - displacement) / config.physics.ch_width_ope);
+        return inverted ? -profile : profile;
+    };
+}
+
+PhaseFieldInit3D cosine_layer_3d(double amplitude, bool inverted) {
+    return [amplitude, inverted](const CaseConfig& config, int i, int j, int k) {
+        // phi(x, y, z, 0) = tanh( (y - y0 - A L cos(2 pi x / Lx) cos(2 pi z / Lz)) / W )
+        const int y0 = config.ny / 2;
+        const double displacement = amplitude * config.nx * std::cos(2. * kPi * i / config.nx) *
+                                    std::cos(2. * kPi * k / config.nz);
         const double profile = std::tanh(((j - y0) - displacement) / config.physics.ch_width_ope);
         return inverted ? -profile : profile;
     };
@@ -264,6 +299,11 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
                           << std::endl;
                 return CommandLineResult::Error;
             }
+            // The three-dimensional stencils are a subset, E4 and E6. `E8` is
+            // two-dimensional only and leaves `stencil_3d` alone rather than
+            // failing, so `--stencil=E8` still means something to the case it
+            // was meant for.
+            stencil_from_name_3d(value.c_str(), &config.stencil_3d);
             continue;
         }
         if (option_value(argument, "interface-field", &value)) {
@@ -426,6 +466,10 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             }
             continue;
         }
+        if (argument == "--vtk") {
+            config.write_vtk_field = true;
+            continue;
+        }
         if (option_value(argument, "threads", &value)) {
             if (!positive_integer(value, "threads", &threads)) {
                 return CommandLineResult::Error;
@@ -436,6 +480,7 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
         // The historical form: a bare stencil name as the first argument.
         if (!argument.empty() && argument[0] != '-') {
             if (stencil_from_name(argument.c_str(), &config.stencil)) {
+                stencil_from_name_3d(argument.c_str(), &config.stencil_3d);
                 continue;
             }
         }
@@ -467,6 +512,7 @@ std::string describe(const CaseConfig& config) {
         << "interval = " << config.interval << "\n"
         << "boundary = " << (config.boundary == Boundary::WallY ? "wall_y" : "periodic_y") << "\n"
         << "stencil = " << stencil_name(config.stencil) << "\n"
+        << "stencil_3d = " << stencil_name_3d(config.stencil_3d) << "\n"
         << "initial_state = "
         << (config.initial_state == InitialState::MechanicalEquilibrium
                 ? "equilibrium"
@@ -505,6 +551,8 @@ std::string describe(const CaseConfig& config) {
         << "p1_inf = " << physics.p1_inf << "\n"
         << "p2_inf = " << physics.p2_inf << "\n"
         << "output_precision = " << config.output_precision << "\n"
+        << "track_interface = " << (config.track_interface ? "true" : "false") << "\n"
+        << "vtk = " << (config.write_vtk_field ? "true" : "false") << "\n"
         << "parallel = " << (config.parallel ? "true" : "false");
     return out.str();
 }

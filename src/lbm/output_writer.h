@@ -60,6 +60,23 @@ public:
     /// capillary cases measure an oscillation period from it.
     void write_interface(int timestep, const Field& phase);
 
+    /// Start `interface.csv` for a three-dimensional droplet and write its
+    /// header, `Timestep, rx, ry, rz`.
+    ///
+    /// A different track from the two-dimensional one, in the same file: there
+    /// a wave is a curve and the whole crossing has to be recorded, while a
+    /// droplet is described by its three semi-axes. The header says which of
+    /// the two a file holds, and no run writes both.
+    void open_droplet_track();
+
+    /// Append the three semi-axes of a droplet at `timestep`.
+    ///
+    /// `radii` is the distance from the domain centre to the interface along
+    /// +x, +y and +z. `nan` for an axis the interface does not cross is written
+    /// through rather than suppressed, so a droplet that has broken up leaves a
+    /// record of it instead of a gap.
+    void write_axes(int timestep, const double* radii);
+
 private:
     std::ofstream open_checked(const std::string& filename) const;
 

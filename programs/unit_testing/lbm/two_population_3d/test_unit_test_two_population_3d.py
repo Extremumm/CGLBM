@@ -13,6 +13,14 @@ for it rather than taken from a table. The rest weights ``phi_i^k`` change --
 which is how the density ratio reaches the pressure. And the curvature of a
 sphere is ``-2/R``, not ``-1/R``: Laplace's law reads ``2 sigma / R`` here, and
 getting it wrong would surface only as a factor of two in a validation run.
+
+Two more were added with the cases that move. ``oscillation_3d`` starts from a
+spheroid and measures its semi-axes back, and either half of that could hide an
+error in the other, so the shape and the measurement are checked against the
+analytic surface here. ``rayleigh_taylor_3d`` uses the wall and the body force
+together in a flow that has no closed form, so the wall and the body force are
+separated here: mass may not cross a wall, and a fluid at rest between two of
+them must go hydrostatic.
 """
 
 import pytest
@@ -39,6 +47,23 @@ REST_SPEED_TOLERANCE = 1.0e-12
 
 #: Relative error allowed on the curvature of a resolved sphere. Measured: 0.06 %.
 CURVATURE_TOLERANCE = 0.02
+#: Relative error allowed on the semi-axes of an analytic spheroid.
+#:
+#: Measured: 0.13 % on the equator and 0.18 % at the pole, both positive. The
+#: bias is the linear interpolation between the two nodes bracketing the
+#: crossing: tanh is convex on the inside of the interface, so the straight line
+#: between the samples crosses zero slightly late.
+AXIS_TOLERANCE = 0.005
+
+#: Relative error allowed on `dp/dy = -rho g`. Measured: 1.0 % after 4000 steps.
+#:
+#: It is a residual, not a floor. The whole pressure varies by 0.8 % across the
+#: box, so the balance is being read out of the fifth digit of the pressure, and
+#: the run still carries motion at 4e-6 -- enough to move that digit by about a
+#: per cent. What the test is for is the failure that would matter: a force that
+#: reached the momentum equation with the wrong sign or magnitude, or a wall
+#: that pushed back on the column.
+HYDROSTATIC_TOLERANCE = 0.03
 
 
 @pytest.fixture(scope="module")
@@ -156,3 +181,83 @@ def test_unit_test_two_population_3d_keeps_the_phase_field_bounded(report, stenc
 def test_unit_test_two_population_3d_leaves_a_uniform_fluid_at_rest(report, stencil):
     """No interface and no gravity: nothing may start moving."""
     assert float(report[stencil]["rest_max_speed"]) < REST_SPEED_TOLERANCE
+
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_3d_lays_down_the_spheroid_it_was_asked_for(report, stencil):
+    """The mode-2 shape and the semi-axes that measure it must agree.
+
+    `oscillation_3d` prescribes `r(theta) = R' [1 + eps P_2(cos theta)]` and
+    reads the oscillation off the difference between the polar and equatorial
+    semi-axes. If the deformation came out at the wrong amplitude, or the
+    measurement read it back wrong, the case would still oscillate and would
+    still be scored against Lamb -- so both are checked against the analytic
+    surface, which fixes the poles at `R'(1 + eps)` and the equator at
+    `R'(1 - eps/2)`.
+    """
+    values = report[stencil]
+    assert float(values["spheroid_rz"]) == pytest.approx(
+        float(values["spheroid_polar_exact"]), rel=AXIS_TOLERANCE
+    )
+    for axis in ("spheroid_rx", "spheroid_ry"):
+        assert float(values[axis]) == pytest.approx(
+            float(values["spheroid_equatorial_exact"]), rel=AXIS_TOLERANCE
+        )
+    assert float(values["spheroid_equal_volume_radius"]) == pytest.approx(
+        float(values["spheroid_equal_volume_exact"]), rel=AXIS_TOLERANCE
+    )
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_3d_spheroid_is_axisymmetric(report, stencil):
+    """The two equatorial semi-axes must be equal to the last bit.
+
+    The deformation is about z, so x and y are interchangeable. Nothing in the
+    lattice enforces that -- D3Q19 treats the three axes alike, and this is the
+    statement that the solver does too.
+    """
+    values = report[stencil]
+    assert float(values["spheroid_rx"]) == float(values["spheroid_ry"])
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_3d_walls_hold_the_fluid(report, stencil):
+    """Nothing may cross a wall, and the fluid must come to rest against it."""
+    values = report[stencil]
+    assert float(values["wall_mass_drift"]) < MASS_DRIFT_TOLERANCE
+    assert float(values["wall_max_speed"]) < 1.0e-4
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_3d_gravity_reaches_hydrostatic_balance(report, stencil):
+    """dp/dy must settle at -rho g, which is what the body force is for."""
+    assert float(report[stencil]["wall_hydrostatic_error"]) < HYDROSTATIC_TOLERANCE
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_3d_wall_layer_conserves_both_components(report, stencil):
+    """The Rayleigh-Taylor arrangement, with the walls and the force together."""
+    values = report[stencil]
+    assert float(values["layer_mass1_drift"]) < MASS_DRIFT_TOLERANCE
+    assert float(values["layer_mass2_drift"]) < MASS_DRIFT_TOLERANCE
+    assert float(values["layer_min_population"]) >= 0.0
+    assert float(values["layer_max_abs_phase"]) <= 1.0 + PHASE_TOLERANCE
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_3d_treats_x_and_z_alike(report, stencil):
+    """A layer symmetric under swapping x and z must stay so.
+
+    The perturbation is `cos(2 pi x / nx) cos(2 pi z / nz)` on a square
+    cross-section, which is unchanged by the swap. Everything downstream of it
+    -- the gradient stencil, the streaming, the wall -- has to be too, and this
+    is the one invariant a two-dimensional run could not have checked.
+    """
+    assert float(report[stencil]["layer_xz_asymmetry"]) < 1.0e-12

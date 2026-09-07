@@ -93,6 +93,23 @@ void CsvWriter::write_interface(int timestep, const Field& phase) {
     }
 }
 
+void CsvWriter::open_droplet_track() {
+    interface_file_.open("interface.csv");
+    if (!interface_file_) {
+        throw OutputError("cannot open interface.csv for writing");
+    }
+    interface_file_.precision(precision_);
+    interface_file_ << "Timestep, rx, ry, rz" << std::endl;
+}
+
+void CsvWriter::write_axes(int timestep, const double* radii) {
+    interface_file_ << timestep << ", " << radii[0] << ", " << radii[1] << ", " << radii[2]
+                    << std::endl;
+    if (!interface_file_) {
+        throw OutputError("failed to write interface.csv");
+    }
+}
+
 void write_vtk(const std::string& prefix, int timestep, const MacroscopicState& state) {
     const std::string filename = prefix + std::to_string(timestep) + ".vtk";
     std::ofstream file(filename);

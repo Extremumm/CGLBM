@@ -312,7 +312,8 @@ sound-speed ratio are tied together, so at 10³ the heavy fluid's sound speed is
 **In three dimensions** the two-population model is available as
 `cglbm::lbm::TwoPopulationSolver3D` on D3Q19 (`laplace_3d`). Laplace's law there
 is Δp = 2σ/R, and the case measures 1.026 of it at a density ratio of 1000 with
-spurious currents of 2 × 10⁻⁵. Only that model is extended: the
+spurious currents of 2 × 10⁻⁵ — 1.011 at R = 15, the error being second order in
+the resolution and flat in the density ratio. Only that model is extended: the
 equation-of-state solver's Hermite equilibrium and its corrective source terms
 would need a full three-dimensional re-derivation, which is not attempted here.
 

@@ -803,8 +803,10 @@ spurious currents that a single relaxation time leaves in the ghost moments.
 
 ## Three dimensions
 
-`TwoPopulationSolver3D` is the two-population model on D3Q19. Only that model is
-extended: `Solver`'s equilibrium is a Hermite expansion carrying the departure
+`TwoPopulationSolver3D` is the two-population model on D3Q19, and
+`laplace_3d`, `oscillation_3d` and `rayleigh_taylor_3d` are the cases that
+exercise it — the static droplet, the same droplet ringing, and the wall and the
+body force. Only that model is extended: `Solver`'s equilibrium is a Hermite expansion carrying the departure
 from the ideal gas, and its source term corrects a third-order moment that D2Q9
 cannot resolve; both would need a three-dimensional re-derivation that there is
 no reference to check against. The two-population model needs no such
@@ -888,15 +890,144 @@ A static droplet at a density ratio of 1000, R = 10 in 48³, σ = 0.1, α₂ = 0
 | 2 × 10⁴ | 1.0261 | 2.1 × 10⁻⁵ |
 | 3 × 10⁴ | **1.0240** | 2.1 × 10⁻⁵ |
 
-approached from above and still creeping down slowly. The residual +2.4 % is
-consistent with the two-dimensional result at the same radius — R = 10 gave
-+2.1 % there against +0.3 % at R = 25 — so it is resolution, not dimension.
+approached from above and still creeping down slowly. Three sweeps say what the
+residual +2.4 % is made of, all at 2 × 10⁴ steps:
+
+| | Δp R / (2σ) | max &#124;u&#124; |
+|---|---|---|
+| density ratio 10 | +2.22 % | 9.8 × 10⁻⁶ |
+| density ratio 100 | +2.29 % | 1.1 × 10⁻⁵ |
+| density ratio 10³ | +2.51 % | 2.1 × 10⁻⁵ |
+| R = 10 in 48³ | +2.51 % | 2.1 × 10⁻⁵ |
+| **R = 15 in 64³** | **+1.08 %** | 1.8 × 10⁻⁵ |
+| E6 gradient | +2.51 % | 2.1 × 10⁻⁵ |
+| E4 gradient | +2.56 % | **1.9 × 10⁻⁴** |
+
+The error is flat in the density ratio across two decades and falls by more than
+half when the radius goes from 10 to 15 — a factor of 2.3 for a resolution ratio
+of 1.5, so second order — which settles that it is resolution rather than
+density contrast or dimension. And the gradient stencil behaves exactly as it
+does in two dimensions: dropping from sixth-order to fourth-order isotropy
+barely moves the pressure jump and costs an order of magnitude on the spurious
+currents. That is the whole reason E6 is the default.
 
 The lattice loops run across OpenMP threads by default here, unlike the
 two-dimensional cases: three dimensions costs about a hundred times more work
 per step, and each loop writes only its own node, so the result does not depend
 on the thread count. That is checked rather than assumed — one thread and eight
 give byte-identical output.
+
+### Dynamics: the oscillating droplet
+
+A static droplet says nothing about whether the scheme moves correctly, and the
+Laplace jump is the only thing `laplace_3d` can be wrong about. `oscillation_3d`
+is the same scheme in motion, scored against the one classical result that
+exists *only* in three dimensions. Lamb gives the frequency of the free
+oscillation of a droplet in a second fluid,
+
+    omega_n² = n (n − 1)(n + 1)(n + 2) σ / { R³ [ (n + 1) ρ_in + n ρ_out ] }
+
+which for the lowest mode a droplet has, n = 2, is
+
+    omega_2² = 24 σ / { R³ (3 ρ_in + 2 ρ_out) }
+
+against `6 σ / [R³ (ρ_in + ρ_out)]` in two dimensions. The numerator, the
+weighting of the two densities and the mode shape behind both change with the
+dimension, so this is the dynamic counterpart of Δp = 2σ/R against σ/R: not a
+two-dimensional formula with a coefficient adjusted, a different formula.
+
+The case lays down `r(θ) = R [1 + ε P₂(cos θ)]` at rest — `R` shrunk by
+`(1 + 3ε²/5)^(1/3)` so the spheroid holds the volume of the sphere that was
+asked for — and appends the three semi-axes to `interface.csv` every step. The
+mode-2 signal is `r_z − r_x`, and `(2 r_x + r_z)/3` is `R` exactly, so the same
+track carries both the oscillation and the check that the droplet is not
+quietly losing volume.
+
+Fitting it needs a decaying sinusoid, which is a nonlinear least-squares problem
+and scipy is not a dependency. It does not need to be one:
+`pycglbm.oscillation` uses Prony's recurrence — a damped sinusoid sampled
+uniformly satisfies `s[n+1] = a s[n] + b s[n−1] + c` exactly, and the roots of
+`z² − az − b` are `exp((−α ± iω))` — for the starting point, then a shrinking
+grid over `(α, ω)` with the amplitude and offset solved linearly at each trial.
+On the shipped track that lands on the same numbers a nonlinear fit does, to
+five digits.
+
+**What it measures**, at a density ratio of 10, σ = 0.1, ε = 0.1, matched
+dynamic viscosity μ = 0.02, E6 gradient:
+
+| R | lattice | ω₀ measured | ω Lamb | ratio | α/ω₀ | fit residual |
+|---|---|---|---|---|---|---|
+| 8 | 48³ | 1.009 × 10⁻² | 1.210 × 10⁻² | 0.834 | 0.138 | 0.010 |
+| 10 | 48³ | 7.550 × 10⁻³ | 8.660 × 10⁻³ | **0.872** | 0.123 | 0.014 |
+| 13 | 64³ | TBD13 | TBD13L | TBD13R | TBD13Z | TBD13F |
+
+**The frequency is low, and the reason is the interface, not the tension.** The
+three ratios are `1 − 1.3/R` to within the scatter — first order in the
+interface width over the radius, the interface being about 1.6 nodes wide at
+every one of them. Two things that could have explained it are ruled out by
+measurement rather than by argument:
+
+ - *The surface tension.* Running `laplace_3d` at exactly these parameters —
+   `--rho1=10 --sigma=0.1 --nu=0.002 --nu2=0.02` — gives Δp R / (2σ) = 1.0235,
+   the same +2 % the ratio-1000 case gives. The tension the droplet is being
+   pulled back by is the tension in the formula.
+ - *The viscosity.* The damping ratio is 0.12, and the correction from the
+   observed frequency to the undamped one, `ω₀ = sqrt(ω² + α²)`, is 0.8 % — a
+   twentieth of the gap. TBDVISC
+
+So what is left is the diffuse interface itself, which is what the 1/R says: at
+R = 10 the transition layer is a sixth of the radius, and neither the tension
+nor the inertia of that layer sits where a sharp-interface theory puts it.
+
+### Walls and gravity
+
+`laplace_3d` and `oscillation_3d` are both triply periodic and neither has a
+body force, so `rayleigh_taylor_3d` — dense component on top, one cosine
+wavelength along x and one along z, no surface tension — is what exercises the
+two remaining paths. It is a demonstration and not a validation, and the
+distinction is worth being explicit about. The inviscid single-mode growth rate
+`n = sqrt(A g k)`, with `k = 2π√2/nx` for the square cell, would be the obvious
+thing to score against; at this resolution it cannot be. The viscous correction
+`−ν k²` is a quarter of it, the interface is 1.6 nodes wide against a wavelength
+of 32, and the perturbation has to start at about that width to be resolved at
+all. Lowering ν enough to sharpen the comparison puts τ under 0.52; raising g
+enough makes the hydrostatic pressure a third of the bulk pressure.
+
+The wall and the body force are therefore checked separately, and exactly, in
+`programs/unit_testing/lbm/two_population_3d`:
+
+| | measured |
+|---|---|
+| mass drift, single fluid between walls, 4 × 10³ steps | 2.6 × 10⁻¹³ |
+| residual speed of that column | 3.7 × 10⁻⁶ |
+| `dp/dy` against `−ρ g` | 1.0 % |
+| mass drift of each component, layer under gravity | 4 × 10⁻¹⁵, 1 × 10⁻¹⁴ |
+| asymmetry under swapping x and z | 4.2 × 10⁻¹⁵ |
+
+The hydrostatic 1 % is a residual and not a floor: the pressure varies by 0.8 %
+across the whole column, so the balance is read out of its fifth digit, and the
+run still carries motion at 4 × 10⁻⁶ — enough to move that digit by about a per
+cent. What the test is there to catch is a force reaching the momentum equation
+with the wrong sign or size, or a wall pushing back on the column.
+
+The last row is the one invariant no two-dimensional run could have had. The
+initial layer is unchanged by swapping x and z, so the solution must be too, and
+everything between the gradient stencil and the bounce-back has to agree for
+that to hold to round-off.
+
+### The three-dimensional cases
+
+| Program | Lattice | What it checks |
+|---|---|---|
+| `laplace_3d` | 48³ | Δp = 2σ/R at a density ratio of 1000 |
+| `oscillation_3d` | 48³ | Lamb's mode-2 frequency, and the scheme in motion |
+| `rayleigh_taylor_3d` | 32×128×32 | the wall and the body force, together |
+
+All three write the `z = nz/2` slice into the four CSV files a two-dimensional
+run writes, so the existing post-processing reads them unchanged. `--vtk` adds
+the whole field as `field_<t>.vtk` for ParaView; it is off by default because a
+48³ dump is 14 MB against 300 kB for the slices, and CSV is not offered for a
+whole field at all — at these sizes it would be gigabytes a step.
 
 ## Isotropy of the colour gradient
 
