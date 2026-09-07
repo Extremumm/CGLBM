@@ -20,6 +20,11 @@ import numpy as np  # noqa: E402
 HERE = pathlib.Path(__file__).resolve().parent
 DATA = HERE / "data"
 
+#: Written into every PDF instead of the current time, so that regenerating the
+#: figures from unchanged data produces byte-identical files and committing them
+#: does not churn.
+SAVE = {"metadata": {"CreationDate": None}}
+
 #: One colour and label per model, used by every figure.
 MODELS = {
     "eos_legacy": ("#B3462F", r"EOS solver, $\Omega^{(2)}$ stress"),
@@ -94,7 +99,7 @@ def figure_sweep():
     bottom.set_xlabel(r"density ratio $\rho_1/\rho_2$")
     bottom.set_ylabel(r"spurious currents $\max|\mathbf{u}|$")
     bottom.set_title("Spurious currents", fontsize=9.5, loc="left")
-    fig.savefig(HERE / "fig_sweep.pdf")
+    fig.savefig(HERE / "fig_sweep.pdf", **SAVE)
     plt.close(fig)
 
 
@@ -130,7 +135,7 @@ def figure_history():
     axis.set_title(
         r"Density ratio $10^3$: what a short run would have reported", fontsize=9.5, loc="left"
     )
-    fig.savefig(HERE / "fig_history.pdf")
+    fig.savefig(HERE / "fig_history.pdf", **SAVE)
     plt.close(fig)
 
 
@@ -163,7 +168,7 @@ def figure_profiles():
     axes[2].set_ylabel(r"pressure $p \, / \, p_\infty$")
     axes[0].legend(loc="lower left", fontsize=6.5)
     axes[2].set_title("pressure", fontsize=8, loc="left")
-    fig.savefig(HERE / "fig_profiles.pdf")
+    fig.savefig(HERE / "fig_profiles.pdf", **SAVE)
     plt.close(fig)
 
 
@@ -199,7 +204,7 @@ def figure_currents():
         loc="left",
     )
     fig.colorbar(image, ax=axis, label=r"$|\mathbf{u}|$", shrink=0.85)
-    fig.savefig(HERE / "fig_currents.pdf")
+    fig.savefig(HERE / "fig_currents.pdf", **SAVE)
     plt.close(fig)
 
 
@@ -252,7 +257,7 @@ def figure_recolouring():
     axis.set_ylim(1e-2, 1e5)
     axis.legend(loc="upper left", fontsize=8)
     axis.set_title("Why the recolouring needs adapting", fontsize=9.5, loc="left")
-    fig.savefig(HERE / "fig_recolouring.pdf")
+    fig.savefig(HERE / "fig_recolouring.pdf", **SAVE)
     plt.close(fig)
     return crossing
 

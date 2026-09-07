@@ -10,6 +10,10 @@
 
 PYTHON ?= python3
 ROOT := ../..
+# Pin the timestamps LaTeX would otherwise embed, so that rebuilding from
+# unchanged sources gives a byte-identical PDF.
+export SOURCE_DATE_EPOCH := 1757203200
+export FORCE_SOURCE_DATE := 1
 FIGURES := $(patsubst %,figures/fig_%.pdf,sweep history profiles currents recolouring)
 
 .PHONY: all figures data clean distclean
