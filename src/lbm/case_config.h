@@ -7,6 +7,7 @@
 #include "lbm/d2q9.h"
 #include "lbm/equation_of_state.h"
 #include "lbm/isotropic_gradient.h"
+#include "lbm/isotropic_gradient_3d.h"
 
 /// What distinguishes one colour-gradient case from another.
 ///
@@ -32,6 +33,9 @@ struct CaseConfig;
 /// phi = +1 is component 1 and phi = -1 component 2; the interface is where it
 /// crosses zero.
 using PhaseFieldInit = std::function<double(const CaseConfig&, int i, int j)>;
+
+/// The same, for a three-dimensional case.
+using PhaseFieldInit3D = std::function<double(const CaseConfig&, int i, int j, int k)>;
 
 /// Which field the colour gradient is taken of.
 ///
@@ -355,6 +359,9 @@ struct CaseConfig {
 
     int nx = 128;  ///< lattice nodes along x
     int ny = 128;  ///< lattice nodes along y
+    /// Lattice nodes along z. Read only by the three-dimensional solver; a
+    /// two-dimensional case leaves it at 1.
+    int nz = 1;
 
     int steps = 1000;    ///< time steps to advance
     int interval = 100;  ///< write the CSV grids every this many steps
@@ -364,6 +371,9 @@ struct CaseConfig {
 
     Boundary boundary = Boundary::PeriodicY;
     PhaseFieldInit initial_phase;
+    /// The same for a three-dimensional case; the solver uses whichever of the
+    /// two its dimensionality calls for.
+    PhaseFieldInit3D initial_phase_3d;
 
     /// How the density and pressure are laid down at t = 0.
     ///
@@ -425,6 +435,14 @@ struct CaseConfig {
     /// nodes there and has not been validated against those cases.
     GradientStencil stencil = GradientStencil::E8;
 
+    /// Isotropy order of the colour gradient in three dimensions.
+    ///
+    /// `E6` reaches two nodes along each axis and is sixth-order isotropic;
+    /// `E4` is the D3Q19 neighbourhood and only fourth-order. In two dimensions
+    /// the equivalent step was worth an order of magnitude on the spurious
+    /// currents, so `E6` is the default.
+    GradientStencil3D stencil_3d = GradientStencil3D::E6;
+
     /// Append the interface position along the mid-plane to `interface.csv`,
     /// every step. The capillary cases measure an oscillation period from it.
     bool track_interface = false;
@@ -467,6 +485,10 @@ PhaseFieldInit droplet_interface();
 /// `inverted` puts the dense component on top, which is what makes the
 /// Rayleigh-Taylor case unstable.
 PhaseFieldInit cosine_layer(double amplitude, bool inverted);
+
+/// A spherical droplet of `physics.radius` centred in the domain, component 1
+/// inside, as a profile in the bulk-normalised phase field.
+PhaseFieldInit3D droplet_interface_3d();
 
 /// Outcome of reading the command line.
 enum class CommandLineResult {

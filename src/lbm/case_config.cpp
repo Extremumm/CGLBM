@@ -86,7 +86,8 @@ void print_usage(const std::string& program_name) {
               << "                      component 1's. Setting nu2 = nu rho1/rho2 matches\n"
               << "                      the dynamic viscosities, which makes tau uniform\n"
               << "                      across the interface\n"
-              << "  --nx=N, --ny=N      lattice size, overriding the case default\n"
+              << "  --nx=N, --ny=N, --nz=N\n"
+              << "                      lattice size, overriding the case default\n"
               << "  --steps=N           number of time steps\n"
               << "  --interval=N        write the CSV grids every N steps\n"
               << "  --precision=N       significant digits in the CSV output (default 6)\n"
@@ -171,6 +172,17 @@ PhaseFieldInit droplet_interface() {
         const double distance = std::sqrt(static_cast<double>((i - x0) * (i - x0)) +
                                           static_cast<double>((j - y0) * (j - y0)));
         return -std::tanh((distance - r) / config.physics.ch_width_init);
+    };
+}
+
+PhaseFieldInit3D droplet_interface_3d() {
+    return [](const CaseConfig& config, int i, int j, int k) {
+        const double x = i - config.nx / 2;
+        const double y = j - config.ny / 2;
+        const double z = k - config.nz / 2;
+        const double distance = std::sqrt(x * x + y * y + z * z);
+        const double radius = config.physics.radius * config.units.dx;
+        return -std::tanh((distance - radius) / config.physics.ch_width_init);
     };
 }
 
@@ -384,6 +396,12 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             }
             continue;
         }
+        if (option_value(argument, "nz", &value)) {
+            if (!positive_integer(value, "nz", &config.nz)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
         if (option_value(argument, "ny", &value)) {
             if (!positive_integer(value, "ny", &config.ny)) {
                 return CommandLineResult::Error;
@@ -444,6 +462,7 @@ std::string describe(const CaseConfig& config) {
     out << "case = " << config.name << "\n"
         << "nx = " << config.nx << "\n"
         << "ny = " << config.ny << "\n"
+        << "nz = " << config.nz << "\n"
         << "steps = " << config.steps << "\n"
         << "interval = " << config.interval << "\n"
         << "boundary = " << (config.boundary == Boundary::WallY ? "wall_y" : "periodic_y") << "\n"

@@ -72,6 +72,20 @@ private:
 /// `prefix` is completed with the timestep and `.vtk`.
 void write_vtk(const std::string& prefix, int timestep, const MacroscopicState& state);
 
+/// The same for a three-dimensional state, on a structured grid.
+///
+/// Declared here and defined in the three-dimensional translation unit, so that
+/// a two-dimensional build does not pull `Field3D` in. CSV is not offered for a
+/// whole 3D field: at the resolutions these runs use it would be gigabytes per
+/// step, and the mid-plane slice the solver writes is what the post-processing
+/// reads anyway.
+void write_vtk_3d(const std::string& prefix,
+                  int timestep,
+                  const class Field3D& density,
+                  const class Field3D& velocity,
+                  const class Field3D& phase,
+                  const class Field3D& pressure);
+
 }  // namespace lbm
 }  // namespace cglbm
 

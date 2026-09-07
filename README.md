@@ -156,6 +156,7 @@ Pass `--precision=17` for output that round-trips.
 | `rayleigh_taylor` | 128×1028 | 5×10⁶ | 4/1 | yes | Rayleigh–Taylor instability, σ = 0, serial |
 | `rayleigh_taylor_omp` | 1024×4096 | 2×10⁶ | 4/1 | yes | same case, OpenMP, production resolution |
 | `laplace_high_ratio` | 100×100 | 4×10⁴ | 1000/1 | no | Laplace law at a density ratio of 1000, two-population solver |
+| `laplace_3d` | 48×48×48 | 1.5×10⁴ | 1000/1 | no | Laplace law in 3D, Δp = 2σ/R, two-population solver on D3Q19 |
 
 > `rayleigh_taylor_omp` allocates several GB of lattice at its production
 > resolution. Check the available memory before launching it, or lower it with
@@ -180,7 +181,7 @@ Contains all the programs
 
 Contains all the sources for the library
 
-- `src/lbm` the schemes: the D2Q9 lattice, the two solvers and their time loops, the
+- `src/lbm` the schemes: the D2Q9 and D3Q19 lattices, the three solvers and their time loops, the
   two-component equation of state, the isotropic colour-gradient stencils, the
   lattice storage and the output writers — each carrying its reference
 - `src/omp` thread-level parallelism: thread count, ids, timing
@@ -307,6 +308,13 @@ limitation the first model exists to avoid: the density ratio and the
 sound-speed ratio are tied together, so at 10³ the heavy fluid's sound speed is
 0.022 in lattice units. Use it for static or slow flows at high contrast, and
 `Solver` for anything acoustic below a few hundred.
+
+**In three dimensions** the two-population model is available as
+`cglbm::lbm::TwoPopulationSolver3D` on D3Q19 (`laplace_3d`). Laplace's law there
+is Δp = 2σ/R, and the case measures 1.026 of it at a density ratio of 1000 with
+spurious currents of 2 × 10⁻⁵. Only that model is extended: the
+equation-of-state solver's Hermite equilibrium and its corrective source terms
+would need a full three-dimensional re-derivation, which is not attempted here.
 
 The measurements, the derivations and what is still missing are in
 [`docs/numerics.md`](docs/numerics.md#how-far-the-density-ratio-goes).

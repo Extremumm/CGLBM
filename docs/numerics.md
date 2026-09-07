@@ -801,6 +801,103 @@ What is left to try there is the MRT collision — the one ingredient of Ba et a
 still not implemented in either solver, and the one aimed at exactly this: the
 spurious currents that a single relaxation time leaves in the ghost moments.
 
+## Three dimensions
+
+`TwoPopulationSolver3D` is the two-population model on D3Q19. Only that model is
+extended: `Solver`'s equilibrium is a Hermite expansion carrying the departure
+from the ideal gas, and its source term corrects a third-order moment that D2Q9
+cannot resolve; both would need a three-dimensional re-derivation that there is
+no reference to check against. The two-population model needs no such
+derivation, and what does change is small enough to state exactly.
+
+### The rest weights
+
+The same two conditions that fix `phi_i^k` on D2Q9 fix it on D3Q19: the weights
+must sum to one, and the fourth moment `sum_i phi_i e e e e` must be isotropic.
+With one weight per shell,
+
+| | D2Q9 | D3Q19 |
+|---|---|---|
+| axial | (1 − α)/5 | (1 − α)/12 |
+| diagonal / edge | (1 − α)/20 | (1 − α)/24 |
+| ratio the isotropy forces | φ_axial = 4 φ_diag | φ_axial = 2 φ_edge |
+| (c_s^k)² | (3/5)(1 − α) | (1/2)(1 − α) |
+
+so the sound speed a given α buys is different, while
+`rho_1/rho_2 = (1 − α_2)/(1 − α_1)` and its consequence — the two bulk pressures
+are identically equal — are unchanged. The derivation is short enough to give:
+with `phi_axial = a` and `phi_edge = d`, isotropy of the fourth moment on D3Q19
+reads `2a + 8d = 3 · 4d`, hence `a = 2d`, and `α + 6a + 12d = 1` then gives both.
+
+### The enhanced equilibrium
+
+Its correction runs over `3|e_i|² − (d + 2)`: the `− 4` of the two-dimensional
+form is `− 5` here. That is not a fitted constant but the third-order Hermite
+contraction,
+
+    H_xxx + H_yyx + H_zzx = e_x (|e|² − 5 c_s²),
+
+against `H_xxx + H_yyx = e_x(|e|² − 4c_s²)` in two dimensions. The test of it is
+that the correction still leaves the momentum alone:
+`sum_i w_i e_α e_β (3|e_i|² − 5) = 0` on D3Q19 exactly as
+`sum_i w_i e_α e_β (3|e_i|² − 4) = 0` on D2Q9 — checked to 10⁻¹⁶.
+
+### The gradient stencils
+
+Isotropy was the single largest quality lever in two dimensions, so the shell
+weights were solved rather than borrowed. Requiring `sum_l W c_α c_β = δ_αβ` and
+an isotropic fourth moment gives, on the D3Q19 neighbourhood,
+
+    E4:  W(1) = 1/6,  W(2) = 1/12          18 points, fourth order
+
+and adding the corner and second-axial shells allows the sixth moment to be
+isotropic as well:
+
+    E6:  W(1) = 2/15, W(2) = 1/15, W(3) = 1/60, W(4) = 1/120
+                                            32 points, sixth order
+
+Both are exact in rational arithmetic and all weights are positive. Sixth order
+cannot be reached on the 27-neighbour set alone: with three shells the
+conditions force `W(2) = 4W(3)` and `W(1) = 16W(3)`, which then give
+`sum W c_x⁶ = 72 W(3)` where isotropy needs `120 W(3)`. The second-axial shell
+is what makes it solvable. `E6` is the default.
+
+### The curvature
+
+`K = −(∇·n − n_α n_β ∂_α n_β)`, the surface divergence, which equals `−∇·n` for
+a unit normal and stays bounded when the discrete one is not quite one. On a
+sphere it is **−2/R**, not −1/R, so Laplace's law reads
+
+    Δp = 2 σ / R
+
+A curvature operator carried over from two dimensions without thought would give
+half of it, and the failure would look like a calibration error rather than a
+bug. `programs/unit_testing/lbm/two_population_3d` therefore measures the
+discrete curvature of an analytic sphere directly: −0.09994 against the exact
+−0.1 at R = 20, an error of 0.06 %.
+
+### What it measures
+
+A static droplet at a density ratio of 1000, R = 10 in 48³, σ = 0.1, α₂ = 0.2,
+β = 0.7, matched dynamic viscosity, E6 gradient:
+
+| steps | Δp R / (2σ) | max &#124;u&#124; |
+|---|---|---|
+| 6 × 10³ | 1.0094 | 3.7 × 10⁻⁴ |
+| 1.5 × 10⁴ | 1.0265 | 1.9 × 10⁻⁵ |
+| 2 × 10⁴ | 1.0261 | 2.1 × 10⁻⁵ |
+| 3 × 10⁴ | **1.0240** | 2.1 × 10⁻⁵ |
+
+approached from above and still creeping down slowly. The residual +2.4 % is
+consistent with the two-dimensional result at the same radius — R = 10 gave
++2.1 % there against +0.3 % at R = 25 — so it is resolution, not dimension.
+
+The lattice loops run across OpenMP threads by default here, unlike the
+two-dimensional cases: three dimensions costs about a hundred times more work
+per step, and each loop writes only its own node, so the result does not depend
+on the thread count. That is checked rather than assumed — one thread and eight
+give byte-identical output.
+
 ## Isotropy of the colour gradient
 
 The colour gradient is differentiated twice per step, and Ω⁽²⁾ divides it by its
