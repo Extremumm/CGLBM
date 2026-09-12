@@ -22,19 +22,24 @@ is stated here so the number is not mistaken for something else.
 import pytest
 from pycglbm.testing import artifacts_dir, run_program
 
-#: Measured Δp R / (2 sigma) at the end of the run. It is approached from
-#: above and still creeping down: 1.0265 here at 1.5e4 steps, 1.0261 at 2e4 and
-#: 1.0240 at 3e4. The residual is resolution, not dimension -- R = 10 in two
-#: dimensions gives +2.1 % against +0.3 % at R = 25.
-MEASURED_JUMP_RATIO = 1.0266
+#: Measured Δp R / (2 sigma) at the end of the run. It overshoots and then
+#: creeps down: 1.0318 here at 1.5e4 steps, 1.0298 at 2e4 and 1.0262 at 3e4.
+#: The residual is resolution, not dimension -- R = 10 in two dimensions gives
+#: +2.1 % against +0.3 % at R = 25.
+MEASURED_JUMP_RATIO = 1.0318
 MEASURED_JUMP_TOLERANCE = 0.01
 
 #: In-plane spurious currents on the mid-plane slice, in lattice units.
-MEASURED_MAX_VELOCITY = 1.9e-5
+#:
+#: Larger than the 1.9e-5 recorded before the enhanced-equilibrium fix, and for
+#: a reason worth keeping: the heavy fluid had been running at 417 times the
+#: viscosity the case asked for, which damped these currents along with
+#: everything else. At 3e4 steps they settle at 3.2e-5.
+MEASURED_MAX_VELOCITY = 7.2e-5
 
 #: The droplet's radius from the phi_N = 0 contour of the slice. It starts at
 #: exactly the prescribed 10 and relaxes slightly inward.
-MEASURED_RADIUS = 9.768
+MEASURED_RADIUS = 9.775
 
 
 @pytest.fixture(scope="module")
@@ -85,7 +90,7 @@ def test_verification_laplace_3d_is_close_to_steady(run_3d, case):
 
     It approaches its limit from above rather than oscillating, so this asserts
     that the last quarter of the run moves it by well under a per cent -- not
-    that it has stopped. Running to 3e4 steps takes it from 1.0265 to 1.0240.
+    that it has stopped. Running to 3e4 steps takes it from 1.0318 to 1.0262.
     """
     tail = [t for t in run_3d.timesteps if t >= 3 * case["steps"] // 4]
     jumps = [run_3d.pressure_jump(t, inner=case["inner"], outer=case["outer"]) for t in tail]

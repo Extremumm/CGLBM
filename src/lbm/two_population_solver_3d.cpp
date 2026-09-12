@@ -14,7 +14,8 @@ namespace cglbm {
 namespace lbm {
 
 TwoPopulationSolver3D::TwoPopulationSolver3D(CaseConfig config)
-    : config_(std::move(config)), nx_(config_.nx), ny_(config_.ny), nz_(config_.nz) {
+    : config_(std::move(config)), lattice_(&lattice_3d(config_.lattice_3d)), nx_(config_.nx),
+      ny_(config_.ny), nz_(config_.nz) {
     if (nx_ <= 0 || ny_ <= 0 || nz_ <= 0) {
         throw std::invalid_argument("lattice must have at least one node on each axis");
     }
@@ -43,14 +44,34 @@ TwoPopulationSolver3D::TwoPopulationSolver3D(CaseConfig config)
             "ratio");
     }
 
+    const Lattice3D& lattice = *lattice_;
+
+    // The two moments the enhanced equilibrium's amplitude is fixed by. Summed
+    // here rather than tabulated per lattice: `lambda` is exactly the quantity
+    // a port carries over by hand and gets wrong, and no conservation check in
+    // this file would notice. See `lattice3d.h`.
+    double second_moment = 0.0;  // S = sum_q w_q e_x^2 e_y^2
+    double third_moment = 0.0;   // T = sum_q w_q e_x^2 e_y^2 (3|e|^2 - 5)
+    for (int q = 0; q < lattice.q; q++) {
+        const double ex = lattice.xi[q][0];
+        const double ey = lattice.xi[q][1];
+        const double weighted = lattice.w[q] * ex * ex * ey * ey;
+        second_moment += weighted;
+        third_moment += weighted * (3.0 * speed_squared_3d(lattice, q) - 5.0);
+    }
+    if (!(std::fabs(third_moment) > 0.0)) {
+        throw std::invalid_argument("this lattice cannot carry the enhanced equilibrium");
+    }
+
     const double alpha[2] = {alpha1_, alpha2_};
     for (int fluid = 0; fluid < 2; fluid++) {
-        // Fixed by sum(phi) = 1 and a fourth-order isotropic sum(phi e e e e):
-        // phi_axial = 2 phi_edge, hence the 12 and 24 below and (1 - alpha)/2.
-        cs_squared_[fluid] = 0.5 * (1.0 - alpha[fluid]);
-        phi_rest_[fluid] = alpha[fluid];
-        phi_axial_[fluid] = (1.0 - alpha[fluid]) / 12.0;
-        phi_edge_[fluid] = (1.0 - alpha[fluid]) / 24.0;
+        cs_squared_[fluid] = sound_speed_squared_3d(lattice, alpha[fluid]);
+        enhancement_[fluid] = (cs_squared_[fluid] - 3.0 * second_moment) / (3.0 * third_moment);
+        rest_weights_[fluid].resize(static_cast<std::size_t>(lattice.q));
+        for (int q = 0; q < lattice.q; q++) {
+            rest_weights_[fluid][static_cast<std::size_t>(q)] =
+                rest_weight_3d(lattice, q, alpha[fluid]);
+        }
     }
     const double nu2 = physics.nu2 < 0.0 ? physics.nu : physics.nu2;
     mu_[0] = physics.rho1 * physics.nu;
@@ -69,8 +90,16 @@ TwoPopulationSolver3D::TwoPopulationSolver3D(CaseConfig config)
     normal_x_ = Field3D(nx_, ny_, nz_);
     normal_y_ = Field3D(nx_, ny_, nz_);
     normal_z_ = Field3D(nx_, ny_, nz_);
-    f1_ = Field3D(nx_, ny_, nz_, kQ3D);
-    f2_ = Field3D(nx_, ny_, nz_, kQ3D);
+    f1_ = Field3D(nx_, ny_, nz_, lattice.q);
+    f2_ = Field3D(nx_, ny_, nz_, lattice.q);
+
+    const double* drive = config_.physics.body_force;
+    has_body_force_ = drive[0] != 0.0 || drive[1] != 0.0 || drive[2] != 0.0;
+
+    if (config_.mhd.enabled) {
+        mhd_ = std::make_unique<QuasiStaticMhd3D>(
+            nx_, ny_, nz_, wall_y_, config_.mhd, parallel_);
+    }
 }
 
 MacroscopicState3D TwoPopulationSolver3D::state() const {
@@ -80,18 +109,21 @@ MacroscopicState3D TwoPopulationSolver3D::state() const {
 void TwoPopulationSolver3D::equilibrium(
     int fluid, double rho_k, double u_x, double u_y, double u_z, double* out) const {
     // The enhancement runs over 3|e|^2 - (d + 2), which is 5 in three
-    // dimensions; see the header. It leaves rho and rho u untouched because
-    // sum_q w_q e e (3|e|^2 - 5) vanishes on D3Q19.
-    const double enhancement = 0.5 * (3.0 * cs_squared_[fluid] - 1.0);
+    // dimensions, and its amplitude was solved for at construction from the
+    // lattice's own moments -- (3 (c_s^k)^2 - 1) on D3Q19, half of that on
+    // D3Q27. It leaves rho and rho u untouched because
+    // sum_q w_q e e (3|e|^2 - 5) vanishes on both.
+    const Lattice3D& lattice = *lattice_;
+    const double enhancement = enhancement_[fluid];
+    const double* phi = rest_weights_[fluid].data();
     const double u_squared = u_x * u_x + u_y * u_y + u_z * u_z;
-    for (int q = 0; q < kQ3D; q++) {
-        const double e_squared = speed_squared_3d(q);
-        const double phi_q = q == 0            ? phi_rest_[fluid]
-                             : e_squared < 1.5 ? phi_axial_[fluid]
-                                               : phi_edge_[fluid];
-        const double eu = kXi3D[q][0] * u_x + kXi3D[q][1] * u_y + kXi3D[q][2] * u_z;
+    for (int q = 0; q < lattice.q; q++) {
+        const double e_squared = speed_squared_3d(lattice, q);
+        const double eu =
+            lattice.xi[q][0] * u_x + lattice.xi[q][1] * u_y + lattice.xi[q][2] * u_z;
         const double first = 3.0 * eu * (1.0 + enhancement * (3.0 * e_squared - 5.0));
-        out[q] = rho_k * phi_q + rho_k * kW3D[q] * (first + 4.5 * eu * eu - 1.5 * u_squared);
+        out[q] = rho_k * phi[static_cast<std::size_t>(q)] +
+                 rho_k * lattice.w[q] * (first + 4.5 * eu * eu - 1.5 * u_squared);
     }
 }
 
@@ -99,12 +131,13 @@ void TwoPopulationSolver3D::densities() {
     const bool parallel = parallel_;
     const double rho1_bulk = config_.physics.rho1;
     const double rho2_bulk = config_.physics.rho2;
+    const int q_count = lattice_->q;
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
             for (int k = 0; k < nz_; k++) {
                 double sum1 = 0.0, sum2 = 0.0;
-                for (int q = 0; q < kQ3D; q++) {
+                for (int q = 0; q < q_count; q++) {
                     sum1 += f1_(i, j, k, q);
                     sum2 += f2_(i, j, k, q);
                 }
@@ -168,6 +201,8 @@ void TwoPopulationSolver3D::surface_force() {
     const double sigma = config_.physics.sigma;
     const double gravity = config_.physics.gravity;
     const bool has_gravity = gravity != 0.0;
+    const bool has_body_force = has_body_force_;
+    const double* drive = config_.physics.body_force;
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -202,27 +237,43 @@ void TwoPopulationSolver3D::surface_force() {
                 if (has_gravity) {
                     force_(i, j, k, 1) -= rho_(i, j, k) * gravity;
                 }
+                if (has_body_force) {
+                    for (int a = 0; a < 3; a++) {
+                        force_(i, j, k, a) += drive[a];
+                    }
+                }
             }
         }
     }
+
+    if (mhd_) {
+        // `u_` is the bare momentum here, not the reported velocity: see the
+        // header. The potential solve is warm-started from the previous step,
+        // so this costs a handful of iterations rather than a fresh solve.
+        mhd_->solve(u_, phi_n_);
+        mhd_->add_lorentz_force(force_);
+    }
 }
 
-void TwoPopulationSolver3D::update_velocity() {
+void TwoPopulationSolver3D::update_velocity(bool with_force) {
     const bool parallel = parallel_;
+    const int q_count = lattice_->q;
+    const Lattice3D& lattice = *lattice_;
+    const double half_step = with_force ? 0.5 * dt_ : 0.0;
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
             for (int k = 0; k < nz_; k++) {
                 double sum[3] = {0.0, 0.0, 0.0};
-                for (int q = 0; q < kQ3D; q++) {
+                for (int q = 0; q < q_count; q++) {
                     const double total = f1_(i, j, k, q) + f2_(i, j, k, q);
                     for (int a = 0; a < 3; a++) {
-                        sum[a] += total * kXi3D[q][a];
+                        sum[a] += total * lattice.xi[q][a];
                     }
                 }
                 const double density = rho_(i, j, k);
                 for (int a = 0; a < 3; a++) {
-                    u_(i, j, k, a) = (sum[a] + 0.5 * force_(i, j, k, a) * dt_) / density;
+                    u_(i, j, k, a) = (sum[a] + half_step * force_(i, j, k, a)) / density;
                 }
             }
         }
@@ -231,6 +282,8 @@ void TwoPopulationSolver3D::update_velocity() {
 
 void TwoPopulationSolver3D::collide() {
     const bool parallel = parallel_;
+    const int q_count = lattice_->q;
+    const Lattice3D& lattice = *lattice_;
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -248,17 +301,18 @@ void TwoPopulationSolver3D::collide() {
 
                 const double f[3] = {force_(i, j, k, 0), force_(i, j, k, 1), force_(i, j, k, 2)};
 
-                double eq1[kQ3D], eq2[kQ3D];
+                double eq1[kQ3D27], eq2[kQ3D27];
                 equilibrium(0, rho_1_(i, j, k), u_x, u_y, u_z, eq1);
                 equilibrium(1, rho_2_(i, j, k), u_x, u_y, u_z, eq2);
 
-                for (int q = 0; q < kQ3D; q++) {
-                    const double eu = kXi3D[q][0] * u_x + kXi3D[q][1] * u_y + kXi3D[q][2] * u_z;
+                for (int q = 0; q < q_count; q++) {
+                    const double* e = lattice.xi[q];
+                    const double eu = e[0] * u_x + e[1] * u_y + e[2] * u_z;
                     double source = 0.0;
-                    source += ((kXi3D[q][0] - u_x) + eu * kXi3D[q][0] / cs2_) * f[0];
-                    source += ((kXi3D[q][1] - u_y) + eu * kXi3D[q][1] / cs2_) * f[1];
-                    source += ((kXi3D[q][2] - u_z) + eu * kXi3D[q][2] / cs2_) * f[2];
-                    source *= kW3D[q] / cs2_;
+                    source += ((e[0] - u_x) + eu * e[0] / cs2_) * f[0];
+                    source += ((e[1] - u_y) + eu * e[1] / cs2_) * f[1];
+                    source += ((e[2] - u_z) + eu * e[2] / cs2_) * f[2];
+                    source *= lattice.w[q] / cs2_;
 
                     f1_(i, j, k, q) += -omega * (f1_(i, j, k, q) - eq1[q]) + guo * share1 * source;
                     f2_(i, j, k, q) +=
@@ -270,15 +324,16 @@ void TwoPopulationSolver3D::collide() {
 }
 
 double TwoPopulationSolver3D::rest_weight(int i, int j, int k, int q) const {
-    const double e_squared = speed_squared_3d(q);
-    const double phi_1 = q == 0 ? phi_rest_[0] : e_squared < 1.5 ? phi_axial_[0] : phi_edge_[0];
-    const double phi_2 = q == 0 ? phi_rest_[1] : e_squared < 1.5 ? phi_axial_[1] : phi_edge_[1];
+    const double phi_1 = rest_weights_[0][static_cast<std::size_t>(q)];
+    const double phi_2 = rest_weights_[1][static_cast<std::size_t>(q)];
     return (rho_1_(i, j, k) * phi_1 + rho_2_(i, j, k) * phi_2) / rho_(i, j, k);
 }
 
 void TwoPopulationSolver3D::recolor() {
     const bool parallel = parallel_;
     const double beta = config_.physics.beta;
+    const int q_count = lattice_->q;
+    const Lattice3D& lattice = *lattice_;
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -293,13 +348,14 @@ void TwoPopulationSolver3D::recolor() {
                     norm > kGradientEpsilon
                         ? beta * rho_1_(i, j, k) * rho_2_(i, j, k) / (density * norm)
                         : 0.0;
-                for (int q = 0; q < kQ3D; q++) {
+                for (int q = 0; q < q_count; q++) {
                     const double total = f1_(i, j, k, q) + f2_(i, j, k, q);
                     double push = 0.0;
                     if (q != 0 && strength != 0.0) {
-                        const double speed = std::sqrt(speed_squared_3d(q));
+                        const double* e = lattice.xi[q];
+                        const double speed = std::sqrt(speed_squared_3d(lattice, q));
                         push = rest_weight(i, j, k, q) * strength *
-                               (kXi3D[q][0] * gx + kXi3D[q][1] * gy + kXi3D[q][2] * gz) / speed;
+                               (e[0] * gx + e[1] * gy + e[2] * gz) / speed;
                     }
                     f1_(i, j, k, q) = share1 * total + push;
                     f2_(i, j, k, q) = total - f1_(i, j, k, q);
@@ -310,18 +366,20 @@ void TwoPopulationSolver3D::recolor() {
 }
 
 void TwoPopulationSolver3D::stream() {
-    Field3D next1(nx_, ny_, nz_, kQ3D);
-    Field3D next2(nx_, ny_, nz_, kQ3D);
+    const Lattice3D& lattice = *lattice_;
+    const int q_count = lattice.q;
+    Field3D next1(nx_, ny_, nz_, q_count);
+    Field3D next2(nx_, ny_, nz_, q_count);
     const bool parallel = parallel_;
     const bool wall = wall_y_;
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
             for (int k = 0; k < nz_; k++) {
-                for (int q = 0; q < kQ3D; q++) {
-                    const int dx = static_cast<int>(kXi3D[q][0]);
-                    const int dy = static_cast<int>(kXi3D[q][1]);
-                    const int dz = static_cast<int>(kXi3D[q][2]);
+                for (int q = 0; q < q_count; q++) {
+                    const int dx = static_cast<int>(lattice.xi[q][0]);
+                    const int dy = static_cast<int>(lattice.xi[q][1]);
+                    const int dz = static_cast<int>(lattice.xi[q][2]);
                     const int ip = (i + dx + nx_) % nx_;
                     const int kp = (k + dz + nz_) % nz_;
                     int jp = j + dy;
@@ -330,7 +388,7 @@ void TwoPopulationSolver3D::stream() {
                         // Half-way bounce-back: the population stays put and
                         // comes back along the reversed direction.
                         jp = j;
-                        qp = kOpposite3D[q];
+                        qp = lattice.opposite[q];
                     } else if (!wall) {
                         jp = (j + dy + ny_) % ny_;
                     }
@@ -356,10 +414,10 @@ void TwoPopulationSolver3D::initialize() {
                     indicator = -1.0;
                 }
                 const double fraction = 0.5 * (1.0 + indicator);
-                double eq1[kQ3D], eq2[kQ3D];
+                double eq1[kQ3D27], eq2[kQ3D27];
                 equilibrium(0, fraction * physics.rho1, 0.0, 0.0, 0.0, eq1);
                 equilibrium(1, (1.0 - fraction) * physics.rho2, 0.0, 0.0, 0.0, eq2);
-                for (int q = 0; q < kQ3D; q++) {
+                for (int q = 0; q < lattice_->q; q++) {
                     f1_(i, j, k, q) = eq1[q];
                     f2_(i, j, k, q) = eq2[q];
                 }
@@ -368,20 +426,28 @@ void TwoPopulationSolver3D::initialize() {
     }
     densities();
     update_colour_gradient();
+    if (mhd_) {
+        update_velocity(false);
+    }
     surface_force();
-    update_velocity();
+    update_velocity(true);
 }
 
 void TwoPopulationSolver3D::refresh() {
     densities();
-    update_velocity();
+    update_velocity(true);
 }
 
 void TwoPopulationSolver3D::step() {
     densities();
     update_colour_gradient();
+    if (mhd_) {
+        // The magnetic force is evaluated at the bare momentum, before Guo's
+        // half step folds the force back in; see the header.
+        update_velocity(false);
+    }
     surface_force();
-    update_velocity();
+    update_velocity(true);
     collide();
     recolor();
     stream();
@@ -497,7 +563,19 @@ void TwoPopulationSolver3D::run() {
             writer.write_axes(timestep, radii);
         }
         if (timestep % config_.interval == 0) {
-            std::cout << "Step " << timestep << std::endl;
+            std::cout << "Step " << timestep;
+            if (mhd_) {
+                // What the potential cost and whether it got there. A run that
+                // stops converging says so here rather than in the flow field
+                // three thousand steps later.
+                std::cout << "  potential: " << mhd_->iterations() << " iterations, residual "
+                          << mhd_->residual() << ", charge imbalance "
+                          << mhd_->charge_imbalance();
+                if (!mhd_->converged()) {
+                    std::cout << "  [did not reach tolerance]";
+                }
+            }
+            std::cout << std::endl;
             refresh();
             write_midplane(writer, timestep);
             if (config_.write_vtk_field) {

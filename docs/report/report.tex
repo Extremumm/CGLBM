@@ -484,7 +484,24 @@ which is $T^{\mathrm{A}}_i$. \qedhere
 The identity is checked numerically over a sweep of sound speed, density and
 velocity by \texttt{report\_enhanced\_equilibrium} in
 \texttt{programs/unit\_testing/lbm/solver}; the largest disagreement is
-$1.1 \times 10^{-14}$. The same correspondence holds for the Chapman--Enskog
+$1.1 \times 10^{-14}$.
+
+\begin{remark}[The coefficient is a D2Q9 coefficient]
+Proposition~\ref{prop:enhanced} is stated and proved on D2Q9, and the
+restriction is not cosmetic. The Hermite form $T^{\mathrm{A}}_i$ is
+dimension-independent in appearance --- it is
+$(p_k - \rho_k\cs^2)w_i u_\gamma(\sum_\alpha \mathcal{H}_{\alpha\alpha\gamma})
+/(2\cs^6)$ in any dimension --- so turning the same crank on D3Q19 returns the
+same $\tfrac12(3(\cs^k)^2-1)$. It would be wrong there. Third-order Hermite
+polynomials are not orthogonal under either quadrature, so what the projection
+delivers into the third moment must be measured, not assumed: on D2Q9 it
+delivers the intended $M_{xxy}$ exactly, and on D3Q19 exactly half of it,
+because the $(\pm1,\pm1,0)$ shell carries $3|\ee|^2-5=1$ where its
+two-dimensional counterpart carried $3|\ee|^2-4=2$. The three-dimensional
+solver therefore uses $3(\cs^k)^2-1$; see \texttt{docs/numerics.md}, \emph{The
+enhanced equilibrium}. Both lattices fail equally on $M_{xxx}$, which no
+amplitude can reach and which is the bulk viscosity rather than the shear.
+\end{remark} The same correspondence holds for the Chapman--Enskog
 source term: Ba et al.'s Eqs.~(17)--(18) correct the energy and diagonal-stress
 moments by the divergence of $Q_\alpha = (1.8\alpha_k - 0.8)\rho_k u_\alpha$,
 and since $1.8\alpha_k - 0.8 = 1 - 3(\cs^k)^2$ this is

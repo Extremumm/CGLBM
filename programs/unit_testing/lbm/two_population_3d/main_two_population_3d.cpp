@@ -20,6 +20,17 @@
 //     together, where the flow itself is past anything analytic; here they are
 //     separated and each is checked exactly.
 //
+// One invariant is weaker here than in two dimensions, and deliberately so.
+// Both populations staying non-negative holds at a ratio of 20 and does not at
+// 1000: on D3Q19 the enhanced equilibrium puts essentially all of the momentum
+// on the six axial directions, so the axial population is
+// rho_k (phi_axial + u/2) and goes negative once |u| passes (c_s^k)^2 / 3 --
+// half the headroom the same argument leaves on D2Q9, and 1.3e-4 at a ratio of
+// 1000. The droplet here is laid down sharp and the transient crosses that
+// bound; it recovers, exactly, by step 1700 and the run stays sound throughout.
+// So r20 is asserted strictly and r1000 is asserted against a bound, with the
+// excursion reported as a fraction of the population it is an excursion in.
+//
 //   main_two_population_3d [stencil]
 
 #include <cmath>
@@ -158,6 +169,7 @@ void report_stencil_isotropy() {
 void report_equilibrium() {
     std::cout.precision(17);
     double worst_mass = 0, worst_momentum = 0, worst_stress = 0, worst_ratio = 0, worst_cs = 0;
+    double worst_third = 0;
     for (double ratio : {1.0, 20.0, 1000.0, 100000.0}) {
         CaseConfig config = droplet_case(ratio, GradientStencil3D::E6);
         TwoPopulationSolver3D solver(config);
@@ -173,6 +185,7 @@ void report_equilibrium() {
             solver.equilibrium_for_test(fluid, rho_k, u, eq);
 
             double mass = 0, momentum[3] = {0, 0, 0}, pxx = 0, pxy = 0, pzz = 0;
+            double qxxy = 0, qzzy = 0;
             for (int q = 0; q < cglbm::lbm::kQ3D; ++q) {
                 mass += eq[q];
                 for (int a = 0; a < 3; ++a) {
@@ -181,6 +194,10 @@ void report_equilibrium() {
                 pxx += eq[q] * cglbm::lbm::kXi3D[q][0] * cglbm::lbm::kXi3D[q][0];
                 pzz += eq[q] * cglbm::lbm::kXi3D[q][2] * cglbm::lbm::kXi3D[q][2];
                 pxy += eq[q] * cglbm::lbm::kXi3D[q][0] * cglbm::lbm::kXi3D[q][1];
+                qxxy += eq[q] * cglbm::lbm::kXi3D[q][0] * cglbm::lbm::kXi3D[q][0] *
+                        cglbm::lbm::kXi3D[q][1];
+                qzzy += eq[q] * cglbm::lbm::kXi3D[q][2] * cglbm::lbm::kXi3D[q][2] *
+                        cglbm::lbm::kXi3D[q][1];
             }
             worst_mass = std::max(worst_mass, std::fabs(mass - rho_k) / rho_k);
             for (int a = 0; a < 3; ++a) {
@@ -191,6 +208,28 @@ void report_equilibrium() {
                                      std::fabs(pxx - rho_k * (cs_squared + u[0] * u[0])) / rho_k,
                                      std::fabs(pzz - rho_k * (cs_squared + u[2] * u[2])) / rho_k,
                                      std::fabs(pxy - rho_k * u[0] * u[1]) / rho_k});
+            // The mixed third moment, which is what the enhanced equilibrium's
+            // amplitude is there to set and the only moment that sees it. The
+            // shear stress depends on the third moment through M3_aab alone,
+            // and tau is calibrated on (c_s^k)^2, so M3_xxy = rho_k (c_s^k)^2
+            // u_y is the condition for the shear viscosity to be the one the
+            // case asked for. It is exact rather than approximate: every other
+            // term of the equilibrium is even in e, so it drops out of an
+            // odd-order moment and leaves no O(u^3) remainder.
+            //
+            // Carrying the two-dimensional amplitude (3 (c_s^k)^2 - 1)/2 over
+            // to D3Q19 unchanged satisfies mass, momentum and stress above and
+            // fails only here, by half the gap between 1/3 and (c_s^k)^2 --
+            // which is a shear viscosity 417 times too large at a ratio of
+            // 1000. That is the regression this line exists to catch.
+            //
+            // M3_xxx is deliberately not checked: sum_q w_q e_x^4 (3|e|^2 - 5)
+            // vanishes on D3Q19, so no amplitude can reach it, and it stays at
+            // the lattice value in two dimensions just as it does here.
+            worst_third = std::max({worst_third,
+                                    std::fabs(qxxy - rho_k * cs_squared * u[1]) / rho_k,
+                                    std::fabs(qzzy - rho_k * cs_squared * u[1]) / rho_k});
+
             // sum_q phi_q^k must be 1, which the mass moment at u = 0 shows.
             double rest[cglbm::lbm::kQ3D];
             const double zero[3] = {0, 0, 0};
@@ -206,6 +245,7 @@ void report_equilibrium() {
     std::cout << "equilibrium_mass_error = " << worst_mass << "\n"
               << "equilibrium_momentum_error = " << worst_momentum << "\n"
               << "equilibrium_stress_error = " << worst_stress << "\n"
+              << "equilibrium_third_moment_error = " << worst_third << "\n"
               << "rest_weight_error = " << worst_cs << "\n"
               << "alpha_density_ratio_error = " << worst_ratio << std::endl;
 }
@@ -283,12 +323,19 @@ void report_droplet(const std::string& prefix, double ratio, GradientStencil3D s
         worst_phase = std::max(worst_phase, max_abs_phase(solver));
         worst_population = std::min(worst_population, min_population(solver));
     }
+    // Any excursion below zero, as a fraction of the heavy fluid's own axial
+    // rest population rho_1 phi_axial. That is the scale the segregation
+    // operator's non-negativity argument is written against, so it is the
+    // scale an excursion means anything on; the raw number alone says nothing
+    // without the density ratio beside it.
+    const double rest_population = ratio * (1.0 - solver.alpha1()) / 12.0;
     std::cout.precision(17);
     std::cout << prefix << "_mass1_drift = " << std::fabs(component_mass(solver, 0) - mass1) / mass1
               << "\n"
               << prefix << "_mass2_drift = " << std::fabs(component_mass(solver, 1) - mass2) / mass2
               << "\n"
               << prefix << "_min_population = " << worst_population << "\n"
+              << prefix << "_min_population_scaled = " << worst_population / rest_population << "\n"
               << prefix << "_max_abs_phase = " << worst_phase << "\n"
               << prefix << "_max_speed = " << max_speed(solver) << std::endl;
 }

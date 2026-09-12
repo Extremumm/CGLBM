@@ -8,6 +8,8 @@
 #include "lbm/equation_of_state.h"
 #include "lbm/isotropic_gradient.h"
 #include "lbm/isotropic_gradient_3d.h"
+#include "lbm/lattice3d.h"
+#include "lbm/quasi_static_mhd_3d.h"
 
 /// What distinguishes one colour-gradient case from another.
 ///
@@ -279,6 +281,18 @@ struct Physics {
     /// carries no force term at all.
     double gravity = 0.0;
 
+    /// A uniform force *density* added at every node, in lattice units.
+    ///
+    /// Not the same thing as `gravity`, which is an acceleration along -y and
+    /// so is multiplied by the local density. This is a force per unit volume
+    /// and is not, which is what a constant pressure gradient driving a channel
+    /// is: `-dp/dx` is the same everywhere however the density varies across
+    /// the channel. `hartmann` uses it, and gets a flow rate that depends on
+    /// the field rather than on which fluid happens to sit where.
+    ///
+    /// All three components zero switches the term off entirely.
+    double body_force[3] = {0.0, 0.0, 0.0};
+
     double ch_width_init = 1.1;  ///< interface width used to lay down phi at t = 0
     double ch_width_ope = 1.6;   ///< interface width `Recolouring::InterfaceWidth` maintains
 
@@ -434,6 +448,23 @@ struct CaseConfig {
     /// exact next to a wall, while a wider stencil becomes one-sided over two
     /// nodes there and has not been validated against those cases.
     GradientStencil stencil = GradientStencil::E8;
+
+    /// Which three-dimensional lattice to run on.
+    ///
+    /// D3Q19 is the default because it is what every case shipped here was
+    /// calibrated on, and the two lattices do not give the same numbers.
+    /// D3Q27 is the better one at a high density ratio -- it halves the
+    /// spurious velocity around a droplet and leaves half again as much room
+    /// before the equilibrium goes negative -- and costs 42 % more per step.
+    /// See `lattice3d.h`. Read only by the three-dimensional solver.
+    Lattice3DKind lattice_3d = Lattice3DKind::D3Q19;
+
+    /// The imposed magnetic field and the two conductivities.
+    ///
+    /// `mhd.enabled` off, the default, leaves the case exactly as it was: no
+    /// potential is solved and no force is formed. See `quasi_static_mhd_3d.h`.
+    /// Read only by the three-dimensional solver.
+    MhdPhysics mhd;
 
     /// Isotropy order of the colour gradient in three dimensions.
     ///

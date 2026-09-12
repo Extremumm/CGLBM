@@ -98,10 +98,29 @@ command line, so a resolution or a run length is a flag rather than a rebuild:
                       component 1's
   --initial-state=equilibrium|eos|linear
                       how rho and p are laid down at t = 0
-  --nx=N, --ny=N      lattice size
+  --lattice=d3q19|d3q27
+                      three-dimensional velocity set
+  --bx=X, --by=X, --bz=X
+                      imposed magnetic field; any of them switches the
+                      inductionless MHD coupling on
+  --mhd, --no-mhd     switch that coupling on or off explicitly
+  --sigma-e1=X, --sigma-e2=X
+                      electrical conductivity of each component
+  --conductivity=harmonic|arithmetic
+                      how the two are averaged onto a face
+  --potential-solver=fv|lbm
+                      discretisation of the potential equation
+  --mhd-tolerance=X   what the potential solve stops at
+  --mhd-iterations=N  its iteration or sweep limit
+  --drive-x=X, --drive-y=X, --drive-z=X
+                      uniform body force density, e.g. a pressure gradient
+  --nx=N, --ny=N, --nz=N
+                      lattice size (--nz for the three-dimensional cases)
   --steps=N           number of time steps
   --interval=N        write the CSV grids every N steps
   --precision=N       significant digits in the CSV output (default 6)
+  --vtk               also write the whole field as field_<t>.vtk, for ParaView
+                      or VisIt; three-dimensional cases only
   --threads=N         OpenMP threads; implies parallel execution
   --help              the same list
 ```
@@ -139,9 +158,17 @@ timestep:
 | `pressure_<t>.csv` | Ly × Lx | pressure p |
 
 One row per lattice row `j` (y), one column per node `i` (x), so `numpy` reads
-them as `array[y, x]`. `capillary` and `gravity_capillary` also append the
-interface position to `interface.csv`. `cglbm::lbm::write_vtk` produces a
-ParaView/VisIt file from the same state; no case calls it by default.
+them as `array[y, x]`. A three-dimensional case writes the `z = nz/2` slice into
+the same four files, so the post-processing reads it unchanged; `--vtk` adds the
+whole field as `field_<t>.vtk`, which is what ParaView or VisIt wants and what
+CSV cannot carry at these sizes.
+
+`capillary` and `gravity_capillary` also append the interface position to
+`interface.csv`, one line per interface node; `oscillation_3d` writes a
+different track into the same file, one line per step holding the droplet's
+three semi-axes. The header says which, and `CaseOutput.droplet_axes` reads the
+second. `cglbm::lbm::write_vtk` produces a ParaView/VisIt file from a
+two-dimensional state; no case calls it by default.
 
 Six significant digits is the default and loses about ten digits of a double.
 Pass `--precision=17` for output that round-trips.
@@ -157,6 +184,10 @@ Pass `--precision=17` for output that round-trips.
 | `rayleigh_taylor_omp` | 1024×4096 | 2×10⁶ | 4/1 | yes | same case, OpenMP, production resolution |
 | `laplace_high_ratio` | 100×100 | 4×10⁴ | 1000/1 | no | Laplace law at a density ratio of 1000, two-population solver |
 | `laplace_3d` | 48×48×48 | 1.5×10⁴ | 1000/1 | no | Laplace law in 3D, Δp = 2σ/R, two-population solver on D3Q19 |
+| `oscillation_3d` | 48×48×48 | 4×10³ | 10/1 | no | Lamb's mode-2 frequency of a ringing droplet, in 3D |
+| `rayleigh_taylor_3d` | 32×128×32 | 3×10³ | 3/1 | yes | Rayleigh–Taylor in 3D, single square-cell mode, σ = 0 |
+| `hartmann` | 8×64×8 | 2×10⁴ | 1/1 | no | Hartmann flow at Ha = 10, against its closed form |
+| `magnetic_rayleigh_taylor` | 128×128×4 | 8×10³ | 3.65/1 | yes | magnetic Rayleigh–Taylor, growth rate against the QS-MHD dispersion relation |
 
 > `rayleigh_taylor_omp` allocates several GB of lattice at its production
 > resolution. Check the available memory before launching it, or lower it with
@@ -181,7 +212,8 @@ Contains all the programs
 
 Contains all the sources for the library
 
-- `src/lbm` the schemes: the D2Q9 and D3Q19 lattices, the three solvers and their time loops, the
+- `src/lbm` the schemes: the D2Q9, D3Q19 and D3Q27 lattices, the three solvers
+  and their time loops, the inductionless MHD module, the
   two-component equation of state, the isotropic colour-gradient stencils, the
   lattice storage and the output writers — each carrying its reference
 - `src/omp` thread-level parallelism: thread count, ids, timing

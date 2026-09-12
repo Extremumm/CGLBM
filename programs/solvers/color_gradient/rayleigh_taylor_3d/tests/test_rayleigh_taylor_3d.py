@@ -14,9 +14,10 @@ which is the statement that the segregation operator still holds where the
 interface is being stretched rather than sitting still.
 
 **What is not.** The inviscid growth rate ``sqrt(A g k)``. At this resolution
-the viscous correction ``-nu k^2`` is a quarter of it and the interface is 1.6
-nodes wide against a wavelength of 32, so agreement or disagreement with it
-would say more about the resolution than about the scheme. The quantitative
+the viscous correction ``-nu k^2`` is 28 % of it and the interface spans
+4.9 nodes between phi_N = +0.9 and -0.9, a sixth of the wavelength, so agreement
+or disagreement with it would say more about the resolution than about the
+scheme. The quantitative
 statements live in ``oscillation_3d``, and the invariants that hold whatever the
 flow does -- mass across a wall, hydrostatic balance, x against z -- are checked
 exactly in ``programs/unit_testing/lbm/two_population_3d``.
@@ -48,7 +49,7 @@ def interface_height(phase: np.ndarray) -> np.ndarray:
 
 @pytest.fixture(scope="module")
 def run_3d():
-    """One shared run of the case. It takes about eight minutes on 24 cores."""
+    """One shared run of the case. It takes about four minutes on 24 cores."""
     return run_program("rayleigh_taylor_3d", artifacts_dir() / "rayleigh_taylor_3d", timeout=2700)
 
 
@@ -130,6 +131,17 @@ def test_verification_rayleigh_taylor_3d_stays_inside_the_phase_range(run_3d):
         assert np.abs(phase).max() <= 1.0 + 1.0e-9, f"at step {timestep}"
 
 
+#: Steps skipped before the interface is asked to move monotonically.
+#:
+#: The case starts at rest with a uniform pressure and gravity switched on, so
+#: the column has to build its own hydrostatic profile before anything else --
+#: an acoustic transient over `ny / c_s`, about 200 steps. Measured, the spike
+#: front dips, comes back up by 0.36 nodes between steps 250 and 500, and falls
+#: monotonically from there. The instability is what this case is about; the
+#: transient in front of it is not, and is skipped rather than tolerated.
+SETTLING_STEPS = 500
+
+
 @pytest.mark.long
 @pytest.mark.validation
 def test_validation_rayleigh_taylor_3d_spike_falls_and_bubble_rises(run_3d, heights):
@@ -143,6 +155,18 @@ def test_validation_rayleigh_taylor_3d_spike_falls_and_bubble_rises(run_3d, heig
     spikes = np.array([np.nanmin(heights[t]) for t in timesteps])
     bubbles = np.array([np.nanmax(heights[t]) for t in timesteps])
 
-    assert np.all(np.diff(spikes) < 0.0)
-    assert np.all(np.diff(bubbles) > 0.0)
+    growing = [n for n, t in enumerate(timesteps) if t >= SETTLING_STEPS]
+    assert np.all(np.diff(spikes[growing]) < 0.0)
+
+    # The separation, not the bubble front on its own, is what has to grow
+    # monotonically. The bubble's top is flat, so which column is highest
+    # changes between outputs and `nanmax` over the row wobbles by up to a
+    # third of a node -- while the front climbs 21 of them over the run. That
+    # wobble is the measurement, not the flow, and asserting it away would be
+    # asserting something the case does not claim.
+    assert np.all(np.diff((bubbles - spikes)[growing]) > 0.0)
+    assert bubbles[-1] > bubbles[growing[0]] + 10.0
+
+    # Over the whole run, transient included, the two fronts must still have
+    # separated by much more than they started apart.
     assert bubbles[-1] - spikes[-1] > 4.0 * (bubbles[0] - spikes[0])

@@ -26,11 +26,17 @@
 /// Output is the z = nz/2 slice, in the same four CSV files a two-dimensional
 /// run writes, so the existing post-processing reads it unchanged.
 ///
-/// The run length is a compromise. The jump approaches its limit from above --
-/// 1.0265 at 1.5e4 steps, 1.0261 at 2e4, 1.0240 at 3e4 -- so 1.5e4 is within
-/// half a per cent of converged and costs twelve minutes on a two dozen cores,
-/// where 3e4 costs half an hour. Raise `--steps` if the last half per cent
-/// matters.
+/// The run length is a compromise. The jump overshoots and then creeps down --
+/// 1.0318 at 1.5e4 steps, 1.0298 at 2e4, 1.0262 at 3e4 -- so 1.5e4 is within
+/// 0.6 % of converged and costs twelve minutes on a two dozen cores, where 3e4
+/// costs half an hour. Raise `--steps` if that 0.6 % matters.
+///
+/// It used to be within 0.25 %. The enhanced-equilibrium fix took 417 times the
+/// viscosity out of the heavy fluid, which is what had been holding the
+/// approach so tight; the limit the jump converges to barely moved, from 1.0240
+/// to 1.0262, because a static jump does not see the third moment the fix
+/// repairs. What it does see is the spurious currents, now 7.2e-5 at 1.5e4
+/// steps against 1.9e-5 before, settling to 3.2e-5 by 3e4.
 
 #include <iostream>
 

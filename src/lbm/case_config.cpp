@@ -86,6 +86,24 @@ void print_usage(const std::string& program_name) {
               << "                      component 1's. Setting nu2 = nu rho1/rho2 matches\n"
               << "                      the dynamic viscosities, which makes tau uniform\n"
               << "                      across the interface\n"
+              << "  --lattice=d3q19|d3q27\n"
+              << "                      three-dimensional velocity set. D3Q27 halves the\n"
+              << "                      spurious velocity around a droplet and costs 42 % more\n"
+              << "  --bx=X, --by=X, --bz=X\n"
+              << "                      imposed magnetic field; any of them switches the\n"
+              << "                      inductionless MHD coupling on\n"
+              << "  --mhd, --no-mhd     switch that coupling on or off explicitly\n"
+              << "  --sigma-e1=X, --sigma-e2=X\n"
+              << "                      electrical conductivity of each component\n"
+              << "  --conductivity=harmonic|arithmetic\n"
+              << "                      how the two are averaged onto a face\n"
+              << "  --potential-solver=fv|lbm\n"
+              << "                      discretisation of the potential equation: the\n"
+              << "                      conservative finite volume, or the D3Q7 march\n"
+              << "  --mhd-tolerance=X   what the potential solve stops at\n"
+              << "  --mhd-iterations=N  its iteration or sweep limit\n"
+              << "  --drive-x=X, --drive-y=X, --drive-z=X\n"
+              << "                      uniform body force density, e.g. a pressure gradient\n"
               << "  --nx=N, --ny=N, --nz=N\n"
               << "                      lattice size, overriding the case default\n"
               << "  --steps=N           number of time steps\n"
@@ -263,6 +281,23 @@ bool nonnegative_double(const std::string& value, const char* name, double* out)
         return true;
     } catch (const std::exception&) {
         std::cerr << name << " must be a non-negative number; got '" << value << "'." << std::endl;
+        return false;
+    }
+}
+
+/// Parse a finite number of either sign, for a field or a force component.
+bool finite_double(const std::string& value, const char* name, double* out) {
+    try {
+        size_t consumed = 0;
+        const double parsed = std::stod(value, &consumed);
+        if (consumed != value.size() || !std::isfinite(parsed)) {
+            std::cerr << name << " must be a finite number; got '" << value << "'." << std::endl;
+            return false;
+        }
+        *out = parsed;
+        return true;
+    } catch (const std::exception&) {
+        std::cerr << name << " must be a finite number; got '" << value << "'." << std::endl;
         return false;
     }
 }
@@ -466,6 +501,99 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             }
             continue;
         }
+        if (option_value(argument, "lattice", &value)) {
+            if (!lattice_3d_from_name(value.c_str(), &config.lattice_3d)) {
+                std::cerr << "Unknown lattice '" << value << "'; expected D3Q19 or D3Q27."
+                          << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "potential-solver", &value)) {
+            if (!potential_solver_from_name(value.c_str(), &config.mhd.solver)) {
+                std::cerr << "Unknown potential solver '" << value << "'; expected fv or lbm."
+                          << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        {
+            // Setting a field component is unambiguous intent, so it switches
+            // the coupling on; --no-mhd after it still wins.
+            const char* names[3] = {"bx", "by", "bz"};
+            bool matched = false;
+            for (int axis = 0; axis < 3 && !matched; ++axis) {
+                if (option_value(argument, names[axis], &value)) {
+                    if (!finite_double(value, names[axis], &config.mhd.b[axis])) {
+                        return CommandLineResult::Error;
+                    }
+                    config.mhd.enabled = true;
+                    matched = true;
+                }
+            }
+            if (matched) {
+                continue;
+            }
+        }
+        {
+            const char* names[3] = {"drive-x", "drive-y", "drive-z"};
+            bool matched = false;
+            for (int axis = 0; axis < 3 && !matched; ++axis) {
+                if (option_value(argument, names[axis], &value)) {
+                    if (!finite_double(value, names[axis], &config.physics.body_force[axis])) {
+                        return CommandLineResult::Error;
+                    }
+                    matched = true;
+                }
+            }
+            if (matched) {
+                continue;
+            }
+        }
+        if (argument == "--mhd") {
+            config.mhd.enabled = true;
+            continue;
+        }
+        if (argument == "--no-mhd") {
+            config.mhd.enabled = false;
+            continue;
+        }
+        if (option_value(argument, "sigma-e1", &value)) {
+            if (!nonnegative_double(value, "--sigma-e1", &config.mhd.conductivity1)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "sigma-e2", &value)) {
+            if (!nonnegative_double(value, "--sigma-e2", &config.mhd.conductivity2)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "conductivity", &value)) {
+            if (value == "harmonic") {
+                config.mhd.harmonic_conductivity = true;
+            } else if (value == "arithmetic") {
+                config.mhd.harmonic_conductivity = false;
+            } else {
+                std::cerr << "Unknown conductivity average '" << value
+                          << "'; expected harmonic or arithmetic." << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "mhd-tolerance", &value)) {
+            if (!positive_double(value, "--mhd-tolerance", &config.mhd.tolerance)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        if (option_value(argument, "mhd-iterations", &value)) {
+            if (!positive_integer(value, "mhd-iterations", &config.mhd.max_iterations)) {
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
         if (argument == "--vtk") {
             config.write_vtk_field = true;
             continue;
@@ -513,6 +641,7 @@ std::string describe(const CaseConfig& config) {
         << "boundary = " << (config.boundary == Boundary::WallY ? "wall_y" : "periodic_y") << "\n"
         << "stencil = " << stencil_name(config.stencil) << "\n"
         << "stencil_3d = " << stencil_name_3d(config.stencil_3d) << "\n"
+        << "lattice_3d = " << lattice_3d_name(config.lattice_3d) << "\n"
         << "initial_state = "
         << (config.initial_state == InitialState::MechanicalEquilibrium
                 ? "equilibrium"
@@ -550,6 +679,20 @@ std::string describe(const CaseConfig& config) {
         << "alpha2 = " << physics.alpha2 << "\n"
         << "p1_inf = " << physics.p1_inf << "\n"
         << "p2_inf = " << physics.p2_inf << "\n"
+        << "body_force_x = " << physics.body_force[0] << "\n"
+        << "body_force_y = " << physics.body_force[1] << "\n"
+        << "body_force_z = " << physics.body_force[2] << "\n"
+        << "mhd = " << (config.mhd.enabled ? "true" : "false") << "\n"
+        << "b_x = " << config.mhd.b[0] << "\n"
+        << "b_y = " << config.mhd.b[1] << "\n"
+        << "b_z = " << config.mhd.b[2] << "\n"
+        << "sigma_e1 = " << config.mhd.conductivity1 << "\n"
+        << "sigma_e2 = " << config.mhd.conductivity2 << "\n"
+        << "conductivity_average = "
+        << (config.mhd.harmonic_conductivity ? "harmonic" : "arithmetic") << "\n"
+        << "potential_solver = " << potential_solver_name(config.mhd.solver) << "\n"
+        << "mhd_tolerance = " << config.mhd.tolerance << "\n"
+        << "mhd_iterations = " << config.mhd.max_iterations << "\n"
         << "output_precision = " << config.output_precision << "\n"
         << "track_interface = " << (config.track_interface ? "true" : "false") << "\n"
         << "vtk = " << (config.write_vtk_field ? "true" : "false") << "\n"

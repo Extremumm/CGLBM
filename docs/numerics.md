@@ -833,16 +833,77 @@ reads `2a + 8d = 3 · 4d`, hence `a = 2d`, and `α + 6a + 12d = 1` then gives bo
 
 ### The enhanced equilibrium
 
-Its correction runs over `3|e_i|² − (d + 2)`: the `− 4` of the two-dimensional
+**Two** things change with the dimension here, and only one of them is the
+obvious one.
+
+The correction runs over `3|e_i|² − (d + 2)`: the `− 4` of the two-dimensional
 form is `− 5` here. That is not a fitted constant but the third-order Hermite
 contraction,
 
     H_xxx + H_yyx + H_zzx = e_x (|e|² − 5 c_s²),
 
-against `H_xxx + H_yyx = e_x(|e|² − 4c_s²)` in two dimensions. The test of it is
-that the correction still leaves the momentum alone:
-`sum_i w_i e_α e_β (3|e_i|² − 5) = 0` on D3Q19 exactly as
-`sum_i w_i e_α e_β (3|e_i|² − 4) = 0` on D2Q9 — checked to 10⁻¹⁶.
+against `H_xxx + H_yyx = e_x(|e|² − 4c_s²)` in two dimensions.
+
+Its *amplitude* changes too, and by a factor the polynomial does not announce
+and the Hermite derivation actively hides.
+
+What the correction is for is the third moment: the second moment already
+carries the fluid's own `(c_s^k)²`, and the third has to follow it there from
+the lattice's `1/3`, or the viscous stress and the pressure disagree about
+which sound speed the fluid has. Written as Hermite coefficients that is
+`a⁽³⁾_αβγ = (p_k − ρ_k c_s²)(δ_αβ u_γ + δ_αγ u_β + δ_βγ u_α)`, whose only
+representable part is the contraction, and projecting it gives
+
+    Δf_i = (p_k − ρ_k c_s²) w_i u_γ (sum_α H_ααγ) / (2 c_s⁶)
+
+— dimension-independent in form, which is exactly the trap. docs/report,
+Proposition *Equivalence of the enhanced equilibrium*, is this object on D2Q9,
+and turning the crank there returns Ba et al.'s `½(3(c_s^k)² − 1)`. Turning the
+same crank in three dimensions returns the same coefficient, because nothing in
+the algebra knows the dimension.
+
+**But the lattice does not deliver what the projection ordered.** Third-order
+Hermite polynomials are not orthogonal under a D2Q9 or D3Q19 quadrature, so
+what `Δf_i` actually puts into the third moment has to be measured rather than
+assumed. Measured:
+
+| | delivered `M3_xxy` / intended | delivered `M3_xxx` / intended |
+|---|---|---|
+| D2Q9 | **1.0000** | 0 |
+| D3Q19 | **0.5000** | 0 |
+
+`M3_xxx` is unreachable on both — `sum_i w_i e_x⁴ (3|e_i|² − (d+2)) = 0` in
+either dimension — and that is the model's known, dimension-independent limit,
+harmless because it is the bulk viscosity and not the shear. The mixed moment
+is the one the shear stress sees, since `∂_c M3_αβc` for `α ≠ β` is built from
+`M3_aab` alone. On D2Q9 the projection lands on it exactly. On D3Q19 it lands
+on exactly half of it, because the `(±1, ±1, 0)` shell — the only shell with
+two non-zero components in the plane — carries `3|e|² − 5 = 1` where in two
+dimensions it carried `3|e|² − 4 = 2`:
+
+    T = sum_i w_i e_x² e_y² (3|e_i|² − (d + 2))  =  2/9 on D2Q9,  1/9 on D3Q19
+
+Half the correction per unit of `λ`, so twice the `λ`. Solving
+`M3_xxy = 1/3 + 3λT = (c_s^k)²` for it,
+
+| | λ |
+|---|---|
+| D2Q9 | `(3 (c_s^k)² − 1) / 2` |
+| D3Q19 | `3 (c_s^k)² − 1` |
+
+So the coefficient in Ba et al. and Leclaire et al. is a D2Q9 coefficient, and
+a three-dimensional port has to re-derive it rather than transcribe it.
+
+The test of the polynomial is that the correction still leaves the momentum
+alone: `sum_i w_i e_α e_β (3|e_i|² − 5) = 0` on D3Q19 exactly as
+`sum_i w_i e_α e_β (3|e_i|² − 4) = 0` on D2Q9 — checked to 10⁻¹⁶. That is
+necessary and not sufficient, and checking only it is what let the amplitude
+stay wrong for the length of a release; see *Fixed: the enhanced equilibrium
+kept its two-dimensional amplitude on D3Q19* below. The test of the amplitude
+is `M3_xxy = ρ_k (c_s^k)² u_y`, which `report_equilibrium` now measures and
+which is exact rather than approximate — every other term of the equilibrium is
+even in `e` and drops out of an odd-order moment, so there is no `O(u³)`
+remainder to hide in.
 
 ### The gradient stencils
 
@@ -885,12 +946,17 @@ A static droplet at a density ratio of 1000, R = 10 in 48³, σ = 0.1, α₂ = 0
 
 | steps | Δp R / (2σ) | max &#124;u&#124; |
 |---|---|---|
-| 6 × 10³ | 1.0094 | 3.7 × 10⁻⁴ |
-| 1.5 × 10⁴ | 1.0265 | 1.9 × 10⁻⁵ |
-| 2 × 10⁴ | 1.0261 | 2.1 × 10⁻⁵ |
-| 3 × 10⁴ | **1.0240** | 2.1 × 10⁻⁵ |
+| 7.5 × 10³ | 1.0072 | 8.0 × 10⁻⁴ |
+| 1.5 × 10⁴ | 1.0318 | 7.2 × 10⁻⁵ |
+| 2 × 10⁴ | 1.0298 | 3.3 × 10⁻⁵ |
+| 3 × 10⁴ | **1.0262** | 3.2 × 10⁻⁵ |
 
-approached from above and still creeping down slowly. Three sweeps say what the
+overshooting and then creeping down slowly. The limit is where it was before
+the enhanced-equilibrium fix — 1.0262 against 1.0240 — because a static jump
+does not see the third moment that fix repairs. The approach to it is not: the
+heavy fluid had been running at 417 times the viscosity the case asked for, and
+without that the currents at 1.5 × 10⁴ steps are 7.2 × 10⁻⁵ rather than
+1.9 × 10⁻⁵ and take until 2 × 10⁴ to settle. Three sweeps say what the
 residual +2.4 % is made of, all at 2 × 10⁴ steps:
 
 | | Δp R / (2σ) | max &#124;u&#124; |
@@ -953,31 +1019,68 @@ On the shipped track that lands on the same numbers a nonlinear fit does, to
 five digits.
 
 **What it measures**, at a density ratio of 10, σ = 0.1, ε = 0.1, matched
-dynamic viscosity μ = 0.02, E6 gradient:
+dynamic viscosity μ = 0.06, E6 gradient:
 
 | R | lattice | ω₀ measured | ω Lamb | ratio | α/ω₀ | fit residual |
 |---|---|---|---|---|---|---|
-| 8 | 48³ | 1.009 × 10⁻² | 1.210 × 10⁻² | 0.834 | 0.138 | 0.010 |
-| 10 | 48³ | 7.550 × 10⁻³ | 8.660 × 10⁻³ | **0.872** | 0.123 | 0.014 |
-| 13 | 64³ | TBD13 | TBD13L | TBD13R | TBD13Z | TBD13F |
+| 8 | 48³ | 9.385 × 10⁻³ | 1.210 × 10⁻² | 0.776 | 0.375 | 0.003 |
+| 10 | 48³ | 7.117 × 10⁻³ | 8.660 × 10⁻³ | **0.822** | 0.346 | 0.004 |
+| 13 | 64³ | 4.997 × 10⁻³ | 5.843 × 10⁻³ | 0.855 | 0.318 | 0.007 |
 
-**The frequency is low, and the reason is the interface, not the tension.** The
-three ratios are `1 − 1.3/R` to within the scatter — first order in the
-interface width over the radius, the interface being about 1.6 nodes wide at
-every one of them. Two things that could have explained it are ruled out by
-measurement rather than by argument:
+μ = 0.06 rather than the 0.02 this case used to run is not a preference: it is
+the floor the D3Q19 positivity bound puts under a case whose heavy fluid is the
+thing moving. At 0.02 the release transient drives an axial population negative
+and the run diverges at step 86. *The positivity bound on D3Q19*, below, has the
+measurements. It matters for reading the rest of this section, because it makes
+the case a good deal more viscous than the one that used to be reported here.
 
- - *The surface tension.* Running `laplace_3d` at exactly these parameters —
-   `--rho1=10 --sigma=0.1 --nu=0.002 --nu2=0.02` — gives Δp R / (2σ) = 1.0235,
-   the same +2 % the ratio-1000 case gives. The tension the droplet is being
-   pulled back by is the tension in the formula.
- - *The viscosity.* The damping ratio is 0.12, and the correction from the
-   observed frequency to the undamped one, `ω₀ = sqrt(ω² + α²)`, is 0.8 % — a
-   twentieth of the gap. TBDVISC
+**The frequency comes out low, and the gap closes as the droplet is better
+resolved** — 22.4 %, 17.8 %, 14.5 % over radii 8, 10, 13. It closes as `1/R`,
+and tightly: `gap × R` is 1.80, 1.78 and 1.88 at the three radii. What the three
+share is the interface, which the segregation operator holds at 5.2 nodes
+between φ_N = +0.9 and −0.9 whatever the radius — 0.65 of R at R = 8, 0.52 at
+R = 10, 0.40 at R = 13. A gap first order in the interface width over the
+radius is what a diffuse interface should give, and 1.8/R against a width of
+5.2 nodes puts the coefficient at about a third of `width/R`.
 
-So what is left is the diffuse interface itself, which is what the 1/R says: at
-R = 10 the transition layer is a sixth of the radius, and neither the tension
-nor the inertia of that layer sits where a sharp-interface theory puts it.
+The other candidates were measured rather than argued away, each by changing one
+thing at R = 10 in 48³:
+
+| | ratio | α/ω₀ |
+|---|---|---|
+| as shipped: σ = 0.1, ρ₁/ρ₂ = 10, μ = 0.06 | 0.822 | 0.346 |
+| μ 0.06 → 0.12 | 0.719 | 0.572 |
+| σ 0.1 → 0.4 | 0.863 | 0.196 |
+| ρ₁/ρ₂ 10 → 1 | 0.798 | 0.188 |
+
+ - *The surface tension* is right, and this is the one conclusion the
+   equilibrium fix leaves untouched — the static jump does not see the third
+   moment. Running `laplace_3d` at exactly the oscillation's parameters —
+   `--rho1=10 --sigma=0.1 --nu=0.006 --nu2=0.06` — gives Δp R / (2σ) = 1.0235,
+   to four digits the same number it gave before the fix, and the same +2 % the
+   ratio-1000 case gives. Quadrupling σ doubles the frequency and moves the
+   ratio by 4 points, so the deficit scales with `sqrt(σ)` much as Lamb's own
+   frequency does: a relative deficit, not a fixed offset.
+ - *The density ratio* is not it. Removing it entirely makes the agreement
+   worse, 0.798 against 0.822, and does so at half the damping.
+ - *The viscosity* **is** a real part of it, and this is where the honest
+   answer changed. Doubling μ costs 10.3 points, not the 1.6 that was reported
+   when the scheme was quietly running at 4.7 times the viscosity it was asked
+   for. The fit already reports the undamped `ω₀ = sqrt(ω² + α²)`, so that is
+   viscous modification of the mode beyond the linear correction, and at
+   α/ω₀ = 0.35 there is a lot of it. Going the other way is not available: the
+   positivity bound is what sets μ.
+
+So the deficit is a mixture, and the case can no longer separate the two parts
+as cleanly as it claimed to. The damping ratio itself falls with R — 0.375,
+0.346, 0.318 — so part of the trend across the three radii is viscous rather
+than geometric. Taking the local slope of ratio against α/ω₀ from the μ and σ
+rows above, about −0.3, that part accounts for roughly a fifth of the 7.9-point
+rise from R = 8 to R = 13; the remaining four fifths is resolution. That is the
+strongest statement this configuration supports. Sharpening it means buying
+headroom under the positivity bound — a smaller ε, or a larger `(c_s^k)²` —
+rather than lowering μ, and that is a change to what the case is, not a
+re-measurement of it.
 
 ### Walls and gravity
 
@@ -988,21 +1091,42 @@ two remaining paths. It is a demonstration and not a validation, and the
 distinction is worth being explicit about. The inviscid single-mode growth rate
 `n = sqrt(A g k)`, with `k = 2π√2/nx` for the square cell, would be the obvious
 thing to score against; at this resolution it cannot be. The viscous correction
-`−ν k²` is a quarter of it, the interface is 1.6 nodes wide against a wavelength
-of 32, and the perturbation has to start at about that width to be resolved at
-all. Lowering ν enough to sharpen the comparison puts τ under 0.52; raising g
-enough makes the hydrostatic pressure a third of the bulk pressure.
+`−ν k²` is 55 % of it at the mean of the two kinematic viscosities, and the
+interface is 4.9 nodes wide between
+φ_N = +0.9 and −0.9, a sixth of the wavelength it is being perturbed at.
+Raising g enough to sharpen the comparison makes the hydrostatic pressure a
+third of the bulk pressure, and lowering ν is not available at all: μ = 0.04 is
+the floor the D3Q19 positivity bound puts under this case, and 0.03 diverges by
+step 750. That 55 % was 28 % while the enhanced equilibrium carried its
+two-dimensional amplitude, which is one of the things that fix cost — the case
+was reading a viscosity 1.8 times lower than the one it was running at.
+
+What the case does do is run: the interface starts 3.0 nodes peak to peak and
+reaches 55 by step 3000 — the spike down to y = 32 and the bubble up to y = 86
+in a column of 128 — with an e-folding time of 815 steps, fitted over steps 500
+to 2000, against the 268 the inviscid rate would give. The first 500 steps are not part of that: the case
+starts at rest with a uniform pressure, so the column builds its own hydrostatic
+profile first, and the spike front dips and comes back up by a third of a node
+before the instability takes over. Left running to 4000 steps the spike reaches
+the bottom wall and the two layers overturn, which is why the case stops at
+3000.
+
+The spike front and the peak-to-peak separation grow monotonically from step 500
+on; the bubble front on its own does not, and the reason is the measurement
+rather than the flow. The bubble's top is flat, so the highest column changes
+between outputs and the maximum over the row wobbles by up to a third of a node
+while the front climbs 21 of them. The test scores the separation.
 
 The wall and the body force are therefore checked separately, and exactly, in
 `programs/unit_testing/lbm/two_population_3d`:
 
 | | measured |
 |---|---|
-| mass drift, single fluid between walls, 4 × 10³ steps | 2.6 × 10⁻¹³ |
+| mass drift, single fluid between walls, 4 × 10³ steps | 2.5 × 10⁻¹³ |
 | residual speed of that column | 3.7 × 10⁻⁶ |
 | `dp/dy` against `−ρ g` | 1.0 % |
-| mass drift of each component, layer under gravity | 4 × 10⁻¹⁵, 1 × 10⁻¹⁴ |
-| asymmetry under swapping x and z | 4.2 × 10⁻¹⁵ |
+| mass drift of each component, layer under gravity | 6 × 10⁻¹⁵, 7 × 10⁻¹⁵ |
+| asymmetry under swapping x and z | 2.1 × 10⁻¹⁵ |
 
 The hydrostatic 1 % is a residual and not a floor: the pressure varies by 0.8 %
 across the whole column, so the balance is read out of its fifth digit, and the
@@ -1028,6 +1152,283 @@ run writes, so the existing post-processing reads them unchanged. `--vtk` adds
 the whole field as `field_<t>.vtk` for ParaView; it is off by default because a
 48³ dump is 14 MB against 300 kB for the slices, and CSV is not offered for a
 whole field at all — at these sizes it would be gigabytes a step.
+
+## D3Q27
+
+The three-dimensional solver runs on either lattice; `--lattice=d3q27` selects
+the larger one, and D3Q19 stays the default because every case shipped here was
+calibrated on it and the two do not give the same numbers.
+
+### What changes, and what must not be written down twice
+
+Four quantities differ between the lattices. Three are tabulated in
+`src/lbm/lattice3d.h`; the fourth is deliberately not tabulated anywhere.
+
+The rest weights follow from `sum_q phi_q = 1` together with fourth-order
+isotropy, `sum phi e_x⁴ = 3 sum phi e_x² e_y²`. That is two conditions for two
+unknown shells on D3Q19 and two for three on D3Q27, so the larger lattice needs
+one more. Taking the one sixth-order relation it *can* satisfy,
+`sum phi e_x⁴ e_y² = 3 sum phi e_x² e_y² e_z²`, closes it and reproduces the
+standard weights at `α = 8/27`:
+
+| | D3Q19 | D3Q27 |
+|---|---|---|
+| rest | `α` | `α` |
+| axial | `(1−α)/12` | `2(1−α)/19` |
+| edge | `(1−α)/24` | `(1−α)/38` |
+| corner | — | `(1−α)/152` |
+| `(c_s^k)²` | `(1−α)/2` | `9(1−α)/19` |
+
+Both are Saito et al. (2017), Eqs. (13) and (19) — the D3Q27 column is theirs
+verbatim. The relation the model is built on, `ρ₁/ρ₂ = (1−α₂)/(1−α₁)`, is
+unchanged, because the coefficient in `(c_s^k)²` cancels between the two
+fluids; so is its consequence that the two bulk pressures are identically equal.
+
+The fourth quantity is the enhanced equilibrium's amplitude, and it is the one
+that matters here. It is fixed by the third moment,
+
+    M3_xxy / (ρ_k u_y) = 3 S + 3 λ T,
+    S = sum_q w_q e_x² e_y²,   T = sum_q w_q e_x² e_y² (3|e_q|² − 5),
+
+so `λ = ((c_s^k)² − 3S)/(3T)`. `S` is `1/9` on both. `T` is `1/9` on D3Q19 and
+`2/9` on D3Q27, because the corner shell carries `3|e|² − 5 = 4` where the edge
+shell carries 1. So `λ` is `3(c_s^k)² − 1` on D3Q19 and **half of that** on
+D3Q27.
+
+Half of that is, exactly, the wrong D3Q19 value that the port from two
+dimensions shipped — see *Fixed: the enhanced equilibrium kept its
+two-dimensional amplitude on D3Q19*, below, and the 417× viscosity error it
+caused at a density ratio of 1000. Two lattices whose correct amplitudes differ
+by the same factor as a real past bug, in a quantity that appears in no
+conservation law, is as strong an argument as exists for not writing either of
+them down. `TwoPopulationSolver3D` therefore sums `S` and `T` over whichever
+lattice it was handed and divides.
+`programs/unit_testing/lbm/lattice_3d` measures `M3_xxy` on both lattices at
+four density ratios, and separately checks the summed amplitude against each
+closed form — measured error 3 × 10⁻¹⁶ and 4 × 10⁻¹⁵.
+
+### The positivity bound is looser
+
+The bound of *The positivity bound on D3Q19* below is a property of the
+lattice, and D3Q27 has a better one. Minimising `phi_q / (3 w_q |e_q| |A_q|)`
+over the directions, with `A_q = 1 + λ(3|e_q|² − 5)`, gives in the small
+`(c_s^k)²` limit
+
+| shell | D3Q19 | D3Q27 |
+|---|---|---|
+| axial | `(c_s^k)²/3` | `(c_s^k)²/2` |
+| edge | — | `√2 (c_s^k)²` |
+| corner | — | `(c_s^k)²/√3` |
+
+The axial shell binds on both, so the bound goes from `(c_s^k)²/3` to
+`(c_s^k)²/2`: half again as much room before an equilibrium component goes
+negative. Measured at a density ratio of 1000, 0.3336 `(c_s^k)²` against 0.5003
+— the difference from the limit is the `(c_s^k)²` terms the table drops.
+
+### What it costs
+
+42 % more memory and streaming. What it buys, beyond the positivity bound, is
+isotropy: D3Q19 misses the sixth-order relation above by `1/9` and D3Q27
+satisfies it to round-off.
+
+Measured on `laplace_3d` — a droplet at a density ratio of 1000, 1.5 × 10⁴
+steps, the two lattices differing in nothing else:
+
+| | max spurious `\|u\|` | `Δp / (2σ/R)` |
+|---|---|---|
+| D3Q19 | 7.175 × 10⁻⁵ | 1.0281 |
+| D3Q27 | 6.050 × 10⁻⁵ | 1.0266 |
+
+So 16 % off the spurious velocity and a slightly better Laplace jump. Saito et
+al. report the same comparison as a factor of two, 1.2 × 10⁻² against
+5.8 × 10⁻³; theirs is under an MRT collision operator where the spurious
+current is dominated by the lattice, and this one is under BGK where it is not,
+so the direction agrees and the size does not. The number to quote for this
+code is the one above.
+
+At the 600 steps of `programs/unit_testing/lbm/lattice_3d` the two are
+indistinguishable and D3Q27 is marginally the worse: that is the transient, not
+the answer, which is why the unit test reports it and does not score it.
+
+## Inductionless magnetohydrodynamics
+
+`src/lbm/quasi_static_mhd_3d.h`. A case that sets `CaseConfig::mhd` gains a
+magnetic force; the default leaves every existing case untouched.
+
+At the magnetic Reynolds numbers of liquid metals — below 10⁻² in almost any
+laboratory or industrial flow — the field the induced current makes is
+negligible beside the imposed one, and the induction equation collapses to an
+instantaneous constraint. No magnetic field is stored and none is advanced:
+
+    J = σ(−∇φ + u × B₀),    ∇·J = 0,    F = J × B₀,
+
+and eliminating `J` between the first two gives the potential equation
+
+    ∇·(σ ∇φ) = ∇·(σ (u × B₀)).
+
+### The current lives on the faces
+
+`∇·J = 0` is not a diagnostic of this system; it is the equation that
+determines `φ`. So a current formed from a node-centred `∇φ` — which is not the
+operator the potential was solved against — carries a spurious charge source,
+and the fictitious force that source produces grows with the field strength
+that motivated the calculation in the first place. This is the argument of Ni
+et al. (2007) for finite volumes, and it applies here unchanged.
+
+The current is therefore built on the faces, from the same difference the
+operator was:
+
+    J_f = σ_f (e_f − (φ₊ − φ₀)),    e_f = (u × B₀)·n_f,
+
+which makes the discrete `sum_faces J_f` *identically* the residual of the
+linear solve. Only for the force is it averaged back to the node. Measured at a
+conductivity ratio of 10⁴, the imbalance is 1.2 × 10⁻¹² of the current carrying
+it under periodic boundaries and 2.3 × 10⁻¹² against an insulating wall.
+
+The insulating wall is the same statement in flux form: a face the current
+cannot cross, dropped from the operator and from the right-hand side alike. No
+ghost node, no one-sided difference, and the conservation statement still holds
+at the boundary. Every boundary being periodic or insulating, the potential is
+determined only up to a constant, and the solve projects that out.
+
+### The conductivity blend, and why neither average is right
+
+A laminate has an *anisotropic* effective conductivity: harmonic across the
+layers and arithmetic along them. A scalar face coefficient cannot carry both,
+so the choice has to be made against the direction the current actually runs at
+the interface.
+
+Current **crossing** the interface — a conducting drop in a field — sees the
+phases in series, and harmonic is right. Current running **along** it — which
+is what a horizontal layer in a vertical field produces — sees them in
+parallel, and arithmetic is. The difference is not small at a large contrast:
+at a conductivity ratio of 10⁴ and a face half in each phase, the harmonic
+value is **2700 times** the smaller of the two and the arithmetic one is half
+the larger, so a harmonic blend turns two or three nodes of interface into an
+insulator exactly where the shear is.
+
+Harmonic is the default, for the current that has to cross and for consistency
+with the reference implementation. `--conductivity=arithmetic` is there for the
+other case, and `magnetic_rayleigh_taylor` is the flow that needs it. What
+removes the choice is a sharp-interface treatment — imposing `[φ] = 0` and
+`[σ ∂φ/∂n] = [σ (u × B)·n]` on a reconstructed interface rather than blending
+at all — which is not implemented here.
+
+### The cost inside a time loop
+
+Measured on `magnetic_rayleigh_taylor` with the field tilted into the plane of
+the interface, so that the potential has real work to do, at a conductivity
+ratio of 10⁴ and a tolerance of 10⁻¹⁰: **289 to 296 conjugate-gradient
+iterations per step**, warm-started, with the charge imbalance at 6 × 10⁻¹⁷ to
+1.3 × 10⁻¹⁶. The conservation is exactly what the construction promises. The
+iteration count is not cheap, and it is the conductivity contrast rather than
+the lattice size that sets it; a stronger preconditioner than Jacobi — or a
+multigrid — is the obvious improvement and is not implemented.
+
+### Two discretisations, and which one to use
+
+Both are implemented, because they fail differently.
+
+**Finite volume** (`--potential-solver=fv`, the default) is the conservative
+face operator above, solved by a Jacobi-preconditioned conjugate gradient
+warm-started from the previous step. Against a manufactured potential it
+recovers it to 4 × 10⁻¹⁴ at a uniform conductivity in 5 iterations, and to
+3 × 10⁻¹³ across a conductivity jump of 10⁴ in 41. Against an analytic solution
+it is second order: measured 2.003 and 2.001.
+
+**Lattice Boltzmann** (`--potential-solver=lbm`) marches
+
+    ∂φ/∂t = ∇·(σ ∇φ) − ∇·(σ (u × B₀))
+
+to its steady state on a D3Q7 lattice — the Poisson model of Chai and Shi
+(2008). It is entirely local: a collision and a stream, with the insulating
+wall falling out of the same half-way bounce-back the flow solver uses, and no
+reductions anywhere. Only the steady state is wanted, and that is unchanged if
+`σ` and the source are scaled together, so the march runs at a scaled
+diffusivity putting the largest relaxation time at `lbm_tau_max`. The collision
+is two-relaxation-time with `Λ = (τ⁺−½)(τ⁻−½) = ¼` rather than BGK, because
+with BGK the effective position of a jump in `σ` moves with the relaxation
+time, and here `σ` jumps at every interface while the relaxation time spans the
+conductivity ratio.
+
+It converges, at second order — measured 1.98 and 2.00 — at about 2.5 times the
+finite volume's error on the same lattice. What it costs is the diffusive
+scaling: **1152, 4272 and 15856 sweeps** from cold at `n` = 16, 32 and 64,
+which is `O(L²)` to within a per cent, against a single conjugate-gradient
+iteration for the same problem. Inside the time loop the gap narrows a long
+way, because the potential is warm-started and barely moves.
+
+And at a large conductivity ratio it does not converge at all. At 10⁴ — a
+liquid metal beside an electrolyte, an ordinary pairing — it had not converged
+after 40000 sweeps, and the current built from the unconverged potential
+carried a charge imbalance of 45 % of itself; the conjugate gradient solved the
+same problem in 38 iterations to 10⁻¹². The elliptic problem's condition number
+*is* that ratio, and no purely local relaxation escapes it. That is the whole
+reason the finite volume is the default, and it is measured rather than
+assumed.
+
+### Where the force sits in the step
+
+The force needs a velocity, and the velocity the solver reports already carries
+half a step of the force — using it would make the magnetic force depend on
+itself. So with a field present the velocity is formed twice: once as the bare
+momentum `sum_q f_q e_q / ρ`, which is what the field sees, and again with
+Guo's half step once the force is known. Without a field the extra pass is
+skipped and the time loop is bit-for-bit what it was.
+
+The force is therefore explicit, and magnetic damping alone relaxes the
+velocity on `τ_m = ρ/(σ B₀²)`; a step much beyond that is unstable however well
+the potential is solved. `magnetic_damping_time` returns it and the cases
+report it.
+
+### What is validated
+
+`hartmann` is the analytic case: a conducting fluid driven along a channel
+across the field, with
+
+    u(y) = (G/(σB₀²))[1 − cosh(Ha y/L)/cosh(Ha)],   Ha = B₀ L √(σ/μ).
+
+At `Ha = 10` on a 64-node channel, the core velocity comes out 6 parts per
+million from the closed form, the whole profile to 0.1 % in L², and the
+Hartmann layer within half a node of `L/Ha = 3.2`. The two measurements are
+independent: the core is `G/(σB₀²)` and fixes the force's magnitude, the layer
+is `√(μ/σ)/B₀` and fixes how it is distributed.
+
+That case leaves the potential uniform, and so does `magnetic_rayleigh_taylor`
+— in both, `u × B₀` points along an axis nothing varies along, so its
+divergence vanishes identically. That is a property of the two configurations,
+both of which have closed forms *because* of it, not a gap in coverage: the
+potential solve is exercised by `programs/unit_testing/lbm/mhd_potential` and,
+in a running flow, by tilting the field out of the symmetry plane.
+
+`magnetic_rayleigh_taylor` is the unsteady, two-phase case: one mode grown
+against a field, scored against the finite-depth quasi-static dispersion
+relation of the `mrt` campaign in `basiliskMHD/QSMHD`, evaluated at this case's
+lattice parameters. The relation is inviscid and this flow is not, so what is
+scored is the *ratio* `ω(B)/ω(0)`, from which the viscous correction largely
+cancels. Measured at 128 nodes per wavelength, a density ratio of 3.6501 and a
+conductivity ratio of 10825:
+
+| interaction parameter `N` | ω measured | ω relation | ω(B)/ω(0) measured | relation | error |
+|---|---|---|---|---|---|
+| 0 | 8.930 × 10⁻⁴ | 1.0438 × 10⁻³ | — | — | — |
+| 2 | 6.928 × 10⁻⁴ | 7.689 × 10⁻⁴ | 0.776 | 0.737 | +5.3 % |
+| 10 | 3.337 × 10⁻⁴ | 3.571 × 10⁻⁴ | 0.374 | 0.342 | +9.2 % |
+
+The absolute rates sit 6.6 %, 9.9 % and 14.4 % below the inviscid relation, in
+that order — which is what `2νk² = 1.4 × 10⁻⁴` gives against each — and never
+above it, which is the direction the omitted viscosity has to push them.
+
+**This case caught a real modelling error.** With the library's default
+harmonic blend the `N = 10` run gave a suppression of 0.567 against 0.342 — 66 %
+too little braking — and an absolute growth rate 1.42 times the *inviscid*
+relation, which is not physically available and is the sort of result that
+should stop a run being believed. The blend was the cause, for the reason given
+above: the current in this flow runs along the interface, so the phases are in
+parallel, and the harmonic average had turned the interface band into an
+insulator exactly where the shear is. With arithmetic the same measurement
+gives 0.374 against 0.342. The case sets arithmetic;
+`--conductivity=harmonic` reproduces the failure.
 
 ## Isotropy of the colour gradient
 
@@ -1225,3 +1626,97 @@ than a measurement of the change. `laplace` is periodic and unchanged.
 Both were preserved through the extraction of the shared kernel, so that it
 could be verified bit for bit against the previous code, and fixed afterwards
 one commit at a time. Any measurement taken before those commits carries them.
+
+### Fixed: the enhanced equilibrium kept its two-dimensional amplitude on D3Q19
+
+`TwoPopulationSolver3D::equilibrium` was ported from the two-dimensional
+solver with the polynomial correctly changed and the coefficient in front of it
+correctly *un*changed:
+
+```cpp
+const double enhancement = 0.5 * (3.0 * cs_squared_[fluid] - 1.0);  // D2Q9 value
+const double first = 3.0 * eu * (1.0 + enhancement * (3.0 * e_squared - 5.0));
+```
+
+Both had to move. `§ The enhanced equilibrium` above has the derivation; the
+short of it is that the shell the correction acts through carries half the
+weight on D3Q19 that it carries on D2Q9, so the amplitude has to double to
+deliver the same correction. At half strength it closed half the distance
+between the lattice's `1/3` and the fluid's `(c_s^k)²`, leaving a shear stress
+governed by the *average* of the two, `((c_s^k)² + 1/3)/2`.
+
+`collide()` sets `τ` from `(c_s^k)²`, so what that produced was a shear
+viscosity too large by `1/(6 (c_s^k)²) + 1/2` in each component:
+
+| case | ρ₁/ρ₂ | heavy ν | light ν |
+|---|---|---|---|
+| `laplace_3d` | 1000 | **× 417** | × 0.917 |
+| `oscillation_3d` | 10 | **× 4.7** | × 0.917 |
+| `rayleigh_taylor_3d` | 3 | × 1.8 | × 0.917 |
+
+Measured rather than argued: a decaying shear wave on D3Q19 driven by this
+equilibrium alone, against the `ν = (c_s^k)²(τ − ½)` the solver calibrates `τ`
+on, came out at 4.68 × for `(c_s^k)² = 0.04` and 84 × for `(c_s^k)² = 0.002`,
+and at 1.003 × for both once the amplitude was doubled. The same experiment on
+D2Q9 gives 1.003 × for the shipped two-dimensional coefficient, so the defect
+never touched the two-dimensional solver.
+
+**Why nothing caught it.** The amplitude enters no moment below the third.
+`report_equilibrium` checked mass, momentum and the momentum flux, and this
+file checked `sum_i w_i e_α e_β (3|e_i|² − 5) = 0`; all four are satisfied by
+any amplitude whatsoever. The check that discriminates is
+`M3_xxy = ρ_k (c_s^k)² u_y`, which the unit test now makes — it reads
+2.8 × 10⁻³ against the old coefficient and 3.5 × 10⁻¹⁸ against the new one.
+
+**What the fix changes.** `laplace_3d` is static and its jump is unaffected in
+the limit — 1.0262 at 3 × 10⁴ steps against 1.0240 before — though its approach
+to that limit and its spurious currents are not, since 417 times the viscosity
+had been damping them. `oscillation_3d` and `rayleigh_taylor_3d` could no
+longer run at their shipped `μ = 0.02` at all and were raised to 0.06 and 0.04;
+the reason is a bound this defect had been masking, recorded under *The
+positivity bound on D3Q19* below. Every number measured from a
+three-dimensional run before this fix carries the wrong viscosity, and the
+tables above were re-measured after it.
+
+### The positivity bound on D3Q19
+
+Not a defect, but the constraint the defect above was hiding, and it is
+tighter in three dimensions than in two.
+
+As `(c_s^k)² → 0` the enhanced equilibrium's amplitude tends to `−1`, which
+sends the edge directions' first-order term to zero and puts essentially all
+of the momentum on the six axial ones. The axial population is then
+
+    f_axial = ρ_k (φ_axial + u/2),   φ_axial = (c_s^k)² / 6,
+
+so it goes negative once `|u|` passes `(c_s^k)²/3`. The same construction on
+D2Q9 spreads the momentum over four axial directions against a rest weight of
+`(c_s^k)²/3`, and the bound is `2(c_s^k)²/3` — twice the headroom.
+
+It binds where the *heavy* fluid moves, since the bound is on the velocity at
+nodes where `ρ_k` is large, not on the domain's peak speed:
+
+ - `laplace_3d` (ratio 1000, bound 1.3 × 10⁻⁴) is unaffected. Its droplet sits
+   still; the spurious current lives in the light fluid.
+ - The unit test's ratio-1000 droplet, laid down sharp, crosses it on the
+   initial transient. Over the 30 steps that case runs, the worst excursion is
+   5.6 % of the heavy fluid's axial rest population `ρ₁ φ_axial`; left running
+   it peaks near step 200 at 1.4 times that population, decays, and is back to
+   exactly zero from step 1700 on, with mass conserved to 10⁻¹⁵ and the phase
+   field inside [−1, 1] throughout. It is transient and bounded, and the test
+   asserts the bound rather than asserting the excursion away. It also scales
+   with how sharply the droplet is laid down — −0.096 at `ch_width_init` 1.1,
+   −0.055 at 1.6, −0.023 at 2.2 — and with the ratio: nothing at all at 20,
+   −3.7 × 10⁻⁴ at 100, −0.038 at 300.
+ - `oscillation_3d` (ratio 10, bound 1.3 × 10⁻²) is the case where the heavy
+   fluid is what moves. At `μ = 0.02` the release transient reached `|u| =
+   0.028`, the populations went negative, and the run diverged at step 86.
+   0.045 survives the release and runs away by step 350; 0.05 holds but leaves
+   a trace; `μ = 0.06` holds the transient at 0.007 and the populations at
+   exactly zero from step 100 on.
+ - `rayleigh_taylor_3d` (ratio 3, bound 4.4 × 10⁻²) has the loosest bound of
+   the three and still fell foul of it: at `μ = 0.02` it diverged between steps
+   250 and 500, at 0.025 by step 500 and at 0.03 by step 750. It ships at 0.04.
+
+The segregation operator's own non-negativity argument is unaffected — it was
+always stated "near equilibrium", and a sharp droplet at release is not.
