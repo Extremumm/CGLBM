@@ -18,7 +18,7 @@ jobs:
     name: Laplace benchmark
     runs-on: ubuntu-latest
     # three full laplace runs of about ten minutes each (density ratio 20 with E8
-    # and E4, density ratio 1e4) and two droplet runs of about five
+    # and E4, density ratio 1e4) and three droplet runs of about five
     timeout-minutes: 120
 
     steps:
@@ -93,7 +93,6 @@ jobs:
 
           print("## Velocity-based droplet solver\n")
           static = pathlib.Path("artifacts/droplet_static")
-          moving = pathlib.Path("artifacts/droplet_moving")
           if static.is_dir():
               case = CaseOutput(static)
               t = case.last_timestep
@@ -108,15 +107,18 @@ jobs:
               print(f"| jump / (sigma / R) | {jump / (SIGMA / radius):.4f} |")
               print(f"| max spurious velocity | {speed.max():.3e} |")
               print()
-          if moving.is_dir():
+          for ratio in ("1e4", "100"):
+              moving = pathlib.Path(f"artifacts/droplet_moving_{ratio}")
+              if not moving.is_dir():
+                  continue
               case = CaseOutput(moving)
               t = case.last_timestep
               momentum = [(case.density(s) * case.velocity(s)[..., 0]).sum() for s in (0, t)]
-              print("### moving, density ratio 1e4 (`droplet E8 1e4 0.01`)\n")
+              print(f"### moving, density ratio {ratio} (`droplet E8 {ratio} 0.01`)\n")
               print("| quantity | value |")
               print("| --- | --- |")
               print(f"| timestep | {t} |")
-              print(f"| total momentum drift | {(momentum[1] - momentum[0]) / momentum[0]:+.4f} |")
+              print(f"| total momentum drift | {(momentum[1] - momentum[0]) / momentum[0]:+.2e} |")
               print()
           PY
 

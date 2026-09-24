@@ -409,64 +409,152 @@ the incompressible Navier-Stokes equations in the velocity form of Fakhari et
 al. (2017) and Zu & He (2013). The components are incompressible; the
 equation of state of the colour-gradient solvers is not used.
 
-Three details decide whether it runs at $10^4$:
+Four details decide whether it runs at $10^4$:
 
-- **The pressure correction on the lattice's own stencil.** Streaming
-  $w_i P$ gives $-\nabla(p/\rho)$ per unit mass; the physics wants
-  $-\nabla p/\rho$. The usual correction $P c_s^2\nabla\rho/\rho$ cancels two
-  terms of order $\rho_1/\rho_2$ computed on different stencils and diverges at
-  $10^4$. Written as
-  $\vec a = \sum_i w_i \vec\xi_i\,P(\vec x + \vec\xi_i)\,(1 - \rho(\vec x + \vec\xi_i)/\rho(\vec x))$,
-  it makes the total exactly $-\nabla_{lat}\,p/\rho$: a uniform pressure across
-  a density jump of $10^4$ exerts no force to $4\times10^{-16}$.
+- **The pressure force as the lattice gradient of $p$.** Streaming $w_i P$
+  gives $-\nabla(p/\rho)$ per unit mass; the physics wants $-\nabla p/\rho$.
+  The usual correction $P c_s^2\nabla\rho/\rho$ cancels two terms of order
+  $\rho_1/\rho_2$ computed on different stencils and diverges at $10^4$. The
+  solver applies instead
+  $\vec a = \sum_i w_i \vec\xi_i\,p(\vec x - \vec\xi_i)/(c_s^2\rho(\vec x))$,
+  the lattice's own gradient of $p$ where $p$ is continuous: a uniform
+  pressure across a density jump of $10^4$ exerts no force to
+  $3\times10^{-17}$, and $\rho\vec a$ sums to zero over the lattice. It enters
+  through the forcing scheme, half before and half after the step; applied
+  whole within the step it diverges within 500 steps.
 - **A separate bulk relaxation.** With comparable dynamic viscosities the heavy
   fluid has $\tau - 1/2 \approx 10^{-4}$; relaxing the trace of the
   non-equilibrium at $\tau_b = 1$ damps its acoustic modes, which otherwise
   grow at the interface within 200 steps.
-- **The viscous correction as $\nu S\cdot\nabla\ln\rho$**, bounded across
-  the interface where $\nabla\rho/\rho$ is not.
+- **A hybrid regularised collision** (Malaspinas 2015; Jacob, Malaspinas &
+  Sagaut 2018): the second-order non-equilibrium that relaxes is 0.98 times
+  that of the populations and 0.02 times its Chapman-Enskog value from the
+  finite-difference velocity gradient. It damps grid-scale shear modes of the
+  nearly inviscid heavy fluid, which the momentum exchange below leaves
+  without the damping the light fluid used to lend them.
+- **A momentum exchange that conserves momentum**, below.
 
 Surface tension is the capillary-stress force of
 [section 3](#3-surface-tension-as-a-body-force), built on $\psi = 2c - 1$.
+
+### Momentum conservation
+
+Read as it stands, the velocity-based update is not conservative. A
+population leaving node $y$ belongs to a node of mass $\rho(y)$, and arrives
+at $x$ counted with $\rho(x)$; across the interface the two differ by up to
+the density ratio. A momentum budget of the first version of this solver,
+split link by link, closed to $10^{-13}$ and put the drift in three places: the
+lattice's advective and viscous exchange (two terms each worth 27 times the
+droplet's momentum over the run, cancelling to a few percent), the streamed
+half of the forcing scheme, and the viscous correction
+$\nu S\cdot\nabla\ln\rho$. Over 10 000 steps the drift reached +4.4 % at
+$10^4$ and +11.7 % at 100.
+
+The literature on phase-field methods at large density ratios gives the
+principle: the momentum equation must be solved in conservative form, with
+the momentum convected by the same mass flux as the phase field, including
+the flux of the Allen-Cahn diffusion and sharpening (Raessi & Pitsch 2012;
+Huang, Lin & Ardekani 2020; Mirjalili & Mani 2021; in a lattice Boltzmann
+model, Zhan, Chai & Shi 2022). The lattice Boltzmann literature at the same
+ratios gives the other half: populations that carry $\rho\vec u$ pick up
+truncation errors in $\vec u\,\partial^n\rho$ that spoil the momentum passed
+from the dense fluid to the light one, and robust schemes stream $\vec u$
+(Fakhari et al. 2017; Otomo et al. 2025). The solver keeps the streaming of
+$\vec u$ and replaces the reading of it by an exchange over each lattice link,
+equal and opposite at its two ends (`link_momentum`):
+
+$$
+\vec J(\vec x) = \rho^n(\vec x)\,\vec u^{\,*}(\vec x) + \sum_{\text{links}}
+\Big[\rho_l\,(F - F_{adv})\,\vec\xi_k
++ \rho_l K\,\bar{\vec u} + (M - \rho_l K)\,\vec u_{up}
++ \beta\,\tfrac{2w_k}{c_s^2}(\vec u_y - \vec u_x)\Big],
+\qquad \vec u^{\,n+1}_{lat} = \vec J/\rho^{n+1}.
+$$
+
+$\vec u^{\,*} = \vec u^{\,n} + \vec a^{\,n}/2$ is the node's velocity after
+its collision, $\vec u_{lat}$ the velocity the populations are given back
+(`set_velocity`), and the macroscopic velocity adds half of the new
+acceleration, as the forcing scheme wants.
+
+- $\rho_l = \min(\rho_x, \rho_y)$ weights the lattice's own exchange $F$ (the
+  two populations the link carried, less their pressure part), without its
+  advective part $F_{adv}$. A light node sees a heavy neighbour exactly as
+  before. A heavy node sees a light neighbour through the light fluid's
+  momentum only, which makes the interface a free surface for the heavy
+  fluid. A larger link density fails: the harmonic mean, which would be right
+  for the viscous stress, lets a light node receive twice the heavy node's
+  non-equilibrium and diverges within 700 steps at $10^4$ (research copy).
+- The advection is the mass the phase populations carry across the link,
+  $M = (\rho_1 - \rho_2)(h_k(y) - h_{\bar k}(x)) + \rho_2 K$, times a link
+  velocity; $K = \Gamma_k(\vec u_y) - \Gamma_{\bar k}(\vec u_x)$ is the volume
+  it moves. The part $\rho_l K$ uses the mean velocity, energy-conserving as in
+  Mirjalili & Mani; the excess $M - \rho_l K$, which exists only where the two
+  densities differ, is upwinded. Within one component $M = \rho K$ and there is
+  no excess. For a uniform velocity $\vec U$ the link carries exactly
+  $M\vec U$, whatever the densities on either side: a droplet translating with
+  its surroundings keeps its speed to $3\times10^{-6}$ over 2000 steps at
+  $U = 0.02$. Advecting all of $M$ with the mean velocity is not bounded, and
+  sets the light fluid moving at 3 to 7 times the droplet's speed (research
+  copy).
+- $\beta$ raises the link viscosity $\rho_l(\nu_x + \nu_y)/2$, which the
+  lighter-density weighting leaves as low as half the dynamic viscosity, to
+  the harmonic mean of $\mu_x$ and $\mu_y$.
+
+The pressure force and the capillary stress divergence both sum to zero over
+the lattice. The total momentum is therefore conserved to rounding, whatever
+the density ratio.
+
+### Results
 
 Static droplet, 10 000 steps, equal dynamic viscosities, R = 10:
 
 | | Δp / (σ/R) | max &#124;u&#124; |
 |---|---|---|
 | colour-gradient `laplace E8 1e4 1` (30 000 steps) | 1.015 | 7.2 × 10⁻⁴ |
-| `droplet E8 1e4 0` | 1.017 | 5.4 × 10⁻⁶ |
-| `droplet E4 1e4 0` | 1.024 | 2.1 × 10⁻⁵ |
+| `droplet E8 1e4 0`, first version | 1.017 | 5.4 × 10⁻⁶ |
+| `droplet E8 1e4 0` | 1.030 | 1.7 × 10⁻⁶ |
 
-The spurious currents are 130 times lower than the colour-gradient solver's at
-the same ratio; research runs give 1.020 at 1000, 1.030 at 1, and 0.991 at
-$10^4$ with R = 20.
+The pressure jump moved by a percent: the streamed half of the forcing used to
+carry the capillary force of the light interface nodes into the heavy ones,
+per unit mass, and now carries it at the light fluid's density.
 
-Droplet launched along x into a fluid at rest (`droplet E8 <ratio> <U>`, 10 000
-steps). On the same test the colour-gradient solver diverges within 2000 steps
-at 1000 and $10^4$, already at $U = 10^{-3}$; at 100 it runs, and conserves
-momentum exactly:
+Droplet launched along x into a fluid at rest (`droplet E8 <ratio> 0.01`,
+10 000 steps). On the same test the colour-gradient solver diverges within
+2000 steps at 1000 and $10^4$, already at $U = 10^{-3}$:
 
-| ρ₁/ρ₂ | U | outcome | total momentum drift | max &#124;u&#124; at the end |
-|---|---|---|---|---|
-| 100 | 0.02 | bounded | +11.7 % | 0.80 U |
-| 1000 | 0.01 | bounded | +4.8 % | 1.12 U |
-| $10^4$ | 0.01 | bounded | +4.4 % | 1.17 U |
+| ρ₁/ρ₂ | momentum drift, first version | momentum drift | droplet speed, first → last 1000 steps |
+|---|---|---|---|
+| 100 | +11.7 % | < 10⁻¹⁰ | 0.812 U → 0.650 U |
+| $10^4$ | +4.4 % | < 10⁻¹⁰ | 0.849 U → 0.841 U |
 
-At $10^4$ a uniformly translating domain holds its speed to $10^{-4}$ over 6000
-steps at $U = 10^{-2}$, and diverges at $U = 5\times10^{-2}$ (research copy).
+The drift left is the ten significant digits of the output; in double
+precision, without the output, it is $10^{-13}$. At $10^4$ the
+droplet now slows down, as it must while it sets the surrounding fluid in
+motion; the first version sped it up from 0.85 U to 0.88 U. At 100 the
+lighter fluid, which could take a third of the momentum once everything moves
+together, has taken a fifth of it by the end of the run.
 
-**Momentum is not conserved.** The scheme evolves $\vec u$, not $\rho\vec u$:
-the mass the Allen-Cahn flux moves does not carry its momentum, and the viscous
-correction is not in conservative form. The drift above grows with time -- the
-$10^4$ droplet speeds up from 0.85 U to 0.88 U over the run -- and is worse at
-low density ratio, where the lighter fluid carries a larger share of the
-momentum. Adding the momentum flux of the Allen-Cahn mass flux (Huang et al.
-2020) as an explicit correction, or writing the viscous correction as a
-difference of two discrete divergences, did not remove it. Below a ratio of
-about 100, where the colour-gradient solver is stable and exactly
-conservative, it remains the reference; the velocity-based solver is for the
-ratios it cannot reach. `tests/test_droplet_velocity_based.py` pins the drift
-at $10^4$ so that a change that worsens it shows.
+Highest launch speed at $10^4$ that stays bounded for 4000 steps (research
+copy, same droplet):
+
+| μ₁/μ₂ | first version | this version |
+|---|---|---|
+| 1 | 0.02 (drift 2.6 %), diverges at 0.05 | 0.05, diverges at 0.1 |
+| 10 | 0.02 (drift 1.9 %), diverges at 0.05 | 0.05, diverges at 0.1 |
+| 100 | 0.02 (drift 0.4 %), diverges at 0.05 | 0.05, diverges at 0.1 |
+
+The hybrid collision alone does not do this: the first version with it still
+diverges at 0.05, after 2100 steps. Over the full 10 000 steps this version
+holds 0.02 at a viscosity ratio of 1, with momentum conserved to $2\times10^{-13}$;
+0.05 is marginal, and diverges after about 7700 steps, by which time the
+droplet has crossed the periodic box twice.
+
+Viscous stress across the interface (research copy): a heavy layer and a light
+layer, $10^4$ apart and of equal dynamic viscosity, driven by a sinusoidal
+body force whose steady solution is a single sine across both, with the
+interfaces where the shear stress is largest. After 3000 steps the light
+layer's largest error is 3.6 % of the peak velocity for the first version, 14 %
+with the lighter-density weighting alone, and 2.1 % with the link viscosity.
 
 ## Status of the modular library
 

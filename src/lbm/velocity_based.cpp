@@ -57,23 +57,18 @@ void forcing(double ux, double uy, double ax, double ay, double* source) {
     }
 }
 
-void collide(const double* populations,
-             const double* equilibrium,
-             const double* source,
-             double tau_shear,
-             double tau_bulk,
-             double* post_collision) {
-    double pxx = 0.0;
-    double pyy = 0.0;
-    double pxy = 0.0;
-    for (int k = 0; k < kQ; ++k) {
-        const double ex = kVelocity[k][0];
-        const double ey = kVelocity[k][1];
-        const double neq = populations[k] - equilibrium[k] + 0.5 * source[k];
-        pxx += neq * ex * ex;
-        pyy += neq * ey * ey;
-        pxy += neq * ex * ey;
-    }
+namespace {
+
+/// Relax the second-order non-equilibrium (pxx, pyy, pxy) and rebuild the
+/// post-collision populations around the equilibrium.
+void relax(double pxx,
+           double pyy,
+           double pxy,
+           const double* equilibrium,
+           const double* source,
+           double tau_shear,
+           double tau_bulk,
+           double* post_collision) {
     const double trace = (1.0 - 1.0 / tau_bulk) * 0.5 * (pxx + pyy);
     const double deviator = (1.0 - 1.0 / tau_shear) * 0.5 * (pxx - pyy);
     const double qxx = trace + deviator;
@@ -88,43 +83,155 @@ void collide(const double* populations,
     }
 }
 
-void pressure_correction(const double* pressure_number,
-                         const double* rho,
-                         int nx,
-                         int ny,
-                         int i,
-                         int j,
-                         double* ax,
-                         double* ay) {
-    const double rho_here = rho[i * ny + j];
+/// Second-order moments of the non-equilibrium g - g^eq + S/2.
+void non_equilibrium(const double* populations,
+                     const double* equilibrium,
+                     const double* source,
+                     double* pxx,
+                     double* pyy,
+                     double* pxy) {
+    *pxx = 0.0;
+    *pyy = 0.0;
+    *pxy = 0.0;
+    for (int k = 0; k < kQ; ++k) {
+        const double ex = kVelocity[k][0];
+        const double ey = kVelocity[k][1];
+        const double neq = populations[k] - equilibrium[k] + 0.5 * source[k];
+        *pxx += neq * ex * ex;
+        *pyy += neq * ey * ey;
+        *pxy += neq * ex * ey;
+    }
+}
+
+/// The u u part of Gamma_k(u): w_k ((xi_k . u)^2 / (2 cs^4) - u^2 / (2 cs^2)).
+double advective_part(int k, double ux, double uy) {
+    const double eu = kVelocity[k][0] * ux + kVelocity[k][1] * uy;
+    return kWeight[k] * (0.5 * eu * eu / kCs4 - 0.5 * (ux * ux + uy * uy) / kCs2);
+}
+
+/// Gamma_k(u) for one direction.
+double carrier(int k, double ux, double uy) {
+    const double eu = kVelocity[k][0] * ux + kVelocity[k][1] * uy;
+    return kWeight[k] * (1.0 + eu / kCs2 + 0.5 * eu * eu / kCs4 - 0.5 * (ux * ux + uy * uy) / kCs2);
+}
+
+}  // namespace
+
+void collide(const double* populations,
+             const double* equilibrium,
+             const double* source,
+             double tau_shear,
+             double tau_bulk,
+             double* post_collision) {
+    double pxx, pyy, pxy;
+    non_equilibrium(populations, equilibrium, source, &pxx, &pyy, &pxy);
+    relax(pxx, pyy, pxy, equilibrium, source, tau_shear, tau_bulk, post_collision);
+}
+
+void collide_hybrid(const double* populations,
+                    const double* equilibrium,
+                    const double* source,
+                    double tau_shear,
+                    double tau_bulk,
+                    double sigma,
+                    const VelocityGradient& gradient,
+                    double* post_collision) {
+    double pxx, pyy, pxy;
+    non_equilibrium(populations, equilibrium, source, &pxx, &pyy, &pxy);
+    const double divergence = gradient.dux_dx + gradient.duy_dy;
+    const double fxx =
+        -tau_shear * kCs2 * (2.0 * gradient.dux_dx - divergence) - tau_bulk * kCs2 * divergence;
+    const double fyy =
+        -tau_shear * kCs2 * (2.0 * gradient.duy_dy - divergence) - tau_bulk * kCs2 * divergence;
+    const double fxy = -tau_shear * kCs2 * (gradient.dux_dy + gradient.duy_dx);
+    relax(sigma * pxx + (1.0 - sigma) * fxx,
+          sigma * pyy + (1.0 - sigma) * fyy,
+          sigma * pxy + (1.0 - sigma) * fxy,
+          equilibrium,
+          source,
+          tau_shear,
+          tau_bulk,
+          post_collision);
+}
+
+void pressure_force(const double* pressure_number,
+                    const double* rho,
+                    int nx,
+                    int ny,
+                    int i,
+                    int j,
+                    double* ax,
+                    double* ay) {
     double sx = 0.0;
     double sy = 0.0;
     for (int k = 1; k < kQ; ++k) {
-        const int ip = ((i + kVelocity[k][0]) % nx + nx) % nx;
-        const int jp = ((j + kVelocity[k][1]) % ny + ny) % ny;
-        const int m = ip * ny + jp;
-        const double weight = kWeight[k] * pressure_number[m] * (1.0 - rho[m] / rho_here);
+        const int im = ((i - kVelocity[k][0]) % nx + nx) % nx;
+        const int jm = ((j - kVelocity[k][1]) % ny + ny) % ny;
+        const int m = im * ny + jm;
+        // w_i p / cs^2 of the upstream node, p = rho cs^2 P
+        const double weight = kWeight[k] * rho[m] * pressure_number[m];
         sx += weight * kVelocity[k][0];
         sy += weight * kVelocity[k][1];
     }
-    *ax = sx;
-    *ay = sy;
+    const double rho_here = rho[i * ny + j];
+    *ax = sx / rho_here;
+    *ay = sy / rho_here;
 }
 
-void viscous_correction(double nu,
-                        double dux_dx,
-                        double dux_dy,
-                        double duy_dx,
-                        double duy_dy,
-                        double dlnrho_dx,
-                        double dlnrho_dy,
-                        double* ax,
-                        double* ay) {
-    const double sxx = 2.0 * dux_dx;
-    const double syy = 2.0 * duy_dy;
-    const double sxy = dux_dy + duy_dx;
-    *ax = nu * (sxx * dlnrho_dx + sxy * dlnrho_dy);
-    *ay = nu * (sxy * dlnrho_dx + syy * dlnrho_dy);
+void link_momentum(int k,
+                   const LinkEnd& donor,
+                   const LinkEnd& receiver,
+                   double rho1,
+                   double rho2,
+                   double* jx,
+                   double* jy) {
+    const int opposite = kOpposite[k];
+    const double ex = kVelocity[k][0];
+    const double ey = kVelocity[k][1];
+    // the lighter end sets how much momentum the lattice's exchange may carry
+    const double rho_link = donor.rho < receiver.rho ? donor.rho : receiver.rho;
+
+    // lattice exchange per unit mass, without its advective part
+    const double exchange = donor.outgoing + receiver.outgoing;
+    const double advective =
+        advective_part(k, donor.ux, donor.uy) + advective_part(k, receiver.ux, receiver.uy);
+    const double lattice = rho_link * (exchange - advective);
+
+    // advection: the mass the phase populations carry, times a link velocity
+    const double volume =
+        carrier(k, donor.ux, donor.uy) - carrier(opposite, receiver.ux, receiver.uy);
+    const double mass = (rho1 - rho2) * (donor.phase - receiver.phase) + rho2 * volume;
+    const double excess = mass - rho_link * volume;
+    const double mid_x = 0.5 * (donor.ux + receiver.ux);
+    const double mid_y = 0.5 * (donor.uy + receiver.uy);
+    const double upwind_x = excess > 0.0 ? donor.ux : receiver.ux;
+    const double upwind_y = excess > 0.0 ? donor.uy : receiver.uy;
+
+    // viscous stress: raise the link viscosity to the harmonic mean of mu
+    const double target = 2.0 * donor.mu * receiver.mu / (donor.mu + receiver.mu);
+    const double lattice_viscosity =
+        rho_link * 0.5 * (donor.mu / donor.rho + receiver.mu / receiver.rho);
+    const double beta = target > lattice_viscosity ? target - lattice_viscosity : 0.0;
+    const double diffusion = beta * 2.0 * kWeight[k] / kCs2;
+
+    *jx = lattice * ex + rho_link * volume * mid_x + excess * upwind_x +
+          diffusion * (donor.ux - receiver.ux);
+    *jy = lattice * ey + rho_link * volume * mid_y + excess * upwind_y +
+          diffusion * (donor.uy - receiver.uy);
+}
+
+void set_velocity(double* populations, double ux, double uy) {
+    double mx = 0.0;
+    double my = 0.0;
+    for (int k = 0; k < kQ; ++k) {
+        mx += populations[k] * kVelocity[k][0];
+        my += populations[k] * kVelocity[k][1];
+    }
+    const double dx = ux - mx;
+    const double dy = uy - my;
+    for (int k = 1; k < kQ; ++k) {
+        populations[k] += kWeight[k] * (kVelocity[k][0] * dx + kVelocity[k][1] * dy) / kCs2;
+    }
 }
 
 }  // namespace velocity_based

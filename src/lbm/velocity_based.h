@@ -2,7 +2,7 @@
 #define CGLBM_LBM_VELOCITY_BASED_H
 
 /// A velocity-based two-phase scheme, for interfaces that move at large density
-/// ratios.
+/// ratios, with a momentum exchange that conserves momentum exactly.
 ///
 /// The colour-gradient solvers stream populations whose moments are the
 /// density rho and the momentum rho u. Both jump by the density ratio across
@@ -31,38 +31,68 @@
 /// in both fluids, and the equation of state of the colour-gradient solvers is
 /// not used.
 ///
-/// Streaming P and u gives -grad(p / rho) and div(nu S) per unit mass. The
-/// physics wants -grad(p) / rho and div(mu S) / rho, and two corrections make
-/// up the difference:
-///  - pressure_correction, written on the lattice's own stencil so that the
-///    total pressure force is exactly -grad_lat(p) / rho. The finite-difference
-///    form P cs^2 grad(rho) / rho cancels two terms of order rho_1 / rho_2
-///    between different stencils, and diverges at a density ratio of 1e4;
-///  - viscous_correction, nu S . grad(ln rho), bounded across the interface
-///    where grad(rho) / rho is not.
+/// Streaming u makes the scheme robust but, read as it stands, not
+/// conservative: a population leaving node y carries rho(y) g_i per unit of
+/// velocity, and arrives at x counted with rho(x). Across the interface the two
+/// differ by up to the density ratio. The momentum is instead updated link by
+/// link, every link exchanging equal and opposite amounts (link_momentum):
+///
+///  - the lattice's own non-equilibrium and thermal exchange, weighted by the
+///    lighter density of the two ends. A light node sees its heavy neighbour
+///    as the velocity-based scheme does; a heavy node sees a light neighbour
+///    through the light fluid's momentum only, as a free surface;
+///  - the advection, as the mass flux of the phase populations times a link
+///    velocity, so that mass and momentum move together (the consistent mass
+///    and momentum transport of the phase-field literature). A uniform
+///    velocity is then carried by the mass flux alone, whatever the densities
+///    on either side of a link;
+///  - a link diffusion that brings the viscous stress across a link to the
+///    harmonic mean of the two dynamic viscosities, which the lighter-density
+///    weighting alone would halve.
+/// The pressure force, the lattice gradient of p itself (pressure_force), and
+/// the capillary stress divergence both sum to zero over the lattice. What a
+/// node holds after the exchanges, divided by its new density, is its new
+/// velocity; set_velocity hands it back to the populations.
+///
 /// The collision relaxes the trace of the non-equilibrium at its own rate: a
 /// heavy fluid with a modest dynamic viscosity has tau close to 1/2, and
-/// without a separate bulk relaxation its acoustic modes are undamped.
-///
-/// Known limitation: momentum is not conserved exactly. The scheme evolves u,
-/// not rho u; the mass moved by the Allen-Cahn flux does not carry its
-/// momentum, and the viscous corrections are not in conservative form. On a
-/// droplet launched into quiescent fluid, total momentum drifts by 4.4 % over
-/// 10 000 steps at a density ratio of 1e4, and by 11.7 % at 100. The
-/// colour-gradient solvers are exactly conservative and remain the reference
-/// below a density ratio of about 100.
+/// without a separate bulk relaxation its acoustic modes are undamped. Its
+/// shear modes, as nearly undamped, are held by the hybrid regularised
+/// collision (collide_hybrid): seen from inside, the interface is a free
+/// surface, and a heavy fluid with tau - 1/2 ~ 1e-4 behind one diverges at a
+/// droplet speed of 0.02 without it.
 ///
 /// References
 ///  - A. Fakhari, T. Mitchell, C. Leonardi, D. Bolster, "Improved locality of
 ///    the phase-field lattice-Boltzmann model for immiscible fluids at high
 ///    density ratios", Phys. Rev. E 96, 053301 (2017). The velocity-based
-///    hydrodynamic equilibrium and its pressure and viscous corrections.
+///    hydrodynamic equilibrium.
 ///  - Y. Q. Zu, S. He, "Phase-field-based lattice Boltzmann model for
 ///    incompressible binary fluid systems with density and viscosity
 ///    contrasts", Phys. Rev. E 87, 043301 (2013).
 ///  - P.-H. Chiu, Y.-T. Lin, "A conservative phase field method for solving
 ///    incompressible two-phase flows", J. Comput. Phys. 230, 185-204 (2011).
 ///    The conservative Allen-Cahn equation.
+///  - Z. Huang, G. Lin, A. M. Ardekani, "Consistent and conservative scheme
+///    for incompressible two-phase flows using the conservative Allen-Cahn
+///    model", J. Comput. Phys. 420, 109718 (2020); S. Mirjalili, A. Mani,
+///    "Consistent, energy-conserving momentum transport for simulations of
+///    two-phase flows using the phase field equations", J. Comput. Phys. 426,
+///    109918 (2021). Momentum convected by the mass flux of the phase-field
+///    equation, including its Allen-Cahn part.
+///  - C. Zhan, Z. Chai, B. Shi, "Consistent and conservative phase-field-based
+///    lattice Boltzmann method for incompressible two-phase flows", Phys. Rev.
+///    E 106, 025319 (2022). The same consistency in a lattice Boltzmann model.
+///  - H. Otomo et al., "Lattice Boltzmann models for the hydrodynamic equations
+///    in multiphase flow with high density ratio", arXiv:2512.01027 (2025).
+///    Why schemes that stream rho u lose accuracy near a large density jump,
+///    and stream u instead.
+///  - O. Malaspinas, "Increasing stability and accuracy of the lattice
+///    Boltzmann scheme: recursivity and regularization", arXiv:1505.06900
+///    (2015); J. Jacob, O. Malaspinas, P. Sagaut, "A new hybrid recursive
+///    regularised Bhatnagar-Gross-Krook collision model for Lattice Boltzmann
+///    method-based large eddy simulation", J. Turbul. 19, 1051-1076 (2018).
+///    The regularised and hybrid regularised collisions.
 
 namespace cglbm {
 namespace lbm {
@@ -81,6 +111,8 @@ constexpr double kWeight[kQ] = {4.0 / 9.0,
                                 1.0 / 36.0,
                                 1.0 / 36.0,
                                 1.0 / 36.0};
+/// The direction opposite each of kVelocity.
+constexpr int kOpposite[kQ] = {0, 3, 4, 1, 2, 7, 8, 5, 6};
 constexpr double kSoundSpeedSquared = 1.0 / 3.0;
 
 /// Gamma_i(u), the second-order Maxwellian of unit mass. Its moments are 1, u
@@ -118,40 +150,99 @@ void collide(const double* populations,
              double tau_bulk,
              double* post_collision);
 
-/// Acceleration that turns the lattice's pressure force into -grad(p) / rho.
-///
-/// Streaming w_i P gives -cs^2 grad_lat(P) per unit mass, with grad_lat the
-/// stencil sum_i w_i xi_i f(x + xi_i) / cs^2. Adding
-///
-///     a(x) = sum_i w_i xi_i P(x + xi_i) (1 - rho(x + xi_i) / rho(x))
-///
-/// makes the total exactly -grad_lat(rho cs^2 P) / rho(x): the pressure p is
-/// differentiated where it is continuous, and nothing of order rho_1 / rho_2
-/// has to cancel. `pressure_number` and `rho` are `nx * ny` values indexed
-/// `[i * ny + j]`; both axes are periodic.
-void pressure_correction(const double* pressure_number,
-                         const double* rho,
-                         int nx,
-                         int ny,
-                         int i,
-                         int j,
-                         double* ax,
-                         double* ay);
+/// A velocity gradient, du_a / dx_b.
+struct VelocityGradient {
+    double dux_dx;
+    double dux_dy;
+    double duy_dx;
+    double duy_dy;
+};
 
-/// Acceleration nu S . grad(ln rho), with S = grad u + grad u^T.
+/// Hybrid regularised collision (Jacob, Malaspinas & Sagaut 2018).
 ///
-/// The lattice gives div(nu S) per unit mass for the local nu = mu / rho; the
-/// physics wants div(mu S) / rho. For any mu(c) the difference is
-/// nu S . grad(ln rho), which stays bounded across the interface.
-void viscous_correction(double nu,
-                        double dux_dx,
-                        double dux_dy,
-                        double duy_dx,
-                        double duy_dy,
-                        double dlnrho_dx,
-                        double dlnrho_dy,
-                        double* ax,
-                        double* ay);
+/// As collide, but the second-order non-equilibrium that relaxes is
+/// `sigma` times that of the populations plus 1 - sigma times its
+/// Chapman-Enskog value from the velocity gradient,
+///
+///     -tau_shear cs^2 (grad u + grad u^T - div u I) - tau_bulk cs^2 div u I.
+///
+/// The two agree on resolved flow; on the grid-scale modes the populations
+/// carry and the finite-difference gradient does not, the blend damps what a
+/// shear relaxation time within 1e-4 of 1/2 would leave undamped. sigma = 1
+/// is collide.
+void collide_hybrid(const double* populations,
+                    const double* equilibrium,
+                    const double* source,
+                    double tau_shear,
+                    double tau_bulk,
+                    double sigma,
+                    const VelocityGradient& gradient,
+                    double* post_collision);
+
+/// Pressure force per unit mass, -grad_lat(p) / rho(x), with p = rho cs^2 P.
+///
+///     a(x) = sum_i w_i xi_i p(x - xi_i) / (cs^2 rho(x))
+///
+/// is the lattice's own pressure gradient, applied to p where it is continuous
+/// rather than to P, which jumps by the density ratio. As a force density
+/// rho a it sums to zero over a periodic lattice, and a uniform p exerts no
+/// force whatever rho does. `pressure_number` and `rho` are `nx * ny` values
+/// indexed `[i * ny + j]`; both axes are periodic.
+void pressure_force(const double* pressure_number,
+                    const double* rho,
+                    int nx,
+                    int ny,
+                    int i,
+                    int j,
+                    double* ax,
+                    double* ay);
+
+/// One end of a lattice link, as link_momentum reads it after streaming.
+struct LinkEnd {
+    /// The post-collision hydrodynamic population this end sent along the
+    /// link, less its pressure part w_i P.
+    double outgoing;
+    /// The phase population this end sent along the link.
+    double phase;
+    /// Density at the new time.
+    double rho;
+    /// Dynamic viscosity at the new time.
+    double mu;
+    /// Velocity at the old time, the one the equilibria were built with.
+    double ux;
+    double uy;
+};
+
+/// Momentum that `receiver` gains through its link with `donor`, where donor
+/// sits at receiver - xi_k. The donor loses the same amount: swapping the two
+/// ends and taking the opposite direction gives exactly the opposite vector.
+///
+/// With rho_l = min(donor.rho, receiver.rho), F the velocity-based exchange
+/// per unit mass (the two `outgoing` values), F_adv its advective part
+/// (the u u terms of both equilibria), K the exchange of the carriers Gamma
+/// and M the mass carried by the phase populations,
+///
+///     J = rho_l (F - F_adv) xi_k                       thermal, viscous, forcing
+///       + rho_l K u_mid + (M - rho_l K) u_upwind       advection by the mass flux
+///       + beta 2 w_k / cs^2 (u_donor - u_receiver)     viscous stress
+///
+/// u_mid is the mean of the two velocities, u_upwind the velocity of the end
+/// the excess mass flux M - rho_l K leaves, and beta raises the link viscosity
+/// rho_l (nu_donor + nu_receiver) / 2 to the harmonic mean of the dynamic
+/// viscosities. Where the two densities are equal and the phase populations
+/// are those of a single component, M = rho K and nothing but the lattice's
+/// exchange, with its advection written as a mass flux, is left.
+void link_momentum(int k,
+                   const LinkEnd& donor,
+                   const LinkEnd& receiver,
+                   double rho1,
+                   double rho2,
+                   double* jx,
+                   double* jy);
+
+/// Replace the first moment of `populations` by u, leaving the zeroth and
+/// second moments unchanged.
+void set_velocity(double* populations, double ux, double uy);
 
 }  // namespace velocity_based
 }  // namespace lbm

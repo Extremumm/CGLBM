@@ -1,17 +1,19 @@
-"""The velocity-based droplet solver at a density ratio of 1e4.
+"""The velocity-based droplet solver at large density ratios.
 
-Two runs of programs/solvers/velocity_based/droplet:
+Three runs of programs/solvers/velocity_based/droplet:
 
 - `droplet E8 1e4 0`: a static droplet, the Laplace benchmark, to compare with
   the colour-gradient `laplace E8 1e4 1`;
 - `droplet E8 1e4 0.01`: the same droplet launched at 0.01 lattice units per
   step into a fluid at rest. The colour-gradient solver diverges on this case
-  within a few hundred steps, at any speed from 1e-3 up.
+  within a few hundred steps, at any speed from 1e-3 up;
+- `droplet E8 100 0.01`: the same at a density ratio of 100, where the lighter
+  fluid carries a large share of the momentum.
 
-The moving run is checked for what the scheme promises -- it stays bounded,
-the droplet keeps moving, no velocity appears beyond the flow -- and for what
-it does not: total momentum drifts, and the drift is pinned so that it cannot
-grow unnoticed. See src/lbm/velocity_based.h and docs/numerics.md.
+The moving runs are checked for what the scheme promises: they stay bounded,
+total momentum is conserved to the precision of the output, and the droplet
+slows down as it sets the lighter fluid in motion. See src/lbm/velocity_based.h
+and docs/numerics.md.
 """
 
 import math
@@ -26,20 +28,22 @@ C_DT = C_DX / 347.0 / math.sqrt(3.0)
 SIGMA = 1.0 / (C_DX**3 / C_DT**2)  # surface tension, lattice units
 RADIUS = 10.0
 NUM_STEPS = 10000
+LX = 128
 DENSITY_RATIO = 1.0e4
-SPEED = 0.01  # initial speed of the moving droplet
+SPEED = 0.01  # initial speed of the moving droplets
 
 LAPLACE_JUMP = SIGMA / RADIUS
 INNER_RADIUS = 0.5 * RADIUS
 OUTER_RADIUS = 3.0 * RADIUS
 
 # Measured on these runs, pinned to catch regressions.
-MEASURED_JUMP_RATIO = 1.017
-MEASURED_MAX_VELOCITY = 5.4e-6
+MEASURED_JUMP_RATIO = 1.030
+MEASURED_MAX_VELOCITY = 1.7e-6
 #: Mean speed of the droplet's centre over the run, as a fraction of SPEED.
-MEASURED_DROPLET_SPEED = 0.857
-#: Relative drift of the total momentum over the run. Not a desired property.
-MEASURED_MOMENTUM_DRIFT = 0.044
+MEASURED_DROPLET_SPEED = {"1e4": 0.844, "100": 0.715}
+#: The output is written with ten significant digits; momentum is conserved
+#: to rounding, and its sum over the lattice to about that precision.
+MOMENTUM_TOLERANCE = 1.0e-9
 
 
 @pytest.fixture(scope="module")
@@ -49,10 +53,13 @@ def static_run():
     )
 
 
-@pytest.fixture(scope="module")
-def moving_run():
-    return run_program(
-        "droplet", artifacts_dir() / "droplet_moving", args=("E8", "1e4", str(SPEED)), timeout=2400
+@pytest.fixture(scope="module", params=["1e4", "100"])
+def moving_run(request):
+    return request.param, run_program(
+        "droplet",
+        artifacts_dir() / f"droplet_moving_{request.param}",
+        args=("E8", request.param, str(SPEED)),
+        timeout=2400,
     )
 
 
@@ -64,6 +71,21 @@ def _centre_x(case, timestep):
     s = (c * np.sin(angle)[None, :]).sum()
     k = (c * np.cos(angle)[None, :]).sum()
     return (math.atan2(s, k) / (2.0 * np.pi) * nx) % nx
+
+
+def _speeds(case):
+    """Speed of the droplet's centre over each output interval, over SPEED."""
+    timesteps = case.timesteps
+    speeds = []
+    previous = _centre_x(case, timesteps[0])
+    for before, after in zip(timesteps[:-1], timesteps[1:]):
+        current = _centre_x(case, after)
+        step = current - previous
+        # unwrap across the periodic boundary
+        step -= LX * round(step / LX)
+        speeds.append(step / (after - before) / SPEED)
+        previous = current
+    return speeds
 
 
 def _momentum(case, timestep):
@@ -94,7 +116,7 @@ def test_verification_droplet_velocity_based_static_is_stationary(static_run):
 @pytest.mark.long
 @pytest.mark.validation
 def test_validation_droplet_velocity_based_pressure_jump(static_run):
-    """Laplace's law; the two percent left is the interface width at R = 10."""
+    """Laplace's law; the three percent left is the interface width at R = 10."""
     radius = static_run.phase_interface_radius(NUM_STEPS)
     jump = static_run.pressure_jump(NUM_STEPS, inner=INNER_RADIUS, outer=OUTER_RADIUS)
     ratio = jump / (SIGMA / radius)
@@ -114,51 +136,48 @@ def test_validation_droplet_velocity_based_spurious_currents(static_run):
 @pytest.mark.verification
 def test_verification_droplet_velocity_based_moving_stays_bounded(moving_run):
     """The run completes, and the phase field and density stay in range."""
-    t = moving_run.last_timestep
+    _, case = moving_run
+    t = case.last_timestep
     assert t == NUM_STEPS
-    for field in moving_run.fields(t).values():
+    for field in case.fields(t).values():
         assert np.isfinite(field).all()
-    phase = moving_run.phase(t)
+    phase = case.phase(t)
     assert phase.min() >= -1.0 - 1.0e-9
     assert phase.max() <= 1.0 + 1.0e-9
-    velocity = moving_run.velocity(t)
+    velocity = case.velocity(t)
     # no velocity beyond the flow the droplet drives
-    assert np.hypot(velocity[..., 0], velocity[..., 1]).max() < 1.5 * SPEED
+    assert np.hypot(velocity[..., 0], velocity[..., 1]).max() < 1.1 * SPEED
+
+
+@pytest.mark.long
+@pytest.mark.verification
+def test_verification_droplet_velocity_based_momentum_is_conserved(moving_run):
+    """Total momentum is conserved at every output, to the output's precision.
+
+    Every link exchanges equal and opposite momentum, and the pressure and
+    capillary forces sum to zero over the lattice. The previous version of the
+    scheme, which read the streamed velocity as it stands, drifted by 4.4 % over
+    this run at a density ratio of 1e4 and by 11.7 % at 100.
+    """
+    _, case = moving_run
+    start = _momentum(case, 0)
+    for t in case.timesteps[1:]:
+        assert _momentum(case, t) == pytest.approx(start, rel=MOMENTUM_TOLERANCE)
 
 
 @pytest.mark.long
 @pytest.mark.validation
-def test_validation_droplet_velocity_based_droplet_keeps_moving(moving_run):
-    """The droplet's centre travels at its measured mean speed.
+def test_validation_droplet_velocity_based_droplet_slows_down(moving_run):
+    """The droplet travels at its measured mean speed, and slows down.
 
     The interface nodes start at c * SPEED, so the droplet as a whole starts at
-    its momentum over its mass, 0.84 SPEED. Dragging the lighter fluid would
-    slow it by a fraction of a percent at this density ratio; the momentum drift
-    of the scheme instead carries it up to 0.88 SPEED by the end of the run.
+    its momentum over its mass, 0.84 SPEED at a density ratio of 1e4. It can
+    only lose speed to the lighter fluid it drags along, which at 1e4 holds a
+    fraction of a percent of the momentum and at 100 about a third.
     """
-    timesteps = moving_run.timesteps
-    travelled = 0.0
-    previous = _centre_x(moving_run, timesteps[0])
-    for t in timesteps[1:]:
-        current = _centre_x(moving_run, t)
-        step = current - previous
-        # unwrap across the periodic boundary
-        step -= 128.0 * round(step / 128.0)
-        travelled += step
-        previous = current
-    mean_speed = travelled / (timesteps[-1] - timesteps[0]) / SPEED
-    assert mean_speed == pytest.approx(MEASURED_DROPLET_SPEED, abs=0.02)
-
-
-@pytest.mark.long
-@pytest.mark.validation
-def test_validation_droplet_velocity_based_momentum_drift(moving_run):
-    """Total momentum drifts by the measured amount, and no more.
-
-    The scheme evolves u rather than rho u and is not conservative; this pins
-    the drift at a density ratio of 1e4 so that a change which worsens it shows.
-    """
-    start = _momentum(moving_run, 0)
-    end = _momentum(moving_run, NUM_STEPS)
-    drift = abs(end - start) / abs(start)
-    assert drift < 1.5 * MEASURED_MOMENTUM_DRIFT
+    ratio, case = moving_run
+    speeds = _speeds(case)
+    assert np.mean(speeds) == pytest.approx(MEASURED_DROPLET_SPEED[ratio], abs=0.01)
+    # never faster than over the interval before, and slower at the end
+    assert all(later < earlier + 1.0e-3 for earlier, later in zip(speeds, speeds[1:]))
+    assert speeds[-1] < speeds[0]

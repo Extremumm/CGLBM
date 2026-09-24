@@ -113,8 +113,9 @@ ratio:
 ../../bin/solvers/velocity_based/droplet/droplet_opt E8 1e4 0.01   # launched into still fluid
 ```
 
-It does not conserve momentum exactly (4 % over 10⁴ steps at a density ratio of
-10⁴); see
+Momentum is exchanged link by link, equal and opposite at the two ends, and is
+conserved to rounding at any density ratio; at 10⁴ a droplet can be launched at
+up to 0.02 lattice units per step. See
 [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
 
 ### About the generated files
@@ -232,8 +233,8 @@ the resulting `CaseOutput`.
 > ratio of 10⁴. The 2 % left is the finite interface width at R = 10. The
 > colour-gradient solvers are validated for static droplets only at large
 > density ratios: at 10⁴ a droplet moving at 10⁻³ lattice units per step
-> diverges. The velocity-based `droplet` solver runs it at 10⁻², with a
-> momentum drift of 4 % over 10⁴ steps. See
+> diverges. The velocity-based `droplet` solver runs it at 10⁻², and up to
+> 2×10⁻², with momentum conserved to rounding. See
 > [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
 
 ## PyCGLBM

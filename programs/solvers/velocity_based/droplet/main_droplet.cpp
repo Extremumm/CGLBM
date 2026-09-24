@@ -24,7 +24,8 @@
 // by the density ratio across the interface; at 1e4 their droplets diverge as
 // soon as they move at 1e-3. Here the streamed moments are p/(rho cs^2) and u,
 // both continuous, and the density follows from a bounded volume fraction.
-// Momentum is not conserved exactly; see src/lbm/velocity_based.h and
+// The momentum is updated link by link, with equal and opposite exchanges, so
+// that it is conserved to rounding; see src/lbm/velocity_based.h and
 // docs/numerics.md.
 //
 // Periodic in both directions.
@@ -63,6 +64,10 @@ double mu1 = mu2; // dynamic viscosity of component 1
 // a modest dynamic viscosity has a shear tau within 1e-3 of 1/2, and without
 // this its acoustic modes are not damped.
 const double tau_bulk = 1.0;
+// Weight of the populations' own non-equilibrium in the hybrid regularised
+// collision; the rest is its finite-difference estimate. It damps the grid-scale
+// modes of a heavy fluid whose shear tau is within 1e-4 of 1/2.
+const double hybrid_weight = 0.98;
 
 double g[Lx][Ly][Q]; // Hydrodynamic populations: moments P and u
 double h[Lx][Ly][Q]; // Phase populations: moment c
@@ -71,20 +76,25 @@ double h_new[Lx][Ly][Q];
 
 double c[Lx][Ly]; // Volume fraction of component 1
 double rho[Lx][Ly]; // Density rho2 + c (rho1 - rho2)
-double ln_rho[Lx][Ly]; // ln(rho), differentiated by the viscous correction
 double psi[Lx][Ly]; // 2c - 1, the field the surface tension is built on
 double P[Lx][Ly]; // Pressure number p / (rho cs^2); p is the pressure relative to the far field
 double u[Lx][Ly][2]; // Velocity
 double u_x[Lx][Ly]; // Velocity components, as scalar fields for the gradient stencils
 double u_y[Lx][Ly];
-double a[Lx][Ly][2]; // Acceleration: surface, pressure and viscous corrections
+double a[Lx][Ly][2]; // Acceleration: surface tension and pressure
+double u_lattice[Lx][Ly][2]; // Velocity from the momentum exchange, before the half acceleration
+// The previous step, which the momentum exchange reads
+double rho_old[Lx][Ly];
+double P_old[Lx][Ly];
+double u_old[Lx][Ly][2];
+double a_old[Lx][Ly][2];
 double normal_x[Lx][Ly]; // Unit interface normal grad(psi)/|grad(psi)|
 double normal_y[Lx][Ly];
 double stress_xx[Lx][Ly]; // Capillary stress sigma/2 (|grad psi| I - grad psi grad psi / |grad psi|)
 double stress_xy[Lx][Ly];
 double stress_yy[Lx][Ly];
 
-// Isotropy order of the gradients (surface tension, normals, corrections).
+// Isotropy order of the gradients (surface tension, normals).
 cglbm::lbm::GradientStencil gradient_stencil = cglbm::lbm::GradientStencil::E8;
 
 double dynamicViscosity(double c_local) {
@@ -105,15 +115,13 @@ void calMacroscopic() {
             c[i][j] = sum_h;
             const double bounded = (sum_h < 0.0) ? 0.0 : ((sum_h > 1.0) ? 1.0 : sum_h);
             rho[i][j] = rho2 + bounded * (rho1 - rho2);
-            ln_rho[i][j] = std::log(rho[i][j]);
             psi[i][j] = 2.0 * bounded - 1.0;
             P[i][j] = sum_g;
         }
     }
 }
 
-// Surface force div(T), pressure correction, viscous correction; the viscous
-// one uses the velocity of the previous step.
+// Surface force div(T) and pressure force, both per unit mass.
 void calAcceleration() {
     for (int i = 0; i < Lx; i++) {
         for (int j = 0; j < Ly; j++) {
@@ -129,33 +137,76 @@ void calAcceleration() {
             cglbm::lbm::surface_force(&stress_xx[0][0], &stress_xy[0][0], &stress_yy[0][0], Lx, Ly, i, j,
                                       gradient_stencil, cglbm::lbm::Boundary::Periodic, &fx, &fy);
             double px = 0.0, py = 0.0;
-            vb::pressure_correction(&P[0][0], &rho[0][0], Lx, Ly, i, j, &px, &py);
-            double dux_dx, dux_dy, duy_dx, duy_dy, dl_dx, dl_dy;
-            cglbm::lbm::gradient_periodic(&u_x[0][0], Lx, Ly, i, j, gradient_stencil, &dux_dx, &dux_dy);
-            cglbm::lbm::gradient_periodic(&u_y[0][0], Lx, Ly, i, j, gradient_stencil, &duy_dx, &duy_dy);
-            cglbm::lbm::gradient_periodic(&ln_rho[0][0], Lx, Ly, i, j, gradient_stencil, &dl_dx, &dl_dy);
-            double vx = 0.0, vy = 0.0;
-            const double nu = dynamicViscosity(c[i][j]) / rho[i][j];
-            vb::viscous_correction(nu, dux_dx, dux_dy, duy_dx, duy_dy, dl_dx, dl_dy, &vx, &vy);
-            a[i][j][0] = fx / rho[i][j] + px + vx;
-            a[i][j][1] = fy / rho[i][j] + py + vy;
+            vb::pressure_force(&P[0][0], &rho[0][0], Lx, Ly, i, j, &px, &py);
+            a[i][j][0] = fx / rho[i][j] + px;
+            a[i][j][1] = fy / rho[i][j] + py;
         }
     }
 }
 
-// Velocity with the half-acceleration correction of the forcing scheme.
+// The momentum after streaming: what each node held after its collision, plus
+// the exchanges over its eight links. The populations have just streamed, so
+// g[x][k] is what the neighbour x - xi_k sent along k, and g[x - xi_k][opp k]
+// what x sent back.
+void calMomentum() {
+    for (int i = 0; i < Lx; i++) {
+        for (int j = 0; j < Ly; j++) {
+            // post-collision velocity u + a/2 of the previous step
+            double jx = rho_old[i][j] * (u_old[i][j][0] + 0.5 * a_old[i][j][0]);
+            double jy = rho_old[i][j] * (u_old[i][j][1] + 0.5 * a_old[i][j][1]);
+            for (int k = 1; k < Q; k++) {
+                const int id = (i - vb::kVelocity[k][0] + Lx) % Lx;
+                const int jd = (j - vb::kVelocity[k][1] + Ly) % Ly;
+                const int back = vb::kOpposite[k];
+                vb::LinkEnd donor;
+                donor.outgoing = g[i][j][k] - vb::kWeight[k] * P_old[id][jd];
+                donor.phase = h[i][j][k];
+                donor.rho = rho[id][jd];
+                donor.mu = dynamicViscosity(c[id][jd]);
+                donor.ux = u_old[id][jd][0];
+                donor.uy = u_old[id][jd][1];
+                vb::LinkEnd receiver;
+                receiver.outgoing = g[id][jd][back] - vb::kWeight[k] * P_old[i][j];
+                receiver.phase = h[id][jd][back];
+                receiver.rho = rho[i][j];
+                receiver.mu = dynamicViscosity(c[i][j]);
+                receiver.ux = u_old[i][j][0];
+                receiver.uy = u_old[i][j][1];
+                double link_x = 0.0, link_y = 0.0;
+                vb::link_momentum(k, donor, receiver, rho1, rho2, &link_x, &link_y);
+                jx += link_x;
+                jy += link_y;
+            }
+            u_lattice[i][j][0] = jx / rho[i][j];
+            u_lattice[i][j][1] = jy / rho[i][j];
+        }
+    }
+}
+
+// The populations take the exchanged velocity; the macroscopic one adds the
+// half acceleration of the forcing scheme.
 void calVelocity() {
     for (int i = 0; i < Lx; i++) {
         for (int j = 0; j < Ly; j++) {
-            double mx = 0.0, my = 0.0;
-            for (int k = 0; k < Q; k++) {
-                mx += g[i][j][k] * vb::kVelocity[k][0];
-                my += g[i][j][k] * vb::kVelocity[k][1];
-            }
-            u[i][j][0] = mx + 0.5 * a[i][j][0] * dt;
-            u[i][j][1] = my + 0.5 * a[i][j][1] * dt;
+            vb::set_velocity(g[i][j], u_lattice[i][j][0], u_lattice[i][j][1]);
+            u[i][j][0] = u_lattice[i][j][0] + 0.5 * a[i][j][0] * dt;
+            u[i][j][1] = u_lattice[i][j][1] + 0.5 * a[i][j][1] * dt;
             u_x[i][j] = u[i][j][0];
             u_y[i][j] = u[i][j][1];
+        }
+    }
+}
+
+// Keep the fields the next momentum exchange reads.
+void saveStep() {
+    for (int i = 0; i < Lx; i++) {
+        for (int j = 0; j < Ly; j++) {
+            rho_old[i][j] = rho[i][j];
+            P_old[i][j] = P[i][j];
+            for (int d = 0; d < 2; d++) {
+                u_old[i][j][d] = u[i][j][d];
+                a_old[i][j][d] = a[i][j][d];
+            }
         }
     }
 }
@@ -168,7 +219,12 @@ void collideAndStream() {
             vb::hydrodynamic_equilibrium(P[i][j], u[i][j][0], u[i][j][1], eq);
             vb::forcing(u[i][j][0], u[i][j][1], a[i][j][0], a[i][j][1], source);
             const double tau = dynamicViscosity(c[i][j]) / (rho[i][j] * cs2 * dt) + 0.5; // shear relaxation time
-            vb::collide(g[i][j], eq, source, tau, tau_bulk, post);
+            vb::VelocityGradient gradient;
+            cglbm::lbm::gradient_periodic(&u_x[0][0], Lx, Ly, i, j, cglbm::lbm::GradientStencil::E4,
+                                          &gradient.dux_dx, &gradient.dux_dy);
+            cglbm::lbm::gradient_periodic(&u_y[0][0], Lx, Ly, i, j, cglbm::lbm::GradientStencil::E4,
+                                          &gradient.duy_dx, &gradient.duy_dy);
+            vb::collide_hybrid(g[i][j], eq, source, tau, tau_bulk, hybrid_weight, gradient, post);
             vb::phase_populations(c[i][j], u[i][j][0], u[i][j][1], normal_x[i][j], normal_y[i][j], width, phase);
             for (int k = 0; k < Q; k++) {
                 const int ip = (i + vb::kVelocity[k][0] + Lx) % Lx;
@@ -259,8 +315,10 @@ void runSimulation() {
     initialize();
     outputDataCSV(0);
     for (int n = 1; n < numSteps + 1; n++) {
+        saveStep();
         collideAndStream();
         calMacroscopic();
+        calMomentum();
         calAcceleration();
         calVelocity();
         if (n % interval == 0) {
