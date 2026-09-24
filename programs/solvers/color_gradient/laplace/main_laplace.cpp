@@ -1,8 +1,23 @@
 #include <iostream>
 #include <cmath>
+#include <cstdlib>
 
 #include "lbm/equation_of_state.h"
 #include "lbm/isotropic_gradient.h"
+#include "lbm/mixture.h"
+#include "lbm/surface_force.h"
+
+// Usage: laplace [E4|E6|E8] [density_ratio] [viscosity_ratio]
+//
+//   density_ratio    rho1/rho2, default 20. The light fluid is fixed (rho2, nu2)
+//                    and the droplet is made heavier.
+//   viscosity_ratio  mu1/mu2, default equal to the density ratio, i.e. the same
+//                    kinematic viscosity in both fluids as in the shipped case.
+//                    At large density ratios give it explicitly: a single
+//                    kinematic viscosity makes the droplet's relaxation time
+//                    grow with the density ratio (tau ~ 5e4 at 1e4), which the
+//                    scheme does not survive. `laplace E8 1e4 1` is the
+//                    high-density-ratio benchmark of docs/numerics.md.
 
 // In this version, all the intermediate variables are calculated for clarity. The code is not optimized for performance.
 // Periodic boundary conditions p170 of the book (Graduate Texts in Physics) Timm Krüger, Halim Kusumaatmaja, Alexandr Kuzmin, Orest Shardt, Goncalo Silva, Erlend Magnus Viggen (auth.) - The Lattice Boltzmann Method_ Principles and Practice-Springer
@@ -25,7 +40,6 @@ const double c_dt = c_dx/347./sqrt(3.); // s : conversion factor from lattice un
 
 const int numSteps = 30000; // Number of simulation steps
 const int interval = 1000; // Output interval
-const double epsilon = 1.0e-10; // Small number to avoid division by zero in recoloration step
 
 // Speed of sound and related constants
 const double cs = dx / sqrt(3.0) / dt; // Speed of sound in the lattice
@@ -34,7 +48,7 @@ const double cs4 = cs2 * cs2;
 const double cs6 = cs4 * cs2;
 
 //parameters
-const double rho1 = 20.; // kg * m-3 Density for component 1
+double rho1 = 20.; // kg * m-3 Density for component 1, overridable from the command line
 const double rho2 = 1.;  // kg * m-3 Density for component 2
 const double c1 = 347./(c_dx/c_dt);//dx / sqrt(3.0) / dt; // Speed of sound for component 1 in lattice units
 const double c2 = 347./(c_dx/c_dt);//dx / sqrt(3.0) / dt; // Speed of sound for component 2 in lattice units
@@ -45,27 +59,56 @@ const double ch_width_init = 1.1 * dx; // Characteristic width of the interface
 const double ch_width_ope = 1.6 * dx;
 
 // viscosities to calculate Relaxation times in collide step
-const double nu   = 1.e-2/(c_dx * c_dx / c_dt) ; //1.0e-3*sqrt(3)/(347*1.0e-3); // kinematic viscosity in lattice units p284 of the book (Graduate Texts in Physics) Timm Krüger, Halim Kusumaatmaja, Alexandr Kuzmin, Orest Shardt, Goncalo Silva, Erlend Magnus Viggen (auth.) - The Lattice Boltzmann Method_ Principles and Practice-Springer
-const double nu_b = 1.e-2/(c_dx * c_dx / c_dt) ; //1.0e-3*sqrt(3)/(347*1.0e-3); // bulk viscosity in lattice units
+// Component 2, the surrounding fluid, keeps the viscosity the case always had;
+// component 1 gets its own, from the viscosity ratio (see setComponents).
+const double nu2   = 1.e-2/(c_dx * c_dx / c_dt) ; //1.0e-3*sqrt(3)/(347*1.0e-3); // kinematic viscosity in lattice units p284 of the book (Graduate Texts in Physics) Timm Krüger, Halim Kusumaatmaja, Alexandr Kuzmin, Orest Shardt, Goncalo Silva, Erlend Magnus Viggen (auth.) - The Lattice Boltzmann Method_ Principles and Practice-Springer
+const double nu_b2 = 1.e-2/(c_dx * c_dx / c_dt) ; //1.0e-3*sqrt(3)/(347*1.0e-3); // bulk viscosity in lattice units
+double nu1   = nu2;   // kinematic viscosity of component 1, lattice units
+double nu_b1 = nu_b2; // bulk viscosity of component 1, lattice units
 
 //The pressure at infinity is used at the equation of state to calculate the pressure and equilibrium distribution function
-const double p1_inf = rho1 * c1 * c1 - rho2 * c2 * c2 - sigma / radius; // Pressure at infinity for component 1
+double p1_inf = rho1 * c1 * c1 - rho2 * c2 * c2 - sigma / radius; // Pressure at infinity for component 1
 const double p2_inf = 0.; // Pressure at infinity for component 2
 
+// Derive everything that depends on the density and viscosity ratios.
+//
+// p1_inf is chosen so that component 1 sits at density rho1 under the Laplace
+// pressure p2 + sigma/R while component 2 sits at rho2 under p2 = rho2 c2^2.
+// The mixture viscosity is rho (Y1 nu1 + Y2 nu2), i.e. the volume-weighted
+// dynamic viscosity alpha1 mu1 + alpha2 mu2 (src/lbm/mixture.h); with
+// viscosity_ratio == density_ratio, nu1 == nu2 and the original single-
+// viscosity case is recovered exactly.
+void setComponents(double density_ratio, double viscosity_ratio) {
+    rho1 = density_ratio * rho2;
+    p1_inf = rho1 * c1 * c1 - rho2 * c2 * c2 - sigma / radius;
+    nu1 = viscosity_ratio * nu2 * rho2 / rho1;
+    nu_b1 = viscosity_ratio * nu_b2 * rho2 / rho1;
+}
+
+cglbm::lbm::ComponentPair componentPair() {
+    return {c1 * c1, c2 * c2, p1_inf, p2_inf};
+}
+
 double S[Lx][Ly][Q]; // Force term
-double F[Lx][Ly][2]; // External volumic force : kg * m^-2 * s^-2
+double F[Lx][Ly][2]; // Volumic force : kg * m^-2 * s^-2. Here the surface tension, see calSurfaceForce
 //for Laplace equation test, the gravity is on the perpendicular direction to the interface: 0
 //for instability test, the gravity is on the parallel direction to the interface
 
 double rho[Lx][Ly]; // Density
 double rho_mdt[Lx][Ly]; // Density at the previous time step
 double u[Lx][Ly][2]; // Velocity components
+double momentum[Lx][Ly][2]; // First moment of f, before the half-force correction of the velocity
 double p[Lx][Ly]; // Pressure
 double p_mdt[Lx][Ly]; // Pressure at the previous time step
-double phi[Lx][Ly]; // Phase field function
+double phi[Lx][Ly]; // Phase field function: mass-fraction difference Y1 - Y2
+double psi[Lx][Ly]; // Normalised colour field: volume-fraction difference alpha1 - alpha2
+double stress_xx[Lx][Ly]; // Capillary stress sigma/2 (|grad psi| I - grad psi grad psi / |grad psi|), xx
+double stress_xy[Lx][Ly]; // Capillary stress, xy
+double stress_yy[Lx][Ly]; // Capillary stress, yy
+double normal_x[Lx][Ly]; // Unit interface normal grad(psi)/|grad(psi)|, x component
+double normal_y[Lx][Ly]; // Unit interface normal grad(psi)/|grad(psi)|, y component
 
 double omega_1[Lx][Ly][Q]; // Collision term
-double omega_2[Lx][Ly][Q]; // Collision term related to surface tension
 double omega_3[Lx][Ly][Q]; // Recoloring term
 double f[Lx][Ly][Q]; // Sum of distribution functions
 double g[Lx][Ly][Q]; // Difference of distribution functions
@@ -128,6 +171,8 @@ void calEquilibrium() {
     }
 }
 
+// Density and momentum. The velocity needs the force, which needs the phase
+// field, so it is completed later by calVelocity.
 void calMacroscopic() {
     for (int i = 0; i < Lx; i++) {
         for (int j = 0; j < Ly; j++) {
@@ -141,20 +186,25 @@ void calMacroscopic() {
                 sum_xi_y += f_local * xi[k][1];
             }
             rho[i][j] = sum_f;
-            F[i][j][0] = 0.0; // External force in lattice units on x direction
-            //F[i][j][1] = rho[i][j] * 1.0e5/(3.*347.*347.); // External force in lattice units on y direction
-            F[i][j][1] = 0.0; // External force in lattice units on y direction
-            u[i][j][0] = (sum_xi_x + F[i][j][0]*dt*0.5) / sum_f;//add force term Guo al.
-            //u[i][j][1] = sum_xi_y / sum_f;
-            u[i][j][1] = (sum_xi_y + F[i][j][1]*dt*0.5) / sum_f;
+            momentum[i][j][0] = sum_xi_x;
+            momentum[i][j][1] = sum_xi_y;
+        }
+    }
+}
 
+// Velocity with the half-force correction of the Guo et al. forcing scheme.
+void calVelocity() {
+    for (int i = 0; i < Lx; i++) {
+        for (int j = 0; j < Ly; j++) {
+            u[i][j][0] = (momentum[i][j][0] + F[i][j][0]*dt*0.5) / rho[i][j];//add force term Guo al.
+            u[i][j][1] = (momentum[i][j][1] + F[i][j][1]*dt*0.5) / rho[i][j];
         }
     }
 }
 
 // Function to calculate the phase field function
 void calPhaseField() {
-    const cglbm::lbm::ComponentPair components = {c1 * c1, c2 * c2, p1_inf, p2_inf};
+    const cglbm::lbm::ComponentPair components = componentPair();
     for (int i = 0; i < Lx; i++) {
         for (int j = 0; j < Ly; j++) {
             double sum_f = 0.0;
@@ -164,7 +214,7 @@ void calPhaseField() {
                 sum_g += g[i][j][k];
             }
             phi[i][j] = sum_g / sum_f;
-            if (abs(phi[i][j]) > 1.0) {
+            if (std::fabs(phi[i][j]) > 1.0 + 1.0e-6) {
                 std::cout << "Error : phi = " << phi[i][j] << std::endl;
             }
             double rho_local = rho[i][j];
@@ -181,6 +231,12 @@ void calPhaseField() {
             // comparison, not used here.
             const double p_local = cglbm::lbm::pressure(rho_local, phi_local, components);
             p[i][j] = p_local;
+            // The colour field the interface is located by. phi is a mass
+            // fraction, and at a density ratio r its zero contour sits
+            // (W/2) ln(r) outside the density interface -- 7.4 nodes at 1e4.
+            // psi = alpha1 - alpha2 is centred on the density interface; see
+            // src/lbm/mixture.h.
+            psi[i][j] = cglbm::lbm::normalised_phase(phi_local, p_local, components);
             }
     }
 }
@@ -191,9 +247,12 @@ void collide() {
         for (int j = 0; j < Ly; j++) {
             double rho_local = rho[i][j];  // Local density
             double p_local = p[i][j];  // Local pressure
-            // Calculate relaxation times
-            double tau_nu = rho_local * nu   / (p_local * dt) + 0.5;  //shear relaxation time
-            double tau_b  = rho_local * nu_b / (p_local * dt) + 0.5; //bulk relaxation time
+            // Calculate relaxation times, tau = mu / p + 1/2 with the mixture
+            // viscosity rho (Y1 nu1 + Y2 nu2) = alpha1 mu1 + alpha2 mu2
+            double nu_local   = cglbm::lbm::mixture_kinematic_viscosity(phi[i][j], nu1, nu2);
+            double nu_b_local = cglbm::lbm::mixture_kinematic_viscosity(phi[i][j], nu_b1, nu_b2);
+            double tau_nu = rho_local * nu_local   / (p_local * dt) + 0.5;  //shear relaxation time
+            double tau_b  = rho_local * nu_b_local / (p_local * dt) + 0.5; //bulk relaxation time
             double sum_nu_neq = 0.0, sum_b_neq = 0.0, sum_xy_neq = 0.0;
 
             // Calculate $f_{k, i}^{r, neq}$ with $k\inn\{\nu, b, x y\}$
@@ -278,30 +337,35 @@ void force() {
     }
 }
 
-void collide_surface(){
+// Surface tension, as the divergence of the capillary stress
+// T = sigma/2 (|grad psi| I - grad psi grad psi / |grad psi|), which enters
+// through S_F like any body force (src/lbm/surface_force.h).
+//
+// This replaces the perturbation operator Omega^(2), which wrote the same
+// stress into the non-equilibrium populations scaled by 1/tau. Streaming then
+// mixes it between neighbours of different tau before it is relaxed, and
+// across an interface with a viscosity contrast the jump came out wrong:
+// 0.71 sigma/R on this case at density ratio 20, where tau changes twentyfold
+// across the droplet boundary. The force does not depend on tau, and being a
+// divergence it conserves momentum exactly.
+//
+//   B. Lafaurie, C. Nardone, R. Scardovelli, S. Zaleski, G. Zanetti,
+//   J. Comput. Phys. 113, 134 (1994)
+void calSurfaceForce() {
+    // the stress first: the force differentiates it
     for (int i=0 ; i<Lx ; i++){
         for (int j=0 ; j<Ly ; j++){
-            // Calculate color gradients Cx and Cy
             // Colour gradient, already carrying the 1/c_s^2 factor.
             double Cx = 0.0, Cy = 0.0;
-            cglbm::lbm::gradient_periodic(&phi[0][0], Lx, Ly, i, j, gradient_stencil, &Cx, &Cy);
-
-            double norm_C = sqrt(Cx * Cx + Cy * Cy); // Magnitude of the color gradient vector
-            for (int k = 0; k < Q; k++) {
-                double xi_x = xi[k][0], xi_y = xi[k][1];
-                double H_nu = 0.5 * (xi_x * xi_x - xi_y * xi_y);
-                double H_b = 0.5 * (xi_x * xi_x + xi_y * xi_y) - cs2;
-                double H_xy = xi_x * xi_y;
-                double tau_nu = rho[i][j] * nu / (p[i][j] * dt) + 0.5;  //shear relaxation time
-                double tau_b  = rho[i][j] * nu_b / (p[i][j] * dt) + 0.5; //bulk relaxation time
-                if (norm_C > epsilon) { // Prevent division by zero
-                    omega_2[i][j][k] = sigma * w[k] / (4 * norm_C * cs4) * ((2 * Cx * Cy * H_xy + (Cx * Cx - Cy * Cy) * H_nu) / tau_nu -((Cx * Cx + Cy * Cy) * H_b) / tau_b);
-                }
-                else {
-                    omega_2[i][j][k] = 0.0;
-                }
-            }
-
+            cglbm::lbm::gradient_periodic(&psi[0][0], Lx, Ly, i, j, gradient_stencil, &Cx, &Cy);
+            cglbm::lbm::unit_normal(Cx, Cy, &normal_x[i][j], &normal_y[i][j]);
+            cglbm::lbm::capillary_stress(sigma, Cx, Cy, &stress_xx[i][j], &stress_xy[i][j], &stress_yy[i][j]);
+        }
+    }
+    for (int i=0 ; i<Lx ; i++){
+        for (int j=0 ; j<Ly ; j++){
+            cglbm::lbm::surface_force(&stress_xx[0][0], &stress_xy[0][0], &stress_yy[0][0], Lx, Ly, i, j,
+                                      gradient_stencil, cglbm::lbm::Boundary::Periodic, &F[i][j][0], &F[i][j][1]);
         }
     }
 }
@@ -309,19 +373,17 @@ void collide_surface(){
 void recolor(){
     for (int i=0 ; i<Lx ; i++){
         for (int j=0 ; j<Ly ; j++){
-            // Calculate the gradient of the phase field by calculating the color gradient firstly
-            // Calculate color gradients Cx and Cy
-            // Colour gradient, already carrying the 1/c_s^2 factor.
-            double Cx = 0.0, Cy = 0.0;
-            cglbm::lbm::gradient_periodic(&phi[0][0], Lx, Ly, i, j, gradient_stencil, &Cx, &Cy);
-            double grad_phi_x, grad_phi_y;
-            grad_phi_x = Cx / dt;
-            grad_phi_y = Cy / dt;
-            double norm_grad_phi = sqrt(grad_phi_x * grad_phi_x + grad_phi_y * grad_phi_y); // Magnitude of the gradient vector
-            if (norm_grad_phi > epsilon) { // Prevent division by zero
+            // Direction of the colour gradient, from calSurfaceForce. It is taken
+            // on psi, which has the same direction as grad(phi) but is centred
+            // on the density interface. The amplitude still uses phi: the tanh
+            // profile it maintains in the mass fraction is the same tanh profile
+            // in the volume fraction, shifted (src/lbm/mixture.h).
+            double n_x = normal_x[i][j];
+            double n_y = normal_y[i][j];
+            if (n_x != 0.0 || n_y != 0.0) { // no interface where the gradient vanishes
                 for (int k = 0; k < Q; k++) {
                         double xi_x = xi[k][0],  xi_y = xi[k][1];
-                        omega_3[i][j][k] = w[k] * p[i][j] * (1 - phi[i][j] * phi[i][j]) / (2. * ch_width_ope) * (xi_x * grad_phi_x + xi_y * grad_phi_y) / (cs2 * norm_grad_phi); ; //w[k] * p[i][j] * (1 - phi[i][j] * phi[i][j]) / (2. * ch_width) * (xi_x * grad_phi_x + xi_y * grad_phi_y) / (epsilon);
+                        omega_3[i][j][k] = w[k] * p[i][j] * (1 - phi[i][j] * phi[i][j]) / (2. * ch_width_ope) * (xi_x * n_x + xi_y * n_y) / cs2;
                     }
             }
             else {
@@ -344,7 +406,7 @@ void stream() {
             for (int k=0 ; k<Q ; k++){
                 int ip = (i + (int)xi[k][0] + Lx) % Lx;
                 int jp = (j + (int)xi[k][1] + Ly) % Ly;
-                f[ip][jp][k] = f_eq[i][j][k] + omega_1[i][j][k] + omega_2[i][j][k] + 0.5*S[i][j][k];
+                f[ip][jp][k] = f_eq[i][j][k] + omega_1[i][j][k] + 0.5*S[i][j][k]; // surface tension is in S, via F
                 g[ip][jp][k] = f[ip][jp][k] * phi[i][j] + omega_3[i][j][k];
             }
             // Save the macroscopic variables at the previous time step for the force step
@@ -467,26 +529,38 @@ void initialize() {
     double r =  radius * dx ; // Lx / 8. * dx; // 16 lattice units
 
     // In order to get f_eq, we need to calculate the macroscopic variables rho(with rho1, rho2 at different nodes), u, p
+    //
+    // The tanh profile is given to the volume fraction, the pressure steps from
+    // p2 outside to p2 + sigma/R inside across it, and each component takes the
+    // density its own branch gives at that pressure (src/lbm/mixture.h). The
+    // state is then in equilibrium with the equation of state node by node.
+    // Setting rho linear in phi instead, as this case used to, leaves the
+    // interface far from it -- at density ratio 1000 its pressure starts about
+    // 300 times the ambient one and the run blows up within ten steps.
+    const cglbm::lbm::ComponentPair components = componentPair();
+    const double p_outside = rho2 * c2 * c2 - p2_inf; // ambient pressure, in component 2
     for (int i=0; i<Lx ; i++){
         for (int j=0; j<Ly ; j++){
             double distance = sqrt((i - x0) * (i - x0) + (j - y0) * (j - y0));
-            double phi_local = -tanh((distance - r) / ch_width_init);
+            double alpha1 = 0.5 * (1.0 - tanh((distance - r) / ch_width_init)); // volume fraction of the droplet
+            double p_local = p_outside + sigma / radius * alpha1;
+            const cglbm::lbm::MixtureState state = cglbm::lbm::mixture_from_volume_fraction(alpha1, p_local, components);
+            double phi_local = state.phi;
             phi[i][j] = phi_local;  // Local phase field
             u[i][j][0] = 0.0; // static flow field
             u[i][j][1] = 0.0; // static flow field
-            double rho_local = rho1 * (0.5 + 0.5*phi_local) + rho2 * (0.5 - 0.5*phi_local);
+            double rho_local = state.rho;
             rho[i][j] = rho_local;  // Loc-al density
             rho_mdt[i][j] = rho_local; // At zero time step, the value of previous step is the one of current step
 
-            // // Calculate pressure from equation of state
-            double p_local = rho_local*((1+phi_local)*0.5*c1*c1 + (1-phi_local)*0.5*c2*c2)- (1+phi_local)*0.5 * p1_inf - (1-phi_local)/2.*p2_inf;
+            // Pressure from the equation of state; it returns p_local to rounding.
+            p_local = cglbm::lbm::pressure(rho_local, phi_local, components);
             p[i][j] = p_local;
             p_mdt[i][j] = p_local;
-            F[i][j][0] = 0.0; // External force in lattice units on x direction
-            F[i][j][1] = 0.0;
-            //F[i][j][1] = rho[i][j] * 1.0e-3/(3.*347.*347.); // External force in lattice units on y direction
+            psi[i][j] = cglbm::lbm::normalised_phase(phi_local, p_local, components);
         }
     }
+    calSurfaceForce();
     calEquilibrium();
     for (int i=0 ; i<Lx ; i++){
         for (int j=0 ; j<Ly ; j++){
@@ -522,6 +596,10 @@ void runSimulation() {
     std::cout << "radius = " << radius << std::endl;
     std::cout << "p1_inf = " << p1_inf << std::endl;
     std::cout << "p2_inf = " << p2_inf << std::endl;
+    std::cout << "rho1 = " << rho1 << std::endl;
+    std::cout << "rho2 = " << rho2 << std::endl;
+    std::cout << "nu1 = " << nu1 << std::endl;
+    std::cout << "nu2 = " << nu2 << std::endl;
     // std::cout << "T_theo = " << 2*3.1415 * sqrt((rho1+rho2)*r3/6./sigma) << std::endl; //T_{\text {theo }}=2 \pi \sqrt{\frac{\left(\rho_1+\rho_2\right) r^3}{6 \sigma}}
     initialize();
     //outputVTK("lbm_output_", 0);
@@ -530,7 +608,6 @@ void runSimulation() {
         // std::cout << "Step " << i << std::endl;
         force();
         collide();
-        collide_surface();
         recolor();
         stream();
         // if (i < 2){
@@ -539,6 +616,8 @@ void runSimulation() {
 
         calMacroscopic();
         calPhaseField();
+        calSurfaceForce();
+        calVelocity();
         calEquilibrium();
 
         //Output or visualization code here
@@ -552,6 +631,17 @@ void runSimulation() {
     }
 }
 
+// A strictly positive number, or false.
+bool parsePositive(const char* text, double* value) {
+    char* end = nullptr;
+    const double parsed = std::strtod(text, &end);
+    if (end == text || *end != '\0' || !(parsed > 0.0) || !std::isfinite(parsed)) {
+        return false;
+    }
+    *value = parsed;
+    return true;
+}
+
 int main(int argc, char** argv) {
     // Optional first argument selects the colour-gradient stencil: E4, E6, E8.
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &gradient_stencil)) {
@@ -559,8 +649,23 @@ int main(int argc, char** argv) {
                   << "'; expected E4, E6 or E8." << std::endl;
         return 2;
     }
+    // Optional second and third: the density ratio rho1/rho2 and the dynamic
+    // viscosity ratio mu1/mu2, which defaults to the density ratio.
+    double density_ratio = rho1 / rho2;
+    if (argc > 2 && !parsePositive(argv[2], &density_ratio)) {
+        std::cerr << "Invalid density ratio '" << argv[2] << "'; expected a positive number." << std::endl;
+        return 2;
+    }
+    double viscosity_ratio = density_ratio;
+    if (argc > 3 && !parsePositive(argv[3], &viscosity_ratio)) {
+        std::cerr << "Invalid viscosity ratio '" << argv[3] << "'; expected a positive number." << std::endl;
+        return 2;
+    }
+    setComponents(density_ratio, viscosity_ratio);
     std::cout << "colour gradient stencil = " << cglbm::lbm::stencil_name(gradient_stencil)
               << std::endl;
+    std::cout << "density ratio = " << density_ratio << std::endl;
+    std::cout << "viscosity ratio = " << viscosity_ratio << std::endl;
     runSimulation();
     return 0;
 }

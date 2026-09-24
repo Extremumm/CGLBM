@@ -198,5 +198,21 @@ void gradient_wall_y(const double* field,
     *grad_y = gy;
 }
 
+void gradient(const double* field,
+              int nx,
+              int ny,
+              int i,
+              int j,
+              GradientStencil stencil,
+              Boundary boundary,
+              double* grad_x,
+              double* grad_y) {
+    if (boundary == Boundary::WallY) {
+        gradient_wall_y(field, nx, ny, i, j, stencil, grad_x, grad_y);
+    } else {
+        gradient_periodic(field, nx, ny, i, j, stencil, grad_x, grad_y);
+    }
+}
+
 }  // namespace lbm
 }  // namespace cglbm

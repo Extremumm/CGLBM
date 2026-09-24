@@ -90,6 +90,19 @@ utilities/run_case.sh laplace            # the program's own default
 ../../bin/solvers/color_gradient/laplace/laplace_opt E4   # the original stencil
 ```
 
+`laplace` also takes the density ratio ρ₁/ρ₂ and the dynamic viscosity ratio
+μ₁/μ₂ after the stencil. They default to the shipped case, 20 and 20 (a single
+kinematic viscosity). The high-density-ratio benchmark is:
+
+```bash
+../../bin/solvers/color_gradient/laplace/laplace_opt E8 1e4 1   # ρ₁/ρ₂ = 10⁴, μ₁ = μ₂
+```
+
+At large density ratios, give the viscosity ratio explicitly. With a single
+kinematic viscosity the droplet's relaxation time grows with the density ratio
+(τ ≈ 5×10⁴ at 10⁴), and the scheme does not survive that. See
+[`docs/numerics.md`](docs/numerics.md#the-high-density-ratio-scheme).
+
 ### About the generated files
 
 Every program writes four ASCII CSV grids per `interval` steps, named after the
@@ -111,7 +124,7 @@ every program for ParaView/VisIt, commented out of the time loop by default.
 
 | Program | Lattice | Steps | ρ₁/ρ₂ | Gravity | Purpose |
 |---|---|---|---|---|---|
-| `laplace` | 128×128 | 3×10⁴ | 20/1 | no | Laplace law Δp = σ/R across a static droplet |
+| `laplace` | 128×128 | 3×10⁴ | 20/1, up to 10⁴/1 | no | Laplace law Δp = σ/R across a static droplet |
 | `capillary` | 128×128 | 10⁴ | 4/1 | no | oscillation period of a perturbed droplet |
 | `gravity_capillary` | 128×128 | 5×10⁴ | 4/1 | yes | droplet under gravity and surface tension |
 | `rayleigh_taylor` | 128×1028 | 5×10⁶ | 4/1 | yes | Rayleigh–Taylor instability, σ = 0, serial |
@@ -141,8 +154,11 @@ Contains all the programs
 Contains all the sources for the library
 
 - `src/core` the constants
-- `src/lbm` the scheme itself: the two-component equation of state and the
-  isotropic colour-gradient stencils, each carrying its reference
+- `src/lbm` the scheme itself: the two-component equation of state, the
+  isotropic colour-gradient stencils, the mixture quantities (volume fractions,
+  normalised colour field, consistent initial state, mixture viscosity) and the
+  surface force as the divergence of a capillary stress, each carrying its
+  reference
 - `src/omp` thread-level parallelism: thread count, ids, timing
 - `src/mpi` distributed memory: environment, Cartesian decomposition, halo
   exchange, error checking
@@ -195,11 +211,14 @@ a solver are additionally marked `long` and skipped unless `--runlong` is given.
 `pycglbm.testing.run_program` runs a program in its own directory and returns
 the resulting `CaseOutput`.
 
-> **Known gap.** The `laplace` case relaxes to a stationary pressure jump of
-> about 0.72 σ/R instead of σ/R, while the droplet radius and the interface stay
-> stable. The jump is exact at t = 0 by construction. The validation test pins
-> this measured value to catch regressions; it does not certify the Laplace law.
-> See [`docs/numerics.md`](docs/numerics.md).
+> **Where the Laplace case stands.** The shipped case relaxes to a stationary
+> jump of 1.021 σ/R, scored against the radius the density settles at. The
+> high-density-ratio case, `laplace E8 1e4 1`, relaxes to 1.015 σ/R at a density
+> ratio of 10⁴. The 2 % left is the finite interface width at R = 10. At large
+> density ratios only static droplets are validated: at 10⁴ a droplet moving at
+> 10⁻³ lattice units per step still diverges, and at 10⁻⁴ it stays bounded with
+> spurious currents 300 times its speed. See
+> [`docs/numerics.md`](docs/numerics.md#the-high-density-ratio-scheme).
 
 ## PyCGLBM
 
