@@ -17,9 +17,9 @@ jobs:
   laplace:
     name: Laplace benchmark
     runs-on: ubuntu-latest
-    # three full runs of about ten minutes each: density ratio 20 with E8 and
-    # E4, and density ratio 1e4
-    timeout-minutes: 90
+    # three full laplace runs of about ten minutes each (density ratio 20 with E8
+    # and E4, density ratio 1e4) and two droplet runs of about five
+    timeout-minutes: 120
 
     steps:
       - uses: actions/checkout@v4
@@ -43,10 +43,12 @@ jobs:
       - name: Configure and build
         run: |
           cmake --preset gnu -DDEBUG=OFF -DPython3_EXECUTABLE="$(which python)"
-          cmake --build --preset gnu --target laplace_opt
+          cmake --build --preset gnu --target laplace_opt droplet_opt
 
       - name: Run the long tests
-        run: python -m pytest programs/solvers/color_gradient/laplace --runlong -v
+        run: |
+          python -m pytest programs/solvers/color_gradient/laplace \
+            programs/solvers/velocity_based/droplet --runlong -v
 
       - name: Record what was measured
         if: always()
@@ -88,13 +90,41 @@ jobs:
               print(f"| jump / (sigma / R_rho) | {jump / (SIGMA / r_rho):.4f} |")
               print(f"| max spurious velocity | {speed.max():.3e} |")
               print()
+
+          print("## Velocity-based droplet solver\n")
+          static = pathlib.Path("artifacts/droplet_static")
+          moving = pathlib.Path("artifacts/droplet_moving")
+          if static.is_dir():
+              case = CaseOutput(static)
+              t = case.last_timestep
+              jump = case.pressure_jump(t, inner=5.0, outer=30.0)
+              radius = case.phase_interface_radius(t)
+              velocity = case.velocity(t)
+              speed = (velocity[..., 0] ** 2 + velocity[..., 1] ** 2) ** 0.5
+              print("### static, density ratio 1e4 (`droplet E8 1e4 0`)\n")
+              print("| quantity | value |")
+              print("| --- | --- |")
+              print(f"| timestep | {t} |")
+              print(f"| jump / (sigma / R) | {jump / (SIGMA / radius):.4f} |")
+              print(f"| max spurious velocity | {speed.max():.3e} |")
+              print()
+          if moving.is_dir():
+              case = CaseOutput(moving)
+              t = case.last_timestep
+              momentum = [(case.density(s) * case.velocity(s)[..., 0]).sum() for s in (0, t)]
+              print("### moving, density ratio 1e4 (`droplet E8 1e4 0.01`)\n")
+              print("| quantity | value |")
+              print("| --- | --- |")
+              print(f"| timestep | {t} |")
+              print(f"| total momentum drift | {(momentum[1] - momentum[0]) / momentum[0]:+.4f} |")
+              print()
           PY
 
       - name: Upload the run logs
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: laplace-logs
+          name: validation-logs
           # The CSV grids are tens of megabytes; the logs say what happened.
           path: |
             artifacts/**/run.log

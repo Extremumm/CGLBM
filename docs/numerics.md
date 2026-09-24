@@ -366,18 +366,21 @@ profile.
   Total momentum is conserved to the last digit in every bounded run, but at
   $10^4$ the spurious currents are 300 times the droplet's speed.
 
-  The mechanism is in the colour transport, not in the surface tension; the
-  perturbation operator fails at the same velocities. In the heavy fluid the
-  moving populations are $\approx p/3 \pm \rho u/2$, strongly negative once
-  $\rho u > p$. Colour streamed as $\phi f_i$ with negative weights leaves the
-  convex hull, and $\phi$ overshoots 1 at the advancing front. There the
-  equation of state is badly conditioned: in the heavy half of the interface the
-  pressure depends on $1-\phi \sim \rho_2/\rho_1$, so an error of $10^{-3}$ in
-  $\phi$ turns the pressure negative, and $\tau$ with it. A colour transport
-  that is not tied to the populations of $f$ is the natural next step, e.g. a
-  separate phase-field distribution with its own equilibrium, or the
-  velocity-based equilibrium of Subhedar (2022). Flooring the pressure keeps a
-  1-D front alive but not a droplet.
+  The limit is structural. The populations of $f$ carry $\rho$ and $\rho\vec u$,
+  which jump by the density ratio across two or three nodes. Their moments pin
+  the moving populations of the heavy fluid at $\approx p/3 \pm \rho u/2$, and
+  keeping them non-negative needs $p/\rho \gtrsim u$: below
+  $u \approx 3\times10^{-5}$ at $10^4$. Past that, the heavy side streams about
+  $-\rho u/2$ into the light nodes behind it, which hold a mass of order one,
+  and the density there goes negative -- in a slab at 1000 and $U = 10^{-2}$,
+  within 15 steps. The colour field overshoots too ($\phi > 1$ at the front),
+  and in the heavy half of the interface the pressure depends on
+  $1 - \phi \sim \rho_2/\rho_1$, so it follows. None of these helped: making
+  the colour transport monotone (a per-link limiter that is exact where both
+  populations are positive), a wider interface, accelerating the droplet
+  smoothly instead of starting it at $U$, flooring the pressure. The
+  [velocity-based solver](#the-velocity-based-droplet-solver) streams
+  continuous moments instead, and removes the divergence.
 - **A viscous heavy fluid at high density ratio.** Keep τ in the droplet of
   order 1–10. At $10^4$ with $\mu_1/\mu_2 = 20$ (τ ≈ 100 in the droplet), the
   jump wanders between 0.90 and 1.01 σ/R over 30 000 steps and the currents
@@ -389,6 +392,81 @@ profile.
   `src/lbm/mixture.h` and `src/lbm/surface_force.h` (the force takes
   `Boundary::WallY`), but it changes their results and none of them has a
   validation test yet.
+
+## The velocity-based droplet solver
+
+`programs/solvers/velocity_based/droplet` (`droplet [E4|E6|E8] [ratio]
+[velocity] [viscosity_ratio]`) is a separate solver for interfaces that move at
+large density ratios, built on `src/lbm/velocity_based.h`. It never streams the
+density. The hydrodynamic populations carry $P = p/(\rho c_s^2)$ and $\vec u$,
+continuous across the interface; the volume fraction $c$ of the droplet is
+carried by a second, memoryless set of populations
+$h_i = c\,\Gamma_i(\vec u) + w_i A\,(\vec\xi_i\cdot\hat n)/c_s^2$, whose
+carrier $\Gamma_i \ge 0$ keeps $c$ within $[0, 1]$ and whose sharpening term is
+the colour-gradient recolouring; and $\rho = \rho_2 + c(\rho_1 - \rho_2)$.
+Together they solve the conservative Allen-Cahn equation (Chiu & Lin 2011) and
+the incompressible Navier-Stokes equations in the velocity form of Fakhari et
+al. (2017) and Zu & He (2013). The components are incompressible; the
+equation of state of the colour-gradient solvers is not used.
+
+Three details decide whether it runs at $10^4$:
+
+- **The pressure correction on the lattice's own stencil.** Streaming
+  $w_i P$ gives $-\nabla(p/\rho)$ per unit mass; the physics wants
+  $-\nabla p/\rho$. The usual correction $P c_s^2\nabla\rho/\rho$ cancels two
+  terms of order $\rho_1/\rho_2$ computed on different stencils and diverges at
+  $10^4$. Written as
+  $\vec a = \sum_i w_i \vec\xi_i\,P(\vec x + \vec\xi_i)\,(1 - \rho(\vec x + \vec\xi_i)/\rho(\vec x))$,
+  it makes the total exactly $-\nabla_{lat}\,p/\rho$: a uniform pressure across
+  a density jump of $10^4$ exerts no force to $4\times10^{-16}$.
+- **A separate bulk relaxation.** With comparable dynamic viscosities the heavy
+  fluid has $\tau - 1/2 \approx 10^{-4}$; relaxing the trace of the
+  non-equilibrium at $\tau_b = 1$ damps its acoustic modes, which otherwise
+  grow at the interface within 200 steps.
+- **The viscous correction as $\nu S\cdot\nabla\ln\rho$**, bounded across
+  the interface where $\nabla\rho/\rho$ is not.
+
+Surface tension is the capillary-stress force of
+[section 3](#3-surface-tension-as-a-body-force), built on $\psi = 2c - 1$.
+
+Static droplet, 10 000 steps, equal dynamic viscosities, R = 10:
+
+| | Δp / (σ/R) | max &#124;u&#124; |
+|---|---|---|
+| colour-gradient `laplace E8 1e4 1` (30 000 steps) | 1.015 | 7.2 × 10⁻⁴ |
+| `droplet E8 1e4 0` | 1.017 | 5.4 × 10⁻⁶ |
+| `droplet E4 1e4 0` | 1.024 | 2.1 × 10⁻⁵ |
+
+The spurious currents are 130 times lower than the colour-gradient solver's at
+the same ratio; research runs give 1.020 at 1000, 1.030 at 1, and 0.991 at
+$10^4$ with R = 20.
+
+Droplet launched along x into a fluid at rest (`droplet E8 <ratio> <U>`, 10 000
+steps). On the same test the colour-gradient solver diverges within 2000 steps
+at 1000 and $10^4$, already at $U = 10^{-3}$; at 100 it runs, and conserves
+momentum exactly:
+
+| ρ₁/ρ₂ | U | outcome | total momentum drift | max &#124;u&#124; at the end |
+|---|---|---|---|---|
+| 100 | 0.02 | bounded | +11.7 % | 0.80 U |
+| 1000 | 0.01 | bounded | +4.8 % | 1.12 U |
+| $10^4$ | 0.01 | bounded | +4.4 % | 1.17 U |
+
+At $10^4$ a uniformly translating domain holds its speed to $10^{-4}$ over 6000
+steps at $U = 10^{-2}$, and diverges at $U = 5\times10^{-2}$ (research copy).
+
+**Momentum is not conserved.** The scheme evolves $\vec u$, not $\rho\vec u$:
+the mass the Allen-Cahn flux moves does not carry its momentum, and the viscous
+correction is not in conservative form. The drift above grows with time -- the
+$10^4$ droplet speeds up from 0.85 U to 0.88 U over the run -- and is worse at
+low density ratio, where the lighter fluid carries a larger share of the
+momentum. Adding the momentum flux of the Allen-Cahn mass flux (Huang et al.
+2020) as an explicit correction, or writing the viscous correction as a
+difference of two discrete divergences, did not remove it. Below a ratio of
+about 100, where the colour-gradient solver is stable and exactly
+conservative, it remains the reference; the velocity-based solver is for the
+ratios it cannot reach. `tests/test_droplet_velocity_based.py` pins the drift
+at $10^4$ so that a change that worsens it shows.
 
 ## Status of the modular library
 
