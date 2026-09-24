@@ -17,7 +17,9 @@
    model.* Computers & Fluids **48**(1), 98–112, 2011.
    DOI: [10.1016/j.compfluid.2011.04.001](https://doi.org/10.1016/j.compfluid.2011.04.001)
 
-   The isotropic gradient stencils of `src/lbm/isotropic_gradient.h`.
+   The isotropic gradient stencils of `src/lbm/isotropic_gradient.h`, and the
+   colour gradient taken on the normalised density rather than on the phase
+   field — `normalised_phase` in `src/lbm/mixture.h`.
 
 4. **M. Sbragaglia, R. Benzi, L. Biferale, S. Succi, K. Sugiyama, F. Toschi.**
    *Generalized lattice Boltzmann method with multirange pseudopotential.*
@@ -33,7 +35,9 @@
    DOI: [10.1103/PhysRevE.94.023310](https://doi.org/10.1103/PhysRevE.94.023310)
 
    MRT collision plus a third-order Hermite equilibrium and a Chapman–Enskog
-   source term; validated to density ratio 1000. Not implemented here.
+   source term; validated to density ratio 1000. Its colour gradient on the
+   normalised density is used by `laplace`; the collision and equilibrium are
+   not implemented here.
 
 6. **S. Leclaire, M. Reggio, J.-Y. Trépanier.** *Enhanced equilibrium
    distribution functions for simulating immiscible multiphase flows with
@@ -45,7 +49,8 @@
    DOI: [10.1103/PhysRevE.106.045308](https://doi.org/10.1103/PhysRevE.106.045308)
 
    Velocity-based equilibrium; interface mobility independent of the density
-   ratio. Not implemented here.
+   ratio. Not implemented here — a candidate for the moving-interface limit
+   recorded in [`numerics.md`](numerics.md#what-is-not-solved).
 
 8. **S. Saito, N. Takada, S. Baba, S. Someya, H. Ito.** *Generalized equilibria
    for color-gradient lattice Boltzmann model based on higher-order Hermite
@@ -60,6 +65,33 @@
    DOI: [10.1103/PhysRevE.71.056702](https://doi.org/10.1103/PhysRevE.71.056702)
 
    The recolouring lineage that `recolor()` sits in.
+
+## Surface tension as a force
+
+10. **B. Lafaurie, C. Nardone, R. Scardovelli, S. Zaleski, G. Zanetti.**
+    *Modelling merging and fragmentation in multiphase flows with SURFER.*
+    Journal of Computational Physics **113**, 134–147, 1994.
+
+    The capillary stress tensor
+    $\tfrac{\sigma}{2}(\lvert\nabla c\rvert\mathsf I - \nabla c\nabla c/\lvert\nabla c\rvert)$,
+    whose divergence is the surface force. `src/lbm/surface_force.h`, used by
+    `laplace` in place of the perturbation operator Ω⁽²⁾.
+
+11. **J. U. Brackbill, D. B. Kothe, C. Zemach.** *A continuum method for
+    modeling surface tension.* Journal of Computational Physics **100**,
+    335–354, 1992. And **S. V. Lishchuk, C. M. Care, I. Halliday.** *Lattice
+    Boltzmann algorithm for surface tension with greatly reduced
+    microcurrents.* Physical Review E **67**, 036701, 2003.
+
+    The same force in curvature form, $\sigma\kappa\nabla c$, the second on the
+    colour field of a colour-gradient model. Not used: it does not conserve
+    momentum on the lattice (see [`numerics.md`](numerics.md#3-surface-tension-as-a-body-force)).
+
+12. **Z. Guo, C. Zheng, B. Shi.** *Discrete lattice effects on the forcing term
+    in the lattice Boltzmann method.* Physical Review E **65**, 046308, 2002.
+
+    The forcing scheme that `S_F` and the half-force velocity correction
+    implement, and through which the surface force enters.
 
 ## Lattice Boltzmann background
 

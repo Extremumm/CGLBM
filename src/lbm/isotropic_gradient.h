@@ -101,6 +101,23 @@ void gradient_wall_y(const double* field,
                      double* grad_x,
                      double* grad_y);
 
+/// How the edges of the lattice are treated by a stencil.
+enum class Boundary {
+    Periodic,  ///< both axes wrap, as in gradient_periodic
+    WallY      ///< x wraps, y is bounded by walls, as in gradient_wall_y
+};
+
+/// gradient_periodic or gradient_wall_y, whichever `boundary` names.
+void gradient(const double* field,
+              int nx,
+              int ny,
+              int i,
+              int j,
+              GradientStencil stencil,
+              Boundary boundary,
+              double* grad_x,
+              double* grad_y);
+
 }  // namespace lbm
 }  // namespace cglbm
 
