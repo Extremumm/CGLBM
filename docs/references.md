@@ -93,6 +93,36 @@
     The forcing scheme that `S_F` and the half-force velocity correction
     implement, and through which the surface force enters.
 
+## Velocity-based scheme
+
+13. **A. Fakhari, T. Mitchell, C. Leonardi, D. Bolster.** *Improved locality
+    of the phase-field lattice-Boltzmann model for immiscible fluids at high
+    density ratios.* Physical Review E **96**, 053301, 2017.
+
+    The velocity-based hydrodynamic equilibrium, with its pressure and viscous
+    corrections, that `src/lbm/velocity_based.h` follows. The pressure
+    correction there is rewritten on the lattice's own stencil, which is what
+    lets it run at $10^4$.
+
+14. **Y. Q. Zu, S. He.** *Phase-field-based lattice Boltzmann model for
+    incompressible binary fluid systems with density and viscosity
+    contrasts.* Physical Review E **87**, 043301, 2013.
+
+15. **P.-H. Chiu, Y.-T. Lin.** *A conservative phase field method for solving
+    incompressible two-phase flows.* Journal of Computational Physics **230**,
+    185–204, 2011.
+
+    The conservative Allen–Cahn equation the phase populations solve.
+
+16. **Z. Huang, G. Lin, A. M. Ardekani.** *Consistent and conservative scheme
+    for incompressible two-phase flows using the conservative Allen–Cahn
+    model.* Journal of Computational Physics, 2020.
+
+    Why a velocity-based scheme drifts in momentum, and the consistent
+    mass–momentum transport that would remove the drift. An explicit version of
+    their correction was tried and made the drift worse; see
+    [`numerics.md`](numerics.md#the-velocity-based-droplet-solver).
+
 ## Lattice Boltzmann background
 
 2. **T. Krüger, H. Kusumaatmaja, A. Kuzmin, O. Shardt, G. Silva, E. M. Viggen.**

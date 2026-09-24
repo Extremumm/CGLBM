@@ -103,6 +103,20 @@ kinematic viscosity the droplet's relaxation time grows with the density ratio
 (τ ≈ 5×10⁴ at 10⁴), and the scheme does not survive that. See
 [`docs/numerics.md`](docs/numerics.md#the-high-density-ratio-scheme).
 
+`droplet` is a separate, velocity-based solver for droplets that *move* at
+large density ratios, where the colour-gradient solvers diverge. It takes the
+stencil, the density ratio, the droplet's initial velocity and the viscosity
+ratio:
+
+```bash
+../../bin/solvers/velocity_based/droplet/droplet_opt E8 1e4 0      # static, the Laplace law
+../../bin/solvers/velocity_based/droplet/droplet_opt E8 1e4 0.01   # launched into still fluid
+```
+
+It does not conserve momentum exactly (4 % over 10⁴ steps at a density ratio of
+10⁴); see
+[`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
+
 ### About the generated files
 
 Every program writes four ASCII CSV grids per `interval` steps, named after the
@@ -129,6 +143,7 @@ every program for ParaView/VisIt, commented out of the time loop by default.
 | `gravity_capillary` | 128×128 | 5×10⁴ | 4/1 | yes | droplet under gravity and surface tension |
 | `rayleigh_taylor` | 128×1028 | 5×10⁶ | 4/1 | yes | Rayleigh–Taylor instability, σ = 0, serial |
 | `rayleigh_taylor_omp` | 1024×4096 | 2×10⁶ | 4/1 | yes | same case, OpenMP, production resolution |
+| `droplet` | 128×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: static or moving droplet at large density ratio |
 
 > `rayleigh_taylor_omp` declares about 2 GB of static lattice arrays, which is
 > why `cmake/Exceptions.cmake` builds it with `-mcmodel=medium` on x86-64.
@@ -156,9 +171,9 @@ Contains all the sources for the library
 - `src/core` the constants
 - `src/lbm` the scheme itself: the two-component equation of state, the
   isotropic colour-gradient stencils, the mixture quantities (volume fractions,
-  normalised colour field, consistent initial state, mixture viscosity) and the
-  surface force as the divergence of a capillary stress, each carrying its
-  reference
+  normalised colour field, consistent initial state, mixture viscosity), the
+  surface force as the divergence of a capillary stress, and the velocity-based
+  scheme of the `droplet` solver, each carrying its reference
 - `src/omp` thread-level parallelism: thread count, ids, timing
 - `src/mpi` distributed memory: environment, Cartesian decomposition, halo
   exchange, error checking
@@ -214,11 +229,12 @@ the resulting `CaseOutput`.
 > **Where the Laplace case stands.** The shipped case relaxes to a stationary
 > jump of 1.021 σ/R, scored against the radius the density settles at. The
 > high-density-ratio case, `laplace E8 1e4 1`, relaxes to 1.015 σ/R at a density
-> ratio of 10⁴. The 2 % left is the finite interface width at R = 10. At large
-> density ratios only static droplets are validated: at 10⁴ a droplet moving at
-> 10⁻³ lattice units per step still diverges, and at 10⁻⁴ it stays bounded with
-> spurious currents 300 times its speed. See
-> [`docs/numerics.md`](docs/numerics.md#the-high-density-ratio-scheme).
+> ratio of 10⁴. The 2 % left is the finite interface width at R = 10. The
+> colour-gradient solvers are validated for static droplets only at large
+> density ratios: at 10⁴ a droplet moving at 10⁻³ lattice units per step
+> diverges. The velocity-based `droplet` solver runs it at 10⁻², with a
+> momentum drift of 4 % over 10⁴ steps. See
+> [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
 
 ## PyCGLBM
 
