@@ -99,10 +99,10 @@
     of the phase-field lattice-Boltzmann model for immiscible fluids at high
     density ratios.* Physical Review E **96**, 053301, 2017.
 
-    The velocity-based hydrodynamic equilibrium, with its pressure and viscous
-    corrections, that `src/lbm/velocity_based.h` follows. The pressure
-    correction there is rewritten on the lattice's own stencil, which is what
-    lets it run at $10^4$.
+    The velocity-based hydrodynamic equilibrium that `src/lbm/velocity_based.h`
+    follows. Its pressure correction is replaced there by the lattice gradient
+    of $p$ itself, and its viscous correction by the link momentum exchange,
+    which is what lets it run at $10^4$ and conserve momentum.
 
 14. **Y. Q. Zu, S. He.** *Phase-field-based lattice Boltzmann model for
     incompressible binary fluid systems with density and viscosity
@@ -116,12 +116,55 @@
 
 16. **Z. Huang, G. Lin, A. M. Ardekani.** *Consistent and conservative scheme
     for incompressible two-phase flows using the conservative Allen–Cahn
-    model.* Journal of Computational Physics, 2020.
+    model.* Journal of Computational Physics **420**, 109718, 2020.
 
-    Why a velocity-based scheme drifts in momentum, and the consistent
-    mass–momentum transport that would remove the drift. An explicit version of
-    their correction was tried and made the drift worse; see
-    [`numerics.md`](numerics.md#the-velocity-based-droplet-solver).
+    The consistency conditions: the momentum is convected by the mass flux of
+    the phase-field equation, Allen–Cahn part included. `link_momentum`
+    carries the advected momentum with the mass flux of the phase
+    populations; see
+    [`numerics.md`](numerics.md#momentum-conservation).
+
+17. **S. Mirjalili, A. Mani.** *Consistent, energy-conserving momentum
+    transport for simulations of two-phase flows using the phase field
+    equations.* Journal of Computational Physics **426**, 109918, 2021.
+    arXiv:1912.10096.
+
+    The same principle for the conservative phase-field equation, with the
+    momentum flux built from the discrete mass flux and a centred,
+    kinetic-energy-conserving link velocity; and the observation that
+    without it high density ratios need special treatment.
+
+18. **M. Raessi, H. Pitsch.** *Consistent mass and momentum transport for
+    simulating incompressible flows with large density ratios using the level
+    set method.* Computers and Fluids **63**, 70–81, 2012.
+
+19. **C. Zhan, Z. Chai, B. Shi.** *Consistent and conservative phase-field-based
+    lattice Boltzmann method for incompressible two-phase flows.* Physical
+    Review E **106**, 025319, 2022. arXiv:2111.00847.
+
+    Consistent mass and momentum transport in a lattice Boltzmann model that
+    streams $\rho\vec u$, run up to a density ratio of about 1000.
+
+20. **H. Otomo, C. Sun, T. Inamuro, W. Li, M. Dressler, H. Chen, Y. Li,
+    R. Zhang.** *Lattice Boltzmann models for the hydrodynamic equations in
+    multiphase flow with high density ratio.* arXiv:2512.01027, 2025.
+
+    Why models that stream $\rho\vec u$ lose accuracy next to a large density
+    jump (truncation errors in $\vec u\,\partial^n\rho$ that spoil the
+    momentum the dense fluid passes to the light one), and why models that
+    stream $p/\rho$ depend on the absolute pressure; hence the pressure force
+    on $p$ and the streaming of $\vec u$ here.
+
+21. **O. Malaspinas.** *Increasing stability and accuracy of the lattice
+    Boltzmann scheme: recursivity and regularization.* arXiv:1505.06900, 2015.
+
+22. **J. Jacob, O. Malaspinas, P. Sagaut.** *A new hybrid recursive
+    regularised Bhatnagar–Gross–Krook collision model for Lattice Boltzmann
+    method-based large eddy simulation.* Journal of Turbulence **19**,
+    1051–1076, 2018.
+
+    The regularised and hybrid regularised collisions of `collide` and
+    `collide_hybrid`.
 
 ## Lattice Boltzmann background
 
