@@ -148,24 +148,43 @@ void report_viscosity(const ComponentPair& components) {
 }
 
 /// Surface force of a psi field: the stress at every node, then its divergence.
+/// With `weighted`, each layer's stress carries layer_weight.
 void force_field(const std::vector<double>& psi,
                  int n,
                  double sigma,
                  GradientStencil stencil,
                  cglbm::lbm::Boundary boundary,
                  std::vector<double>* force_x,
-                 std::vector<double>* force_y) {
+                 std::vector<double>* force_y,
+                 bool weighted = false) {
     const std::size_t size = static_cast<std::size_t>(n) * n;
+    std::vector<double> gx(size);
+    std::vector<double> gy(size);
+    std::vector<double> normal_x(size);
+    std::vector<double> normal_y(size);
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            const std::size_t k = static_cast<std::size_t>(i) * n + j;
+            cglbm::lbm::gradient(psi.data(), n, n, i, j, stencil, boundary, &gx[k], &gy[k]);
+            cglbm::lbm::unit_normal(gx[k], gy[k], &normal_x[k], &normal_y[k]);
+        }
+    }
     std::vector<double> sxx(size);
     std::vector<double> sxy(size);
     std::vector<double> syy(size);
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             const std::size_t k = static_cast<std::size_t>(i) * n + j;
-            double gx = 0.0;
-            double gy = 0.0;
-            cglbm::lbm::gradient(psi.data(), n, n, i, j, stencil, boundary, &gx, &gy);
-            cglbm::lbm::capillary_stress(sigma, gx, gy, &sxx[k], &sxy[k], &syy[k]);
+            double weight = 1.0;
+            if (weighted) {
+                double dnx_dx = 0.0, dnx_dy = 0.0, dny_dx = 0.0, dny_dy = 0.0;
+                cglbm::lbm::gradient(
+                    normal_x.data(), n, n, i, j, stencil, boundary, &dnx_dx, &dnx_dy);
+                cglbm::lbm::gradient(
+                    normal_y.data(), n, n, i, j, stencil, boundary, &dny_dx, &dny_dy);
+                weight = cglbm::lbm::layer_weight(psi[k], dnx_dx + dny_dy, kWidth);
+            }
+            cglbm::lbm::capillary_stress(sigma * weight, gx[k], gy[k], &sxx[k], &sxy[k], &syy[k]);
         }
     }
     force_x->assign(size, 0.0);
@@ -186,6 +205,32 @@ void force_field(const std::vector<double>& psi,
                                       &(*force_y)[k]);
         }
     }
+}
+
+/// The layer weight is r/R on every layer of a circle, and 1 on a flat interface.
+void report_layer_weight() {
+    const double radius = 10.0;
+    double circle = 0.0;
+    double flat = 0.0;
+    for (double r = radius - 3.0 * kWidth; r <= radius + 3.0 * kWidth; r += 0.1) {
+        const double psi = -std::tanh((r - radius) / kWidth);
+        // the normal points into component 1, towards the centre: div n = -1/r
+        const double weight = cglbm::lbm::layer_weight(psi, -1.0 / r, kWidth);
+        circle = std::max(circle, std::fabs(weight - r / radius));
+        flat = std::max(flat, std::fabs(cglbm::lbm::layer_weight(psi, 0.0, kWidth) - 1.0));
+    }
+    std::cout << "layer_weight_circle_error = " << circle << "\n";
+    std::cout << "layer_weight_flat_error = " << flat << "\n";
+}
+
+/// Pressure jump the force of a psi circle supports: p_out - p_in is the sum of
+/// F_x along the +x ray, since grad p = F at rest.
+double ray_jump(const std::vector<double>& fx, int n) {
+    double ray_sum = 0.0;
+    for (int i = n / 2; i < n; ++i) {
+        ray_sum += fx[static_cast<std::size_t>(i) * n + n / 2];
+    }
+    return -ray_sum;
 }
 
 /// Integrated force of a circle, net force of an ellipse, force on a flat interface.
@@ -233,6 +278,22 @@ void report_surface_force(GradientStencil stencil) {
     std::cout << "force_inward_nodes = " << inward << "\n";
     std::cout << "force_outward_nodes = " << outward << "\n";
 
+    // the same circles with each layer weighted: sigma / R at R = 20 and 10
+    for (double r : {20.0, 10.0}) {
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) {
+                psi[static_cast<std::size_t>(i) * n + j] =
+                    -std::tanh((std::hypot(i - centre, j - centre) - r) / kWidth);
+            }
+        }
+        force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::Periodic, &fx, &fy, false);
+        std::cout << "force_jump_over_laplace_R" << r << " = " << ray_jump(fx, n) / (sigma / r)
+                  << "\n";
+        force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::Periodic, &fx, &fy, true);
+        std::cout << "weighted_force_jump_over_laplace_R" << r << " = "
+                  << ray_jump(fx, n) / (sigma / r) << "\n";
+    }
+
     // an off-centre ellipse has no symmetry to cancel the force: a divergence
     // still sums to zero over the periodic lattice
     double total_x = 0.0;
@@ -253,6 +314,14 @@ void report_surface_force(GradientStencil stencil) {
         scale += std::hypot(fx[k], fy[k]);
     }
     std::cout << "ellipse_net_force = " << std::hypot(total_x, total_y) / scale << "\n";
+    force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::Periodic, &fx, &fy, true);
+    total_x = total_y = scale = 0.0;
+    for (std::size_t k = 0; k < size; ++k) {
+        total_x += fx[k];
+        total_y += fy[k];
+        scale += std::hypot(fx[k], fy[k]);
+    }
+    std::cout << "weighted_ellipse_net_force = " << std::hypot(total_x, total_y) / scale << "\n";
 
     // a flat interface bounded by walls exerts no force at all
     for (int i = 0; i < n; ++i) {
@@ -266,6 +335,12 @@ void report_surface_force(GradientStencil stencil) {
         flat = std::max(flat, std::hypot(fx[k], fy[k]));
     }
     std::cout << "flat_force = " << flat << "\n";
+    force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::WallY, &fx, &fy, true);
+    flat = 0.0;
+    for (std::size_t k = 0; k < size; ++k) {
+        flat = std::max(flat, std::hypot(fx[k], fy[k]));
+    }
+    std::cout << "weighted_flat_force = " << flat << "\n";
 }
 
 }  // namespace
@@ -293,6 +368,7 @@ int main(int argc, char** argv) {
     report_round_trip(components);
     report_phase_offset(components);
     report_viscosity(components);
+    report_layer_weight();
     report_surface_force(stencil);
     std::cout << std::flush;
     return 0;

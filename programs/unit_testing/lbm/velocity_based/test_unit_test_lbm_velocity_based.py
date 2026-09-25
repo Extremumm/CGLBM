@@ -5,7 +5,8 @@ solver: the moments of its equilibria and forcing, the conservation of P and u
 by the collisions, the positivity of the phase-field carrier, a pressure force
 that leaves no force from a uniform pressure across a density jump of 1e4, a
 link momentum exchange that is equal and opposite at the two ends of every
-link, and a phase transport that keeps its profile, its mass and its bounds.
+link, a dissipation force that sums to zero, and a phase transport that keeps
+its profile, its mass and its bounds, at speeds up to 0.2.
 """
 
 import pytest
@@ -69,9 +70,20 @@ def test_unit_test_lbm_velocity_based_pressure_force_conserves(values):
 @pytest.mark.unit_test
 def test_unit_test_lbm_velocity_based_link_momentum_conserves(values):
     """What one end of a link gains, the other loses; over a periodic lattice
-    the exchanges sum to zero."""
+    the exchanges sum to zero. Both ends see the same dissipation coefficient,
+    and it is never negative."""
     assert float(values["link_antisymmetry"]) < 1e-14
     assert float(values["lattice_momentum_total"]) < 1e-14
+    assert float(values["link_dissipation_asymmetry"]) < 1e-12
+    assert float(values["link_dissipation_min"]) >= 0.0
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_dissipation_force(values):
+    """With one coefficient per link, the dissipation force sums to zero over
+    the lattice, and a uniform velocity feels none."""
+    assert float(values["dissipation_force_total"]) < 1e-13
+    assert float(values["dissipation_force_uniform"]) == 0.0
 
 
 @pytest.mark.unit_test
@@ -84,8 +96,9 @@ def test_unit_test_lbm_velocity_based_link_momentum_uniform_velocity(values):
 @pytest.mark.unit_test
 def test_unit_test_lbm_velocity_based_link_momentum_single_component(values):
     """Within one component the exchange is the lattice's own, with its
-    advection written as a mass flux; no upwinding, no added viscosity."""
+    advection written as a mass flux; no dissipation."""
     assert float(values["link_single_component_error"]) < 1e-14
+    assert float(values["link_single_component_dissipation"]) < 1e-12
 
 
 @pytest.mark.unit_test
@@ -105,3 +118,13 @@ def test_unit_test_lbm_velocity_based_phase_transport(values):
     assert float(values["phase_profile_deviation"]) < 0.02
     assert float(values["phase_min"]) >= 0.0
     assert float(values["phase_max"]) <= 1.0
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_phase_limiter(values):
+    """At |u| = 0.2 the unlimited sharpening would make populations negative;
+    limited, each stays between 0 and its carrier, and c is kept."""
+    assert float(values["phase_unlimited_min"]) < -1e-4
+    assert float(values["phase_limited_min"]) > -1e-17
+    assert float(values["phase_limited_complement_min"]) > -1e-17
+    assert float(values["phase_limited_mass_error"]) < 1e-15

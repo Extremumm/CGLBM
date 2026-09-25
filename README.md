@@ -109,13 +109,17 @@ stencil, the density ratio, the droplet's initial velocity and the viscosity
 ratio:
 
 ```bash
-../../bin/solvers/velocity_based/droplet/droplet_opt E8 1e4 0      # static, the Laplace law
-../../bin/solvers/velocity_based/droplet/droplet_opt E8 1e4 0.01   # launched into still fluid
+../../bin/solvers/velocity_based/droplet/droplet_opt E8 1e4 0        # static, the Laplace law
+../../bin/solvers/velocity_based/droplet/droplet_opt E8 1e4 0.01     # launched into still fluid
+../../bin/solvers/velocity_based/droplet/droplet_opt E8 1e4 0.1 100  # ten times faster, 100 times more viscous
 ```
 
 Momentum is exchanged link by link, equal and opposite at the two ends, and is
 conserved to rounding at any density ratio; at 10⁴ a droplet can be launched at
-up to 0.02 lattice units per step. See
+up to 0.1 lattice units per step, at viscosity ratios from 1 to 100. A static
+droplet carries 0.998 σ/R. `layers` shears two layers 10⁴ apart across their
+interfaces, with the same scheme and the same arguments (the third is the peak
+velocity). See
 [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
 
 ### About the generated files
@@ -145,6 +149,7 @@ every program for ParaView/VisIt, commented out of the time loop by default.
 | `rayleigh_taylor` | 128×1028 | 5×10⁶ | 4/1 | yes | Rayleigh–Taylor instability, σ = 0, serial |
 | `rayleigh_taylor_omp` | 1024×4096 | 2×10⁶ | 4/1 | yes | same case, OpenMP, production resolution |
 | `droplet` | 128×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: static or moving droplet at large density ratio |
+| `layers` | 8×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: two layers sheared across their interfaces |
 
 > `rayleigh_taylor_omp` declares about 2 GB of static lattice arrays, which is
 > why `cmake/Exceptions.cmake` builds it with `-mcmodel=medium` on x86-64.
@@ -234,7 +239,8 @@ the resulting `CaseOutput`.
 > colour-gradient solvers are validated for static droplets only at large
 > density ratios: at 10⁴ a droplet moving at 10⁻³ lattice units per step
 > diverges. The velocity-based `droplet` solver runs it at 10⁻², and up to
-> 2×10⁻², with momentum conserved to rounding. See
+> 10⁻¹, with momentum conserved to rounding, and its static droplet carries
+> 0.998 σ/R. See
 > [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
 
 ## PyCGLBM

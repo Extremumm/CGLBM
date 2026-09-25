@@ -35,6 +35,16 @@ void capillary_stress(double sigma,
     }
 }
 
+double layer_weight(double psi, double divergence_of_normal, double width) {
+    // atanh is finite for |psi| < 1; past this the layer carries no stress anyway
+    constexpr double kLargest = 1.0 - 1.0e-12;
+    const double bounded = (psi < -kLargest) ? -kLargest : ((psi > kLargest) ? kLargest : psi);
+    const double distance = -width * std::atanh(bounded);
+    const double jacobian = 1.0 + distance * divergence_of_normal;
+    const double kept = (jacobian < 0.25) ? 0.25 : ((jacobian > 4.0) ? 4.0 : jacobian);
+    return 1.0 / kept;
+}
+
 void surface_force(const double* stress_xx,
                    const double* stress_xy,
                    const double* stress_yy,

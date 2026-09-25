@@ -5,7 +5,9 @@ a solver: the initial state built from a volume fraction is in equilibrium with
 the equation of state, the phase field phi is a mass fraction whose zero sits
 (W/2) ln(rho_1/rho_2) off the density interface, and the surface force -- the
 divergence of the capillary stress -- integrates to the Laplace jump across a
-circular interface and conserves momentum.
+circular interface and conserves momentum. With each layer of the interface
+weighted by layer_weight, the jump is sigma / R to a few parts in 1e4 even at
+R = 10, where the unweighted stress is 3 % high.
 """
 
 import math
@@ -123,3 +125,34 @@ def test_unit_test_lbm_mixture_surface_force_conserves_momentum(stencil):
 @pytest.mark.parametrize("stencil", STENCILS)
 def test_unit_test_lbm_mixture_flat_interface_between_walls_feels_no_force(stencil):
     assert float(_run(stencil=stencil)["flat_force"]) < 1e-14
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_mixture_layer_weight_is_r_over_radius():
+    """On every layer of a circle the weight is r/R; on a flat interface, 1."""
+    values = _run()
+    assert float(values["layer_weight_circle_error"]) < 1e-12
+    assert float(values["layer_weight_flat_error"]) == 0.0
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_lbm_mixture_weighted_surface_force_gives_sigma_over_radius(stencil):
+    """The weighted stress supports sigma / R whatever the interface width.
+
+    The unweighted stress spreads the tension over radii R +- W and supports
+    sigma times the mean of 1/r over them: 3 % above sigma / R at R = 10.
+    """
+    values = _run(stencil=stencil)
+    assert float(values["force_jump_over_laplace_R10"]) > 1.025
+    assert float(values["weighted_force_jump_over_laplace_R10"]) == pytest.approx(1.0, abs=5e-4)
+    assert float(values["weighted_force_jump_over_laplace_R20"]) == pytest.approx(1.0, abs=5e-5)
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_lbm_mixture_weighted_surface_force_conserves_momentum(stencil):
+    """Weighted, the force is still the divergence of a stress."""
+    values = _run(stencil=stencil)
+    assert float(values["weighted_ellipse_net_force"]) < 1e-13
+    assert float(values["weighted_flat_force"]) < 1e-14

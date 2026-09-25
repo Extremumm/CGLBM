@@ -42,6 +42,11 @@
 ///  - J. U. Brackbill, D. B. Kothe, C. Zemach, "A continuum method for modeling
 ///    surface tension", J. Comput. Phys. 100, 335-354 (1992). The same force
 ///    in curvature form.
+///  - C. Kublik, R. Tsai, "Integration over curves and surfaces defined by the
+///    closest point mapping", Res. Math. Sci. 3, 3 (2016), arXiv:1504.05478,
+///    proposition 2; C. Kublik, N. M. Tanushev, R. Tsai, J. Comput. Phys. 247,
+///    279-311 (2013). The Jacobian 1 + d kappa between a curve and the curve at
+///    distance d from it, which layer_weight uses.
 
 namespace cglbm {
 namespace lbm {
@@ -60,6 +65,25 @@ void capillary_stress(double sigma,
                       double* stress_xx,
                       double* stress_xy,
                       double* stress_yy);
+
+/// Weight 1/J that carries the tension of each layer of a diffuse interface
+/// onto the interface psi = 0.
+///
+/// The capillary stress spreads the tension over the interface width, and a
+/// layer at distance d from psi = 0 is bent to its own radius: across a
+/// droplet of radius R the pressure jump comes out as sigma times the mean of
+/// 1/r over the layers rather than sigma / R, 3 % high at R = 10 with W = 1.6.
+/// In 2D the length of psi = 0 is J = 1 + d div(n) times the length of the
+/// layer at distance d, with n the unit normal into component 1 (Kublik & Tsai
+/// 2016). A stress divided by J pulls in every layer as the interface itself
+/// does: the jump across a circle is sigma / R whatever its width, a flat
+/// interface is unchanged, and the force is still the divergence of a stress,
+/// which conserves momentum.
+///
+/// d = -W atanh(psi) is the distance from psi = 0 on the equilibrium profile
+/// psi = -tanh(d / W), positive in component 2; J is kept within [1/4, 4], a
+/// bound that only a layer many widths away from a small droplet reaches.
+double layer_weight(double psi, double divergence_of_normal, double width);
 
 /// Surface force div(T) at node (i, j).
 ///
