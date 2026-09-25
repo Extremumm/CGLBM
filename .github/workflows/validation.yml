@@ -18,7 +18,8 @@ jobs:
     name: Laplace benchmark
     runs-on: ubuntu-latest
     # three full laplace runs of about ten minutes each (density ratio 20 with E8
-    # and E4, density ratio 1e4) and three droplet runs of about five
+    # and E4, density ratio 1e4), six droplet runs of about five and a layers
+    # run of under one
     timeout-minutes: 120
 
     steps:
@@ -43,18 +44,19 @@ jobs:
       - name: Configure and build
         run: |
           cmake --preset gnu -DDEBUG=OFF -DPython3_EXECUTABLE="$(which python)"
-          cmake --build --preset gnu --target laplace_opt droplet_opt
+          cmake --build --preset gnu --target laplace_opt droplet_opt layers_opt
 
       - name: Run the long tests
         run: |
           python -m pytest programs/solvers/color_gradient/laplace \
-            programs/solvers/velocity_based/droplet --runlong -v
+            programs/solvers/velocity_based --runlong -v
 
       - name: Record what was measured
         if: always()
         run: |
           python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
           import math, pathlib
+          import numpy as np
           from pycglbm import CaseOutput
 
           C_DX = 1.0e-5
@@ -119,6 +121,35 @@ jobs:
               print("| --- | --- |")
               print(f"| timestep | {t} |")
               print(f"| total momentum drift | {(momentum[1] - momentum[0]) / momentum[0]:+.2e} |")
+              print()
+          for viscosity in ("1", "10", "100"):
+              fast = pathlib.Path(f"artifacts/droplet_fast_{viscosity}")
+              if not fast.is_dir():
+                  continue
+              case = CaseOutput(fast)
+              t = case.last_timestep
+              momentum = [(case.density(s) * case.velocity(s)[..., 0]).sum() for s in (0, t)]
+              print(f"### fast, viscosity ratio {viscosity} (`droplet E8 1e4 0.1 {viscosity}`)\n")
+              print("| quantity | value |")
+              print("| --- | --- |")
+              print(f"| timestep | {t} |")
+              print(f"| total momentum drift | {(momentum[1] - momentum[0]) / momentum[0]:+.2e} |")
+              print()
+          layers = pathlib.Path("artifacts/layers")
+          if layers.is_dir():
+              case = CaseOutput(layers)
+              t = case.last_timestep
+              u = case.velocity(t)[..., 0]
+              ny = u.shape[0]
+              exact = 0.01 * np.sin(2.0 * np.pi * np.arange(ny) / ny)[:, None]
+              error = np.abs(u - exact) / 0.01
+              light = case.phase(t) < 0.0
+              print("### sheared layers, density ratio 1e4 (`layers E8 1e4 0.01`)\n")
+              print("| quantity | value |")
+              print("| --- | --- |")
+              print(f"| timestep | {t} |")
+              print(f"| max error, light layer / U | {error[light].max():.4f} |")
+              print(f"| max error, heavy layer / U | {error[~light].max():.5f} |")
               print()
           PY
 

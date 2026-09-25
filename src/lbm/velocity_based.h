@@ -41,26 +41,33 @@
 ///    lighter density of the two ends. A light node sees its heavy neighbour
 ///    as the velocity-based scheme does; a heavy node sees a light neighbour
 ///    through the light fluid's momentum only, as a free surface;
-///  - the advection, as the mass flux of the phase populations times a link
-///    velocity, so that mass and momentum move together (the consistent mass
-///    and momentum transport of the phase-field literature). A uniform
-///    velocity is then carried by the mass flux alone, whatever the densities
-///    on either side of a link;
-///  - a link diffusion that brings the viscous stress across a link to the
-///    harmonic mean of the two dynamic viscosities, which the lighter-density
-///    weighting alone would halve.
+///  - the advection, as the mass flux of the phase populations times the mean
+///    velocity of the two ends, so that mass and momentum move together (the
+///    consistent mass and momentum transport of the phase-field literature).
+///    A uniform velocity is then carried by the mass flux alone, whatever the
+///    densities on either side of a link.
 /// The pressure force, the lattice gradient of p itself (pressure_force), and
 /// the capillary stress divergence both sum to zero over the lattice. What a
 /// node holds after the exchanges, divided by its new density, is its new
 /// velocity; set_velocity hands it back to the populations.
 ///
+/// Two more link terms are diffusions of the velocity: the upwind part of the
+/// mass flux the lighter density does not account for, which a node the heavy
+/// fluid is leaving needs, and the viscous stress the lighter-density
+/// weighting takes away, restored to the harmonic mean of the two dynamic
+/// viscosities. Neither goes into the exchange. At tau close to 1/2 the
+/// non-equilibrium flips sign every step, and a dissipation added to the
+/// velocity within the step, which the populations never see, drives that
+/// period-2 mode: the same diffusion that is harmless through the forcing term
+/// makes a single fluid diverge in about 400 steps at |u| = 0.1. link_momentum
+/// hands their coefficients back, and dissipation_force applies them as a
+/// force, half before and half after the step like any other.
+///
 /// The collision relaxes the trace of the non-equilibrium at its own rate: a
 /// heavy fluid with a modest dynamic viscosity has tau close to 1/2, and
 /// without a separate bulk relaxation its acoustic modes are undamped. Its
 /// shear modes, as nearly undamped, are held by the hybrid regularised
-/// collision (collide_hybrid): seen from inside, the interface is a free
-/// surface, and a heavy fluid with tau - 1/2 ~ 1e-4 behind one diverges at a
-/// droplet speed of 0.02 without it.
+/// collision (collide_hybrid).
 ///
 /// References
 ///  - A. Fakhari, T. Mitchell, C. Leonardi, D. Bolster, "Improved locality of
@@ -122,11 +129,20 @@ void velocity_equilibrium(double ux, double uy, double* gamma);
 /// g_i^eq = w_i P + Gamma_i(u) - w_i, with moments P, u and P cs^2 I + u u.
 void hydrodynamic_equilibrium(double pressure_number, double ux, double uy, double* equilibrium);
 
-/// Post-collision phase populations c Gamma_i(u) + w_i A (xi_i . n) / cs^2.
+/// Post-collision phase populations c Gamma_i(u) + theta w_i A (xi_i . n) / cs^2.
 ///
 /// A = M 2 c (1 - c) / W with M = cs^2 / 2 is the sharpening flux along the
 /// unit normal n that balances the diffusion of the memoryless transport on
 /// the profile c = (1 + tanh(x / W)) / 2. Streamed, they give the new c.
+///
+/// theta in [0, 1] is the largest weight that keeps every population between
+/// 0 and Gamma_i(u), and with them the component-2 populations Gamma_i - h_i,
+/// non-negative. Then the new c is a sum of non-negative parts, and so is
+/// 1 - c up to the compressibility of the carriers. It is 1 at rest and
+/// below |u| ~ 0.03 with W = 1.6; faster, the carrier against the flow drops
+/// below the sharpening on the far side of the interface, and a population a
+/// thousandth of a unit negative there is a negative mass as large as the
+/// light node's own at a density ratio of 1e4.
 void phase_populations(double c,
                        double ux,
                        double uy,
@@ -214,31 +230,56 @@ struct LinkEnd {
 };
 
 /// Momentum that `receiver` gains through its link with `donor`, where donor
-/// sits at receiver - xi_k. The donor loses the same amount: swapping the two
-/// ends and taking the opposite direction gives exactly the opposite vector.
+/// sits at receiver - xi_k, and the dissipation coefficient of the link. The
+/// donor loses the same momentum: swapping the two ends and taking the
+/// opposite direction gives exactly the opposite vector and the same
+/// coefficient.
 ///
 /// With rho_l = min(donor.rho, receiver.rho), F the velocity-based exchange
 /// per unit mass (the two `outgoing` values), F_adv its advective part
-/// (the u u terms of both equilibria), K the exchange of the carriers Gamma
-/// and M the mass carried by the phase populations,
+/// (the u u terms of both equilibria), K the exchange of the carriers Gamma,
+/// K_lin its part linear in u, and M the mass carried by the phase populations,
 ///
-///     J = rho_l (F - F_adv) xi_k                       thermal, viscous, forcing
-///       + rho_l K u_mid + (M - rho_l K) u_upwind       advection by the mass flux
-///       + beta 2 w_k / cs^2 (u_donor - u_receiver)     viscous stress
+///     J = rho_l (F - F_adv) xi_k                 thermal, viscous, forcing
+///       + (M - rho_l (K - K_lin)) u_mid          advection by the mass flux
 ///
-/// u_mid is the mean of the two velocities, u_upwind the velocity of the end
-/// the excess mass flux M - rho_l K leaves, and beta raises the link viscosity
+///     D = |M - rho_l K| / 2 + beta 2 w_k / cs^2  (dissipation_force)
+///
+/// u_mid is the mean of the two velocities. K - K_lin, the carriers'
+/// quadratic part, is a diffusion of the velocity along the flow; carried
+/// within the step it destabilises a single fluid at |u| = 0.1, and it
+/// vanishes for a uniform velocity, which the mass flux still carries exactly.
+/// The first term of D turns the centred advection of the excess mass flux
+/// M - rho_l K into an upwind one; beta raises the link viscosity
 /// rho_l (nu_donor + nu_receiver) / 2 to the harmonic mean of the dynamic
 /// viscosities. Where the two densities are equal and the phase populations
-/// are those of a single component, M = rho K and nothing but the lattice's
-/// exchange, with its advection written as a mass flux, is left.
+/// are those of a single component, M = rho K and D = 0: the exchange is the
+/// lattice's own, with its advection written as a mass flux.
 void link_momentum(int k,
                    const LinkEnd& donor,
                    const LinkEnd& receiver,
                    double rho1,
                    double rho2,
                    double* jx,
-                   double* jy);
+                   double* jy,
+                   double* dissipation);
+
+/// Force density sum_k D_k (u(x - xi_k) - u(x)) at node (i, j), from the
+/// link coefficients link_momentum returns.
+///
+/// `coefficients` holds kQ values per node, `[(i * ny + j) * kQ + k]` for the
+/// link to (i, j) - xi_k; `ux` and `uy` are `nx * ny` values indexed
+/// `[i * ny + j]`, both axes periodic. With the same coefficient at the two
+/// ends of every link, the force sums to zero over the lattice.
+void dissipation_force(const double* coefficients,
+                       const double* ux,
+                       const double* uy,
+                       int nx,
+                       int ny,
+                       int i,
+                       int j,
+                       double* fx,
+                       double* fy);
 
 /// Replace the first moment of `populations` by u, leaving the zeroth and
 /// second moments unchanged.

@@ -33,15 +33,30 @@ void phase_populations(double c,
                        double normal_y,
                        double width,
                        double* populations) {
-    velocity_equilibrium(ux, uy, populations);
+    double gamma[kQ];
+    velocity_equilibrium(ux, uy, gamma);
     // the sharpening vanishes outside [0, 1], so a rounding overshoot of c is
     // not amplified
     const double bounded = (c < 0.0) ? 0.0 : ((c > 1.0) ? 1.0 : c);
     const double mobility = 0.5 * kCs2;
     const double sharpening = mobility * 2.0 * bounded * (1.0 - bounded) / width;
+    double flux[kQ];
+    double theta = 1.0;
     for (int k = 0; k < kQ; ++k) {
         const double en = kVelocity[k][0] * normal_x + kVelocity[k][1] * normal_y;
-        populations[k] = c * populations[k] + kWeight[k] * sharpening * en / kCs2;
+        flux[k] = kWeight[k] * sharpening * en / kCs2;
+        // keep 0 <= c Gamma_k + theta flux_k <= Gamma_k
+        if (flux[k] < 0.0 && bounded * gamma[k] < -theta * flux[k]) {
+            theta = bounded * gamma[k] / -flux[k];
+        } else if (flux[k] > 0.0 && (1.0 - bounded) * gamma[k] < theta * flux[k]) {
+            theta = (1.0 - bounded) * gamma[k] / flux[k];
+        }
+    }
+    if (theta < 0.0) {
+        theta = 0.0;
+    }
+    for (int k = 0; k < kQ; ++k) {
+        populations[k] = c * gamma[k] + theta * flux[k];
     }
 }
 
@@ -184,7 +199,8 @@ void link_momentum(int k,
                    double rho1,
                    double rho2,
                    double* jx,
-                   double* jy) {
+                   double* jy,
+                   double* dissipation) {
     const int opposite = kOpposite[k];
     const double ex = kVelocity[k][0];
     const double ey = kVelocity[k][1];
@@ -197,27 +213,51 @@ void link_momentum(int k,
         advective_part(k, donor.ux, donor.uy) + advective_part(k, receiver.ux, receiver.uy);
     const double lattice = rho_link * (exchange - advective);
 
-    // advection: the mass the phase populations carry, times a link velocity
+    // advection: the mass the phase populations carry, less the quadratic part
+    // of the carriers' volume at the lighter density, times the mean velocity
     const double volume =
         carrier(k, donor.ux, donor.uy) - carrier(opposite, receiver.ux, receiver.uy);
+    const double linear =
+        kWeight[k] * (ex * (donor.ux + receiver.ux) + ey * (donor.uy + receiver.uy)) / kCs2;
     const double mass = (rho1 - rho2) * (donor.phase - receiver.phase) + rho2 * volume;
     const double excess = mass - rho_link * volume;
+    const double carried = rho_link * linear + excess;
     const double mid_x = 0.5 * (donor.ux + receiver.ux);
     const double mid_y = 0.5 * (donor.uy + receiver.uy);
-    const double upwind_x = excess > 0.0 ? donor.ux : receiver.ux;
-    const double upwind_y = excess > 0.0 ? donor.uy : receiver.uy;
 
     // viscous stress: raise the link viscosity to the harmonic mean of mu
     const double target = 2.0 * donor.mu * receiver.mu / (donor.mu + receiver.mu);
     const double lattice_viscosity =
         rho_link * 0.5 * (donor.mu / donor.rho + receiver.mu / receiver.rho);
     const double beta = target > lattice_viscosity ? target - lattice_viscosity : 0.0;
-    const double diffusion = beta * 2.0 * kWeight[k] / kCs2;
 
-    *jx = lattice * ex + rho_link * volume * mid_x + excess * upwind_x +
-          diffusion * (donor.ux - receiver.ux);
-    *jy = lattice * ey + rho_link * volume * mid_y + excess * upwind_y +
-          diffusion * (donor.uy - receiver.uy);
+    *jx = lattice * ex + carried * mid_x;
+    *jy = lattice * ey + carried * mid_y;
+    *dissipation = 0.5 * (excess < 0.0 ? -excess : excess) + beta * 2.0 * kWeight[k] / kCs2;
+}
+
+void dissipation_force(const double* coefficients,
+                       const double* ux,
+                       const double* uy,
+                       int nx,
+                       int ny,
+                       int i,
+                       int j,
+                       double* fx,
+                       double* fy) {
+    const int here = i * ny + j;
+    double sx = 0.0;
+    double sy = 0.0;
+    for (int k = 1; k < kQ; ++k) {
+        const int id = ((i - kVelocity[k][0]) % nx + nx) % nx;
+        const int jd = ((j - kVelocity[k][1]) % ny + ny) % ny;
+        const int there = id * ny + jd;
+        const double coefficient = coefficients[here * kQ + k];
+        sx += coefficient * (ux[there] - ux[here]);
+        sy += coefficient * (uy[there] - uy[here]);
+    }
+    *fx = sx;
+    *fy = sy;
 }
 
 void set_velocity(double* populations, double ux, double uy) {

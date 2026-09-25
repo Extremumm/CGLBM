@@ -121,7 +121,8 @@
     The consistency conditions: the momentum is convected by the mass flux of
     the phase-field equation, Allen–Cahn part included. `link_momentum`
     carries the advected momentum with the mass flux of the phase
-    populations; see
+    populations, less a part quadratic in the velocity that vanishes for a
+    uniform flow; see
     [`numerics.md`](numerics.md#momentum-conservation).
 
 17. **S. Mirjalili, A. Mani.** *Consistent, energy-conserving momentum
@@ -165,6 +166,23 @@
 
     The regularised and hybrid regularised collisions of `collide` and
     `collide_hybrid`.
+
+23. **C. Kublik, R. Tsai.** *Integration over curves and surfaces defined by
+    the closest point mapping.* Research in the Mathematical Sciences **3**, 3,
+    2016. arXiv:1504.05478.
+
+    Proposition 2: in 2D, the Jacobian $1 + \eta\kappa_\eta$ between a curve
+    and its level set at distance $\eta$. `layer_weight` divides the capillary
+    stress of each layer of a diffuse interface by it, which carries every
+    layer's tension onto $\psi = 0$; see
+    [`numerics.md`](numerics.md#surface-tension-at-the-interface-not-across-it).
+
+24. **C. Kublik, N. M. Tanushev, R. Tsai.** *An implicit interface boundary
+    integral method for Poisson's equation on arbitrary domains.* Journal of
+    Computational Physics **247**, 279–311, 2013.
+
+    The same Jacobian, used to write integrals over a curve as integrals over a
+    band around it.
 
 ## Lattice Boltzmann background
 

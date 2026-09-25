@@ -1,6 +1,6 @@
 """The velocity-based droplet solver at large density ratios.
 
-Three runs of programs/solvers/velocity_based/droplet:
+Six runs of programs/solvers/velocity_based/droplet:
 
 - `droplet E8 1e4 0`: a static droplet, the Laplace benchmark, to compare with
   the colour-gradient `laplace E8 1e4 1`;
@@ -8,7 +8,10 @@ Three runs of programs/solvers/velocity_based/droplet:
   step into a fluid at rest. The colour-gradient solver diverges on this case
   within a few hundred steps, at any speed from 1e-3 up;
 - `droplet E8 100 0.01`: the same at a density ratio of 100, where the lighter
-  fluid carries a large share of the momentum.
+  fluid carries a large share of the momentum;
+- `droplet E8 1e4 0.1 <1|10|100>`: launched ten times faster, at viscosity
+  ratios of 1, 10 and 100. Before the dissipation went through the forcing
+  term these diverged within 1500 steps, and 0.05 after 7700.
 
 The moving runs are checked for what the scheme promises: they stay bounded,
 total momentum is conserved to the precision of the output, and the droplet
@@ -31,16 +34,19 @@ NUM_STEPS = 10000
 LX = 128
 DENSITY_RATIO = 1.0e4
 SPEED = 0.01  # initial speed of the moving droplets
+FAST_SPEED = 0.1  # initial speed of the fast ones
 
 LAPLACE_JUMP = SIGMA / RADIUS
 INNER_RADIUS = 0.5 * RADIUS
 OUTER_RADIUS = 3.0 * RADIUS
 
 # Measured on these runs, pinned to catch regressions.
-MEASURED_JUMP_RATIO = 1.030
-MEASURED_MAX_VELOCITY = 1.7e-6
+MEASURED_JUMP_RATIO = 0.998
+MEASURED_MAX_VELOCITY = 2.3e-6
 #: Mean speed of the droplet's centre over the run, as a fraction of SPEED.
-MEASURED_DROPLET_SPEED = {"1e4": 0.844, "100": 0.715}
+MEASURED_DROPLET_SPEED = {"1e4": 0.844, "100": 0.714}
+#: The same at FAST_SPEED, by viscosity ratio.
+MEASURED_FAST_SPEED = {"1": 0.850, "10": 0.850, "100": 0.851}
 #: The output is written with ten significant digits; momentum is conserved
 #: to rounding, and its sum over the lattice to about that precision.
 MOMENTUM_TOLERANCE = 1.0e-9
@@ -63,6 +69,16 @@ def moving_run(request):
     )
 
 
+@pytest.fixture(scope="module", params=["1", "10", "100"])
+def fast_run(request):
+    return request.param, run_program(
+        "droplet",
+        artifacts_dir() / f"droplet_fast_{request.param}",
+        args=("E8", "1e4", str(FAST_SPEED), request.param),
+        timeout=2400,
+    )
+
+
 def _centre_x(case, timestep):
     """x of the droplet's centre, periodic-aware, weighted by the volume fraction."""
     c = 0.5 * (1.0 + case.phase(timestep))
@@ -73,17 +89,22 @@ def _centre_x(case, timestep):
     return (math.atan2(s, k) / (2.0 * np.pi) * nx) % nx
 
 
-def _speeds(case):
-    """Speed of the droplet's centre over each output interval, over SPEED."""
+def _speeds(case, speed=SPEED):
+    """Speed of the droplet's centre over each output interval, over `speed`.
+
+    Unwrapped across the periodic boundary, which a droplet at 0.1 crosses in
+    less than an output interval: the displacement is taken nearest to the
+    launch speed times the interval.
+    """
     timesteps = case.timesteps
     speeds = []
     previous = _centre_x(case, timesteps[0])
     for before, after in zip(timesteps[:-1], timesteps[1:]):
         current = _centre_x(case, after)
         step = current - previous
-        # unwrap across the periodic boundary
-        step -= LX * round(step / LX)
-        speeds.append(step / (after - before) / SPEED)
+        expected = 0.8 * speed * (after - before)
+        step += LX * round((expected - step) / LX)
+        speeds.append(step / (after - before) / speed)
         previous = current
     return speeds
 
@@ -116,12 +137,16 @@ def test_verification_droplet_velocity_based_static_is_stationary(static_run):
 @pytest.mark.long
 @pytest.mark.validation
 def test_validation_droplet_velocity_based_pressure_jump(static_run):
-    """Laplace's law; the three percent left is the interface width at R = 10."""
+    """Laplace's law, to a few parts in 1e3 at R = 10.
+
+    Without layer_weight the capillary stress supports sigma times the mean of
+    1/r across the interface, 3 % above sigma / R at this radius.
+    """
     radius = static_run.phase_interface_radius(NUM_STEPS)
     jump = static_run.pressure_jump(NUM_STEPS, inner=INNER_RADIUS, outer=OUTER_RADIUS)
     ratio = jump / (SIGMA / radius)
-    assert ratio == pytest.approx(MEASURED_JUMP_RATIO, abs=0.01)
-    assert ratio == pytest.approx(1.0, abs=0.05)
+    assert ratio == pytest.approx(MEASURED_JUMP_RATIO, abs=0.002)
+    assert ratio == pytest.approx(1.0, abs=0.005)
 
 
 @pytest.mark.long
@@ -180,4 +205,36 @@ def test_validation_droplet_velocity_based_droplet_slows_down(moving_run):
     assert np.mean(speeds) == pytest.approx(MEASURED_DROPLET_SPEED[ratio], abs=0.01)
     # never faster than over the interval before, and slower at the end
     assert all(later < earlier + 1.0e-3 for earlier, later in zip(speeds, speeds[1:]))
+    assert speeds[-1] < speeds[0]
+
+
+@pytest.mark.long
+@pytest.mark.verification
+def test_verification_droplet_velocity_based_fast_stays_bounded(fast_run):
+    """At 0.1 lattice units per step the run completes, bounded, and conserves
+    momentum, whatever the viscosity ratio."""
+    _, case = fast_run
+    t = case.last_timestep
+    assert t == NUM_STEPS
+    for field in case.fields(t).values():
+        assert np.isfinite(field).all()
+    phase = case.phase(t)
+    assert phase.min() >= -1.0 - 1.0e-9
+    assert phase.max() <= 1.0 + 1.0e-9
+    # the droplet is still one droplet: its core is component 1
+    assert phase.max() > 0.99
+    velocity = case.velocity(t)
+    assert np.hypot(velocity[..., 0], velocity[..., 1]).max() < 1.1 * FAST_SPEED
+    start = _momentum(case, 0)
+    for step in case.timesteps[1:]:
+        assert _momentum(case, step) == pytest.approx(start, rel=MOMENTUM_TOLERANCE)
+
+
+@pytest.mark.long
+@pytest.mark.validation
+def test_validation_droplet_velocity_based_fast_droplet_slows_down(fast_run):
+    """The fast droplet travels at its measured mean speed, and slows down."""
+    ratio, case = fast_run
+    speeds = _speeds(case, FAST_SPEED)
+    assert np.mean(speeds) == pytest.approx(MEASURED_FAST_SPEED[ratio], abs=0.01)
     assert speeds[-1] < speeds[0]

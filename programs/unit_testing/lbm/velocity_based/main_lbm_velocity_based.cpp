@@ -9,13 +9,16 @@
 //  3. the pressure force turns a uniform pressure across a density jump of 1e4
 //     into no force at all, and sums to zero as a force density;
 //  4. the link momentum exchange is equal and opposite at the two ends of a
-//     link, sums to zero over a lattice, carries a uniform velocity with the
-//     mass alone, and changes nothing where there is a single component;
+//     link, with the same dissipation coefficient at both, sums to zero over a
+//     lattice, carries a uniform velocity with the mass alone, and is the
+//     lattice's own where there is a single component; the dissipation force
+//     sums to zero and leaves a uniform velocity alone;
 //  5. the hybrid collision reduces to the regularised one, conserves P and u,
 //     and leaves a resolved non-equilibrium alone; set_velocity changes the
 //     first moment only;
 //  6. the memoryless phase transport keeps its tanh profile, conserves c and
-//     stays within [0, 1].
+//     stays within [0, 1]; at |u| = 0.2 the limited sharpening keeps every
+//     phase population between 0 and its carrier.
 //
 //   main_lbm_velocity_based
 
@@ -214,18 +217,25 @@ void report_link_momentum() {
 
     // equal and opposite: the same link seen from its other end
     double antisymmetry = 0.0;
+    double dissipation_asymmetry = 0.0;
+    double smallest_dissipation = 1.0;
     for (int trial = 0; trial < 200; ++trial) {
         for (int k = 1; k < vb::kQ; ++k) {
             const vb::LinkEnd a = random_end(random, rho1, rho2);
             const vb::LinkEnd b = random_end(random, rho1, rho2);
-            double jx = 0.0, jy = 0.0, kx = 0.0, ky = 0.0;
-            vb::link_momentum(k, a, b, rho1, rho2, &jx, &jy);
-            vb::link_momentum(vb::kOpposite[k], b, a, rho1, rho2, &kx, &ky);
+            double jx = 0.0, jy = 0.0, kx = 0.0, ky = 0.0, da = 0.0, db = 0.0;
+            vb::link_momentum(k, a, b, rho1, rho2, &jx, &jy, &da);
+            vb::link_momentum(vb::kOpposite[k], b, a, rho1, rho2, &kx, &ky, &db);
             const double scale = std::max(std::hypot(jx, jy), 1e-300);
             antisymmetry = std::max(antisymmetry, std::hypot(jx + kx, jy + ky) / scale);
+            dissipation_asymmetry =
+                std::max(dissipation_asymmetry, std::fabs(da - db) / std::max(da, 1e-300));
+            smallest_dissipation = std::min(smallest_dissipation, std::min(da, db));
         }
     }
     std::cout << "link_antisymmetry = " << antisymmetry << "\n";
+    std::cout << "link_dissipation_asymmetry = " << dissipation_asymmetry << "\n";
+    std::cout << "link_dissipation_min = " << smallest_dissipation << "\n";
 
     // over a periodic lattice, indexed as the droplet solver indexes it
     const int n = 12;
@@ -254,8 +264,8 @@ void report_link_momentum() {
                 vb::LinkEnd receiver = node[x];
                 receiver.outgoing = sent[x * vb::kQ + vb::kOpposite[k]];
                 receiver.phase = phase[x * vb::kQ + vb::kOpposite[k]];
-                double jx = 0.0, jy = 0.0;
-                vb::link_momentum(k, donor, receiver, rho1, rho2, &jx, &jy);
+                double jx = 0.0, jy = 0.0, d = 0.0;
+                vb::link_momentum(k, donor, receiver, rho1, rho2, &jx, &jy, &d);
                 total_x += jx;
                 total_y += jy;
                 scale = std::max(scale, std::hypot(jx, jy));
@@ -279,8 +289,8 @@ void report_link_momentum() {
             donor.uy = receiver.uy = uy;
             donor.outgoing = gamma[k] - vb::kWeight[k];
             receiver.outgoing = gamma[vb::kOpposite[k]] - vb::kWeight[k];
-            double jx = 0.0, jy = 0.0;
-            vb::link_momentum(k, donor, receiver, rho1, rho2, &jx, &jy);
+            double jx = 0.0, jy = 0.0, d = 0.0;
+            vb::link_momentum(k, donor, receiver, rho1, rho2, &jx, &jy, &d);
             const double volume = gamma[k] - gamma[vb::kOpposite[k]];
             const double mass = (rho1 - rho2) * (donor.phase - receiver.phase) + rho2 * volume;
             // relative to the terms that cancel: the mass flux and the lighter
@@ -294,8 +304,10 @@ void report_link_momentum() {
     std::cout << "link_uniform_velocity_error = " << galilean << "\n";
 
     // one component on both sides (c = 1): no excess mass flux, no added
-    // viscosity, and the lattice exchange with its advection as a mass flux
+    // viscosity, and the lattice exchange with its advection as the linear
+    // part of the mass flux times the mean velocity
     double single = 0.0;
+    double single_dissipation = 0.0;
     for (int trial = 0; trial < 200; ++trial) {
         for (int k = 1; k < vb::kQ; ++k) {
             vb::LinkEnd donor = random_end(random, rho1, rho2);
@@ -307,8 +319,9 @@ void report_link_momentum() {
             vb::velocity_equilibrium(receiver.ux, receiver.uy, gr);
             donor.phase = gd[k];
             receiver.phase = gr[vb::kOpposite[k]];
-            double jx = 0.0, jy = 0.0;
-            vb::link_momentum(k, donor, receiver, rho1, rho2, &jx, &jy);
+            double jx = 0.0, jy = 0.0, d = 0.0;
+            vb::link_momentum(k, donor, receiver, rho1, rho2, &jx, &jy, &d);
+            single_dissipation = std::max(single_dissipation, std::fabs(d));
             auto advective = [&](double vx, double vy) {
                 const double eu = vb::kVelocity[k][0] * vx + vb::kVelocity[k][1] * vy;
                 return vb::kWeight[k] *
@@ -317,16 +330,62 @@ void report_link_momentum() {
             const double lattice =
                 rho1 * (donor.outgoing + receiver.outgoing - advective(donor.ux, donor.uy) -
                         advective(receiver.ux, receiver.uy));
-            const double volume = gd[k] - gr[vb::kOpposite[k]];
+            const double linear = vb::kWeight[k] *
+                                  (vb::kVelocity[k][0] * (donor.ux + receiver.ux) +
+                                   vb::kVelocity[k][1] * (donor.uy + receiver.uy)) /
+                                  kCs2;
             const double ex =
-                rho1 * volume * 0.5 * (donor.ux + receiver.ux) + lattice * vb::kVelocity[k][0];
+                rho1 * linear * 0.5 * (donor.ux + receiver.ux) + lattice * vb::kVelocity[k][0];
             const double ey =
-                rho1 * volume * 0.5 * (donor.uy + receiver.uy) + lattice * vb::kVelocity[k][1];
+                rho1 * linear * 0.5 * (donor.uy + receiver.uy) + lattice * vb::kVelocity[k][1];
             single = std::max(single,
                               std::hypot(jx - ex, jy - ey) / std::max(std::hypot(ex, ey), 1e-300));
         }
     }
     std::cout << "link_single_component_error = " << single << "\n";
+    std::cout << "link_single_component_dissipation = " << single_dissipation << "\n";
+
+    // the dissipation force, with the same coefficient at the two ends of
+    // every link, sums to zero, and vanishes for a uniform velocity
+    std::vector<double> coefficient(node.size() * vb::kQ, 0.0);
+    std::vector<double> vel_x(node.size());
+    std::vector<double> vel_y(node.size());
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            const std::size_t x = static_cast<std::size_t>(i) * n + j;
+            vel_x[x] = 0.02 * (unit(random) - 0.5);
+            vel_y[x] = 0.02 * (unit(random) - 0.5);
+            for (int k = 1; k < vb::kQ; ++k) {
+                if (k == 1 || k == 2 || k == 5 || k == 6) {
+                    // one value per link, stored at both of its ends
+                    const int id = (i - vb::kVelocity[k][0] + n) % n;
+                    const int jd = (j - vb::kVelocity[k][1] + n) % n;
+                    const std::size_t y = static_cast<std::size_t>(id) * n + jd;
+                    const double value = 1.0e3 * unit(random);
+                    coefficient[x * vb::kQ + k] = value;
+                    coefficient[y * vb::kQ + vb::kOpposite[k]] = value;
+                }
+            }
+        }
+    }
+    double force_x = 0.0, force_y = 0.0, force_scale = 0.0, uniform = 0.0;
+    std::vector<double> still_x(node.size(), 0.013);
+    std::vector<double> still_y(node.size(), -0.007);
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            double fx = 0.0, fy = 0.0;
+            vb::dissipation_force(
+                coefficient.data(), vel_x.data(), vel_y.data(), n, n, i, j, &fx, &fy);
+            force_x += fx;
+            force_y += fy;
+            force_scale = std::max(force_scale, std::hypot(fx, fy));
+            vb::dissipation_force(
+                coefficient.data(), still_x.data(), still_y.data(), n, n, i, j, &fx, &fy);
+            uniform = std::max(uniform, std::hypot(fx, fy));
+        }
+    }
+    std::cout << "dissipation_force_total = " << std::hypot(force_x, force_y) / force_scale << "\n";
+    std::cout << "dissipation_force_uniform = " << uniform / force_scale << "\n";
 }
 
 /// The hybrid collision is collide at sigma = 1, conserves P and u, and does
@@ -416,6 +475,47 @@ void report_set_velocity() {
 }
 
 /// The phase transport alone, at rest, on a slab: profile, mass, bounds.
+/// At |u| = 0.2 the carrier against the flow is smaller than the unlimited
+/// sharpening; the limited populations stay within [0, Gamma_k].
+void report_phase_limiter() {
+    const double speed = 0.2;
+    const double width = 1.6;
+    double below = 0.0;
+    double above = 0.0;
+    double mass = 0.0;
+    double unlimited_below = 0.0;
+    for (double c : {0.001, 0.01, 0.1, 0.5, 0.9, 0.99, 0.999}) {
+        for (int a = 0; a < 16; ++a) {
+            for (int b = 0; b < 16; ++b) {
+                const double ux = speed * std::cos(2.0 * M_PI * a / 16.0);
+                const double uy = speed * std::sin(2.0 * M_PI * a / 16.0);
+                const double nx = std::cos(2.0 * M_PI * (b + 0.5) / 16.0);
+                const double ny = std::sin(2.0 * M_PI * (b + 0.5) / 16.0);
+                double h[vb::kQ];
+                double gamma[vb::kQ];
+                vb::phase_populations(c, ux, uy, nx, ny, width, h);
+                vb::velocity_equilibrium(ux, uy, gamma);
+                double sum = 0.0;
+                for (int k = 0; k < vb::kQ; ++k) {
+                    below = std::min(below, h[k]);
+                    above = std::min(above, gamma[k] - h[k]);
+                    sum += h[k];
+                    // what the unlimited sharpening would give
+                    const double en = vb::kVelocity[k][0] * nx + vb::kVelocity[k][1] * ny;
+                    const double sharpening = 0.5 * kCs2 * 2.0 * c * (1.0 - c) / width;
+                    unlimited_below = std::min(
+                        unlimited_below, c * gamma[k] + vb::kWeight[k] * sharpening * en / kCs2);
+                }
+                mass = std::max(mass, std::fabs(sum - c));
+            }
+        }
+    }
+    std::cout << "phase_limited_min = " << below << "\n";
+    std::cout << "phase_limited_complement_min = " << above << "\n";
+    std::cout << "phase_limited_mass_error = " << mass << "\n";
+    std::cout << "phase_unlimited_min = " << unlimited_below << "\n";
+}
+
 void report_phase_transport() {
     const int nx = 64;
     const int ny = 4;
@@ -490,6 +590,7 @@ int main() {
     report_link_momentum();
     report_collide_hybrid();
     report_set_velocity();
+    report_phase_limiter();
     report_phase_transport();
     std::cout << std::flush;
     return 0;
