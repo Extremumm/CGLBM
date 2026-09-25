@@ -66,7 +66,7 @@ jobs:
           print("## Laplace benchmark\n")
           runs = {
               "density ratio 20 (`laplace`)": pathlib.Path("artifacts/laplace"),
-              "density ratio 1e4 (`laplace E8 1e4 1`)": pathlib.Path("artifacts/laplace_ratio_1e4"),
+              "density ratio 1e4 (`laplace --rho1=1e4 ... --viscosity-mixing=dynamic --surface-tension=stress`)": pathlib.Path("artifacts/laplace_ratio_1e4"),
           }
           for title, rundir in runs.items():
               print(f"### {title}\n")

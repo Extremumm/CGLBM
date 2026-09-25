@@ -62,22 +62,38 @@ __constant__ int d_e4_cx[8];
 __constant__ int d_e4_cy[8];
 __constant__ double d_e4_w[8];
 
-__device__ inline double device_pressure(double rho_val, double phi_val, double c1_sq, double c2_sq, double p1_i, double p2_i) {
+__device__ inline double device_pressure(
+    double rho_val, double phi_val, double c1_sq, double c2_sq, double p1_i, double p2_i) {
     double c_hat_squared = 0.5 * (c1_sq + c2_sq) + 0.5 * phi_val * (c1_sq - c2_sq);
     double c_bar_squared = 0.5 * (c1_sq - c2_sq) + 0.5 * phi_val * (c1_sq + c2_sq);
     double linear = p2_i - p1_i + rho_val * c_bar_squared;
     double mixing = 1.0 - phi_val * phi_val;
-    if (mixing < 0.0) mixing = 0.0;
+    if (mixing < 0.0)
+        mixing = 0.0;
     double discriminant = linear * linear + rho_val * rho_val * mixing * c1_sq * c2_sq;
     return 0.5 * (rho_val * c_hat_squared - p1_i - p2_i + std::sqrt(discriminant));
 }
 
-__global__ void k_initialize(double* phi, double* rho, double* rho_mdt, double* p, double* p_mdt,
-                             double* u, double* F, int lx, int ly, double c1_sq, double c2_sq,
-                             double p1_i, double p2_i, double a_grav, double w_init, double w_ope) {
+__global__ void k_initialize(double* phi,
+                             double* rho,
+                             double* rho_mdt,
+                             double* p,
+                             double* p_mdt,
+                             double* u,
+                             double* F,
+                             int lx,
+                             int ly,
+                             double c1_sq,
+                             double c2_sq,
+                             double p1_i,
+                             double p2_i,
+                             double a_grav,
+                             double w_init,
+                             double w_ope) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
     int y0 = ly / 2;
@@ -94,8 +110,9 @@ __global__ void k_initialize(double* phi, double* rho, double* rho_mdt, double* 
     rho[idx] = rho_local;
     rho_mdt[idx] = rho_local;
 
-    double p_local = rho_local * ((1.0 + phi_local) * 0.5 * c1_sq + (1.0 - phi_local) * 0.5 * c2_sq)
-                   - (1.0 + phi_local) * 0.5 * p1_i - (1.0 - phi_local) * 0.5 * p2_i;
+    double p_local =
+        rho_local * ((1.0 + phi_local) * 0.5 * c1_sq + (1.0 - phi_local) * 0.5 * c2_sq) -
+        (1.0 + phi_local) * 0.5 * p1_i - (1.0 - phi_local) * 0.5 * p2_i;
     p[idx] = p_local;
     p_mdt[idx] = p_local;
 
@@ -103,11 +120,19 @@ __global__ void k_initialize(double* phi, double* rho, double* rho_mdt, double* 
     F[idx * 2 + 1] = -rho_local * a_grav;
 }
 
-__global__ void k_cal_equilibrium(double* f_eq, const double* rho, const double* u, const double* p,
-                                  int lx, int ly, double c_s2, double c_s4, double c_s6) {
+__global__ void k_cal_equilibrium(double* f_eq,
+                                  const double* rho,
+                                  const double* u,
+                                  const double* p,
+                                  int lx,
+                                  int ly,
+                                  double c_s2,
+                                  double c_s4,
+                                  double c_s6) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
     double rho_local = rho[idx];
@@ -132,16 +157,21 @@ __global__ void k_cal_equilibrium(double* f_eq, const double* rho, const double*
         double Hxxyy = Hx * Hx * Hy * Hy - c_s2 * (Hx * Hx + Hy * Hy) + c_s4;
 
         double E = d_w[k] * ((Hxx + Hyy) / (2.0 * c_s4) - Hxxyy / (4.0 * c_s6));
-        double term1 = rho_local * d_w[k] * (H0 + u_x * Hx / c_s2 + u_y * Hy / c_s2
-                     + 0.5 * (u_x * u_x * Hxx + 2.0 * u_x * u_y * Hxy + u_y * u_y * Hyy) / c_s4);
-        f_eq[idx * Q + k] = term1 + (p_local - rho_local * c_s2) * (E + d_w[k] * (u_x * (Hyyx + Hxxx) + u_y * (Hyyy + Hxxy)) / (2.0 * c_s6));
+        double term1 = rho_local * d_w[k] *
+                       (H0 + u_x * Hx / c_s2 + u_y * Hy / c_s2 +
+                        0.5 * (u_x * u_x * Hxx + 2.0 * u_x * u_y * Hxy + u_y * u_y * Hyy) / c_s4);
+        f_eq[idx * Q + k] =
+            term1 + (p_local - rho_local * c_s2) *
+                        (E + d_w[k] * (u_x * (Hyyx + Hxxx) + u_y * (Hyyy + Hxxy)) / (2.0 * c_s6));
     }
 }
 
-__global__ void k_init_distrib(double* f, double* g, const double* f_eq, const double* phi, int lx, int ly) {
+__global__ void
+k_init_distrib(double* f, double* g, const double* f_eq, const double* phi, int lx, int ly) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
     double phi_val = phi[idx];
@@ -152,12 +182,23 @@ __global__ void k_init_distrib(double* f, double* g, const double* f_eq, const d
     }
 }
 
-__global__ void k_force(double* S, const double* u, const double* F, const double* p, const double* p_mdt,
-                        const double* rho, const double* rho_mdt, int lx, int ly,
-                        double c_s2, double c_s4, double c_s6, double d_t) {
+__global__ void k_force(double* S,
+                        const double* u,
+                        const double* F,
+                        const double* p,
+                        const double* p_mdt,
+                        const double* rho,
+                        const double* rho_mdt,
+                        int lx,
+                        int ly,
+                        double c_s2,
+                        double c_s4,
+                        double c_s6,
+                        double d_t) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
     double u_x = u[idx * 2 + 0];
@@ -194,12 +235,14 @@ __global__ void k_force(double* S, const double* u, const double* F, const doubl
         double Hxyk = xik0 * xik1;
 
         double term1 = (F_x * xik0 + F_y * xik1) / c_s2;
-        double term23 = (u_x * F_x * Hxxk + u_y * F_y * Hyyk + (u_x * F_y + u_y * F_x) * Hxyk) / c_s4;
+        double term23 =
+            (u_x * F_x * Hxxk + u_y * F_y * Hyyk + (u_x * F_y + u_y * F_x) * Hxyk) / c_s4;
         double S_F = d_w[k] * (term1 + term23);
 
         double H_nu = (xik0 * xik0 - xik1 * xik1) * 0.5;
         double H_b = (xik0 * xik0 + xik1 * xik1) * 0.5 - c_s2;
-        double S_Sp = d_w[k] * (derive_y * (3.0 * H_nu - H_b) + derive_x * (-3.0 * H_nu - H_b)) / (2.0 * c_s4);
+        double S_Sp = d_w[k] * (derive_y * (3.0 * H_nu - H_b) + derive_x * (-3.0 * H_nu - H_b)) /
+                      (2.0 * c_s4);
 
         double H_xxyy = xik0 * xik0 * xik1 * xik1 - c_s2 * (xik0 * xik0 + xik1 * xik1) + c_s4;
         double E = d_w[k] * ((Hxxk + Hyyk) / (2.0 * c_s4) - H_xxyy / (4.0 * c_s6));
@@ -209,12 +252,23 @@ __global__ void k_force(double* S, const double* u, const double* F, const doubl
     }
 }
 
-__global__ void k_collide(double* omega_1, const double* f, const double* f_eq, const double* S,
-                          const double* rho, const double* p, int lx, int ly,
-                          double nu_val, double nu_b_val, double c_s2, double c_s4, double d_t) {
+__global__ void k_collide(double* omega_1,
+                          const double* f,
+                          const double* f_eq,
+                          const double* S,
+                          const double* rho,
+                          const double* p,
+                          int lx,
+                          int ly,
+                          double nu_val,
+                          double nu_b_val,
+                          double c_s2,
+                          double c_s4,
+                          double d_t) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
     double rho_local = rho[idx];
@@ -245,24 +299,36 @@ __global__ void k_collide(double* omega_1, const double* f, const double* f_eq, 
         double f_nu_neq = H_nu / c_s4 * sum_nu_neq;
         double f_b_neq = H_b / c_s4 * sum_b_neq;
         double f_xy_neq = H_xy / c_s4 * sum_xy_neq;
-        omega_1[idx * Q + k] = d_w[k] * (1.0 - 1.0 / tau_nu) * (f_nu_neq + f_xy_neq)
-                            + d_w[k] * (1.0 - 1.0 / tau_b) * f_b_neq;
+        omega_1[idx * Q + k] = d_w[k] * (1.0 - 1.0 / tau_nu) * (f_nu_neq + f_xy_neq) +
+                               d_w[k] * (1.0 - 1.0 / tau_b) * f_b_neq;
     }
 }
 
-__global__ void k_collide_surface(double* omega_2, const double* phi, const double* rho, const double* p,
-                                 int lx, int ly, double sigma_val, double nu_val, double nu_b_val,
-                                 double c_s2, double c_s4, double d_t, double eps) {
+__global__ void k_collide_surface(double* omega_2,
+                                  const double* phi,
+                                  const double* rho,
+                                  const double* p,
+                                  int lx,
+                                  int ly,
+                                  double sigma_val,
+                                  double nu_val,
+                                  double nu_b_val,
+                                  double c_s2,
+                                  double c_s4,
+                                  double d_t,
+                                  double eps) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
 
     double Cx = 0.0, Cy = 0.0;
     for (int n = 0; n < 8; ++n) {
         int jp = j + d_e4_cy[n];
-        if (jp < 0 || jp >= ly) continue;
+        if (jp < 0 || jp >= ly)
+            continue;
         int ip = (i + d_e4_cx[n] + lx) % lx;
         double val = phi[ip * ly + jp];
         Cx += d_e4_w[n] * d_e4_cx[n] * val;
@@ -279,27 +345,36 @@ __global__ void k_collide_surface(double* omega_2, const double* phi, const doub
             double H_nu = 0.5 * (xi_x * xi_x - xi_y * xi_y);
             double H_b = 0.5 * (xi_x * xi_x + xi_y * xi_y) - c_s2;
             double H_xy = xi_x * xi_y;
-            omega_2[idx * Q + k] = sigma_val * d_w[k] / (4.0 * norm_C * c_s4)
-                                * ((2.0 * Cx * Cy * H_xy + (Cx * Cx - Cy * Cy) * H_nu) / tau_nu
-                                - ((Cx * Cx + Cy * Cy) * H_b) / tau_b);
+            omega_2[idx * Q + k] = sigma_val * d_w[k] / (4.0 * norm_C * c_s4) *
+                                   ((2.0 * Cx * Cy * H_xy + (Cx * Cx - Cy * Cy) * H_nu) / tau_nu -
+                                    ((Cx * Cx + Cy * Cy) * H_b) / tau_b);
         } else {
             omega_2[idx * Q + k] = 0.0;
         }
     }
 }
 
-__global__ void k_recolor(double* omega_3, const double* phi, const double* p,
-                          int lx, int ly, double w_ope, double c_s2, double d_t, double eps) {
+__global__ void k_recolor(double* omega_3,
+                          const double* phi,
+                          const double* p,
+                          int lx,
+                          int ly,
+                          double w_ope,
+                          double c_s2,
+                          double d_t,
+                          double eps) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
 
     double Cx = 0.0, Cy = 0.0;
     for (int n = 0; n < 8; ++n) {
         int jp = j + d_e4_cy[n];
-        if (jp < 0 || jp >= ly) continue;
+        if (jp < 0 || jp >= ly)
+            continue;
         int ip = (i + d_e4_cx[n] + lx) % lx;
         double val = phi[ip * ly + jp];
         Cx += d_e4_w[n] * d_e4_cx[n] * val;
@@ -316,21 +391,32 @@ __global__ void k_recolor(double* omega_3, const double* phi, const double* p,
     for (int k = 0; k < Q; ++k) {
         if (norm_grad > eps) {
             double xi_x = d_xi[k][0], xi_y = d_xi[k][1];
-            omega_3[idx * Q + k] = d_w[k] * p_val * (1.0 - phi_val * phi_val) / (2.0 * w_ope)
-                                * (xi_x * grad_phi_x + xi_y * grad_phi_y) / (c_s2 * norm_grad);
+            omega_3[idx * Q + k] = d_w[k] * p_val * (1.0 - phi_val * phi_val) / (2.0 * w_ope) *
+                                   (xi_x * grad_phi_x + xi_y * grad_phi_y) / (c_s2 * norm_grad);
         } else {
             omega_3[idx * Q + k] = 0.0;
         }
     }
 }
 
-__global__ void k_stream(double* f_out, double* g_out, const double* f_eq, const double* omega_1,
-                         const double* omega_2, const double* omega_3, const double* S,
-                         const double* phi, const double* rho, const double* p,
-                         double* rho_mdt, double* p_mdt, int lx, int ly) {
+__global__ void k_stream(double* f_out,
+                         double* g_out,
+                         const double* f_eq,
+                         const double* omega_1,
+                         const double* omega_2,
+                         const double* omega_3,
+                         const double* S,
+                         const double* phi,
+                         const double* rho,
+                         const double* p,
+                         double* rho_mdt,
+                         double* p_mdt,
+                         int lx,
+                         int ly) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
     rho_mdt[idx] = rho[idx];
@@ -350,17 +436,19 @@ __global__ void k_stream(double* f_out, double* g_out, const double* f_eq, const
             kp = k;
         }
         int target_idx = (ip * ly + jp) * Q + kp;
-        double f_val = f_eq[idx * Q + k] + omega_1[idx * Q + k] + omega_2[idx * Q + k] + 0.5 * S[idx * Q + k];
+        double f_val =
+            f_eq[idx * Q + k] + omega_1[idx * Q + k] + omega_2[idx * Q + k] + 0.5 * S[idx * Q + k];
         f_out[target_idx] = f_val;
         g_out[target_idx] = f_val * phi[idx] + omega_3[idx * Q + k];
     }
 }
 
-__global__ void k_macroscopic(double* rho, double* u, double* F, const double* f,
-                              int lx, int ly, double a_grav, double d_t) {
+__global__ void k_macroscopic(
+    double* rho, double* u, double* F, const double* f, int lx, int ly, double a_grav, double d_t) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
     double sum_f = 0.0;
@@ -384,12 +472,21 @@ __global__ void k_macroscopic(double* rho, double* u, double* F, const double* f
     u[idx * 2 + 1] = (sum_xi_y + F_y * d_t * 0.5) / sum_f;
 }
 
-__global__ void k_phase_field(double* phi, double* p, const double* f, const double* g,
-                              const double* rho, int lx, int ly,
-                              double c1_sq, double c2_sq, double p1_i, double p2_i) {
+__global__ void k_phase_field(double* phi,
+                              double* p,
+                              const double* f,
+                              const double* g,
+                              const double* rho,
+                              int lx,
+                              int ly,
+                              double c1_sq,
+                              double c2_sq,
+                              double p1_i,
+                              double p2_i) {
     int i = blockIdx.x * blockDim.x + threadIdx.x;
     int j = blockIdx.y * blockDim.y + threadIdx.y;
-    if (i >= lx || j >= ly) return;
+    if (i >= lx || j >= ly)
+        return;
 
     int idx = i * ly + j;
     double sum_f = 0.0;
@@ -406,7 +503,8 @@ __global__ void k_phase_field(double* phi, double* p, const double* f, const dou
     p[idx] = device_pressure(rho_local, phi_val, c1_sq, c2_sq, p1_i, p2_i);
 }
 
-void outputDataCSV(int timestep, const double* h_rho, const double* h_u, const double* h_phi, const double* h_p) {
+void outputDataCSV(
+    int timestep, const double* h_rho, const double* h_u, const double* h_phi, const double* h_p) {
     std::ofstream fileDensity("density_" + std::to_string(timestep) + ".csv");
     std::ofstream fileVelocity("velocity_" + std::to_string(timestep) + ".csv");
     std::ofstream filePhase("phase_" + std::to_string(timestep) + ".csv");
@@ -437,11 +535,13 @@ void outputDataCSV(int timestep, const double* h_rho, const double* h_u, const d
 int main(int argc, char** argv) {
     cglbm::lbm::GradientStencil gradient_stencil = cglbm::lbm::GradientStencil::E4;
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &gradient_stencil)) {
-        std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8." << std::endl;
+        std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8."
+                  << std::endl;
         return 2;
     }
 
-    std::cout << "colour gradient stencil = " << cglbm::lbm::stencil_name(gradient_stencil) << std::endl;
+    std::cout << "colour gradient stencil = " << cglbm::lbm::stencil_name(gradient_stencil)
+              << std::endl;
     std::cout << cglbm::cuda::describe() << std::endl;
 
     if (!cglbm::cuda::available()) {
@@ -453,16 +553,16 @@ int main(int argc, char** argv) {
 
     // Copy constants to device constant memory
     const double h_xi[Q][2] = {
-        {0, 0}, {1, 0}, {0, 1}, {-1, 0}, {0, -1},
-        {1, 1}, {-1, 1}, {-1, -1}, {1, -1}
-    };
-    const double h_w[Q] = {4./9., 1./9., 1./9., 1./9., 1./9., 1./36., 1./36., 1./36., 1./36.};
+        {0, 0}, {1, 0}, {0, 1}, {-1, 0}, {0, -1}, {1, 1}, {-1, 1}, {-1, -1}, {1, -1}};
+    const double h_w[Q] = {
+        4. / 9., 1. / 9., 1. / 9., 1. / 9., 1. / 9., 1. / 36., 1. / 36., 1. / 36., 1. / 36.};
     CGLBM_CUDA_CHECK(cudaMemcpyToSymbol(d_xi, h_xi, sizeof(h_xi)));
     CGLBM_CUDA_CHECK(cudaMemcpyToSymbol(d_w, h_w, sizeof(h_w)));
 
     const int h_e4_cx[8] = {1, 0, -1, 0, 1, -1, -1, 1};
     const int h_e4_cy[8] = {0, 1, 0, -1, 1, 1, -1, -1};
-    const double h_e4_w[8] = {1./3., 1./3., 1./3., 1./3., 1./12., 1./12., 1./12., 1./12.};
+    const double h_e4_w[8] = {
+        1. / 3., 1. / 3., 1. / 3., 1. / 3., 1. / 12., 1. / 12., 1. / 12., 1. / 12.};
     CGLBM_CUDA_CHECK(cudaMemcpyToSymbol(d_e4_cx, h_e4_cx, sizeof(h_e4_cx)));
     CGLBM_CUDA_CHECK(cudaMemcpyToSymbol(d_e4_cy, h_e4_cy, sizeof(h_e4_cy)));
     CGLBM_CUDA_CHECK(cudaMemcpyToSymbol(d_e4_w, h_e4_w, sizeof(h_e4_w)));
@@ -490,17 +590,30 @@ int main(int argc, char** argv) {
     dim3 threads(16, 16);
     dim3 blocks((Lx + threads.x - 1) / threads.x, (Ly + threads.y - 1) / threads.y);
 
-    k_initialize<<<blocks, threads>>>(d_phi.data(), d_rho.data(), d_rho_mdt.data(), d_p.data(),
-                                      d_p_mdt.data(), d_u.data(), d_F.data(), Lx, Ly,
-                                      c1_squared, c2_squared, p1_inf, p2_inf, a_g,
-                                      ch_width_init, ch_width_ope);
+    k_initialize<<<blocks, threads>>>(d_phi.data(),
+                                      d_rho.data(),
+                                      d_rho_mdt.data(),
+                                      d_p.data(),
+                                      d_p_mdt.data(),
+                                      d_u.data(),
+                                      d_F.data(),
+                                      Lx,
+                                      Ly,
+                                      c1_squared,
+                                      c2_squared,
+                                      p1_inf,
+                                      p2_inf,
+                                      a_g,
+                                      ch_width_init,
+                                      ch_width_ope);
     CGLBM_CUDA_CHECK(cudaGetLastError());
 
-    k_cal_equilibrium<<<blocks, threads>>>(d_f_eq.data(), d_rho.data(), d_u.data(), d_p.data(),
-                                           Lx, Ly, cs2, cs4, cs6);
+    k_cal_equilibrium<<<blocks, threads>>>(
+        d_f_eq.data(), d_rho.data(), d_u.data(), d_p.data(), Lx, Ly, cs2, cs4, cs6);
     CGLBM_CUDA_CHECK(cudaGetLastError());
 
-    k_init_distrib<<<blocks, threads>>>(d_f.data(), d_g.data(), d_f_eq.data(), d_phi.data(), Lx, Ly);
+    k_init_distrib<<<blocks, threads>>>(
+        d_f.data(), d_g.data(), d_f_eq.data(), d_phi.data(), Lx, Ly);
     CGLBM_CUDA_CHECK(cudaGetLastError());
     cglbm::cuda::synchronize();
 
@@ -518,8 +631,8 @@ int main(int argc, char** argv) {
     int steps_to_run = (argc > 2) ? std::atoi(argv[2]) : numSteps;
     int print_interval = (steps_to_run < interval) ? steps_to_run : interval;
 
-    std::cout << "Starting CUDA simulation: " << Lx << "x" << Ly << " lattice, "
-              << steps_to_run << " steps..." << std::endl;
+    std::cout << "Starting CUDA simulation: " << Lx << "x" << Ly << " lattice, " << steps_to_run
+              << " steps..." << std::endl;
     double t_start = cglbm::cuda::wall_time();
 
     double* cur_f = d_f.data();
@@ -528,36 +641,87 @@ int main(int argc, char** argv) {
     double* next_g = d_g_stream.data();
 
     for (int step = 1; step <= steps_to_run; ++step) {
-        k_force<<<blocks, threads>>>(d_S.data(), d_u.data(), d_F.data(), d_p.data(), d_p_mdt.data(),
-                                     d_rho.data(), d_rho_mdt.data(), Lx, Ly, cs2, cs4, cs6, dt);
+        k_force<<<blocks, threads>>>(d_S.data(),
+                                     d_u.data(),
+                                     d_F.data(),
+                                     d_p.data(),
+                                     d_p_mdt.data(),
+                                     d_rho.data(),
+                                     d_rho_mdt.data(),
+                                     Lx,
+                                     Ly,
+                                     cs2,
+                                     cs4,
+                                     cs6,
+                                     dt);
 
-        k_collide<<<blocks, threads>>>(d_omega_1.data(), cur_f, d_f_eq.data(), d_S.data(),
-                                       d_rho.data(), d_p.data(), Lx, Ly, nu, nu_b, cs2, cs4, dt);
+        k_collide<<<blocks, threads>>>(d_omega_1.data(),
+                                       cur_f,
+                                       d_f_eq.data(),
+                                       d_S.data(),
+                                       d_rho.data(),
+                                       d_p.data(),
+                                       Lx,
+                                       Ly,
+                                       nu,
+                                       nu_b,
+                                       cs2,
+                                       cs4,
+                                       dt);
 
-        k_collide_surface<<<blocks, threads>>>(d_omega_2.data(), d_phi.data(), d_rho.data(), d_p.data(),
-                                               Lx, Ly, sigma, nu, nu_b, cs2, cs4, dt, epsilon);
+        k_collide_surface<<<blocks, threads>>>(d_omega_2.data(),
+                                               d_phi.data(),
+                                               d_rho.data(),
+                                               d_p.data(),
+                                               Lx,
+                                               Ly,
+                                               sigma,
+                                               nu,
+                                               nu_b,
+                                               cs2,
+                                               cs4,
+                                               dt,
+                                               epsilon);
 
-        k_recolor<<<blocks, threads>>>(d_omega_3.data(), d_phi.data(), d_p.data(), Lx, Ly,
-                                       ch_width_ope, cs2, dt, epsilon);
+        k_recolor<<<blocks, threads>>>(
+            d_omega_3.data(), d_phi.data(), d_p.data(), Lx, Ly, ch_width_ope, cs2, dt, epsilon);
 
-        k_stream<<<blocks, threads>>>(next_f, next_g, d_f_eq.data(), d_omega_1.data(),
-                                      d_omega_2.data(), d_omega_3.data(), d_S.data(),
-                                      d_phi.data(), d_rho.data(), d_p.data(),
-                                      d_rho_mdt.data(), d_p_mdt.data(), Lx, Ly);
+        k_stream<<<blocks, threads>>>(next_f,
+                                      next_g,
+                                      d_f_eq.data(),
+                                      d_omega_1.data(),
+                                      d_omega_2.data(),
+                                      d_omega_3.data(),
+                                      d_S.data(),
+                                      d_phi.data(),
+                                      d_rho.data(),
+                                      d_p.data(),
+                                      d_rho_mdt.data(),
+                                      d_p_mdt.data(),
+                                      Lx,
+                                      Ly);
 
         // Swap stream buffers
         std::swap(cur_f, next_f);
         std::swap(cur_g, next_g);
 
-        k_macroscopic<<<blocks, threads>>>(d_rho.data(), d_u.data(), d_F.data(), cur_f,
-                                           Lx, Ly, a_g, dt);
+        k_macroscopic<<<blocks, threads>>>(
+            d_rho.data(), d_u.data(), d_F.data(), cur_f, Lx, Ly, a_g, dt);
 
-        k_phase_field<<<blocks, threads>>>(d_phi.data(), d_p.data(), cur_f, cur_g,
-                                           d_rho.data(), Lx, Ly, c1_squared, c2_squared,
-                                           p1_inf, p2_inf);
+        k_phase_field<<<blocks, threads>>>(d_phi.data(),
+                                           d_p.data(),
+                                           cur_f,
+                                           cur_g,
+                                           d_rho.data(),
+                                           Lx,
+                                           Ly,
+                                           c1_squared,
+                                           c2_squared,
+                                           p1_inf,
+                                           p2_inf);
 
-        k_cal_equilibrium<<<blocks, threads>>>(d_f_eq.data(), d_rho.data(), d_u.data(), d_p.data(),
-                                               Lx, Ly, cs2, cs4, cs6);
+        k_cal_equilibrium<<<blocks, threads>>>(
+            d_f_eq.data(), d_rho.data(), d_u.data(), d_p.data(), Lx, Ly, cs2, cs4, cs6);
 
         if (step % print_interval == 0) {
             cglbm::cuda::synchronize();
@@ -574,7 +738,8 @@ int main(int argc, char** argv) {
     double t_end = cglbm::cuda::wall_time();
     double total_time = t_end - t_start;
     double mlups = (static_cast<double>(steps_to_run) * N) / (total_time * 1.0e6);
-    std::cout << "Finished simulation in " << total_time << " s (" << mlups << " MLUPs)." << std::endl;
+    std::cout << "Finished simulation in " << total_time << " s (" << mlups << " MLUPs)."
+              << std::endl;
 
     return 0;
 }

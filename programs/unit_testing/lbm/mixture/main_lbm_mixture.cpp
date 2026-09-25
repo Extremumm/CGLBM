@@ -251,7 +251,7 @@ void report_surface_force(GradientStencil stencil) {
             psi[static_cast<std::size_t>(i) * n + j] = -std::tanh((r - radius) / kWidth);
         }
     }
-    force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::Periodic, &fx, &fy);
+    force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::PeriodicY, &fx, &fy);
     // jump: p_out - p_in = sum of F_x along the +x ray, since grad p = F at rest
     double ray_sum = 0.0;
     int inward = 0;
@@ -286,10 +286,10 @@ void report_surface_force(GradientStencil stencil) {
                     -std::tanh((std::hypot(i - centre, j - centre) - r) / kWidth);
             }
         }
-        force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::Periodic, &fx, &fy, false);
+        force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::PeriodicY, &fx, &fy, false);
         std::cout << "force_jump_over_laplace_R" << r << " = " << ray_jump(fx, n) / (sigma / r)
                   << "\n";
-        force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::Periodic, &fx, &fy, true);
+        force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::PeriodicY, &fx, &fy, true);
         std::cout << "weighted_force_jump_over_laplace_R" << r << " = "
                   << ray_jump(fx, n) / (sigma / r) << "\n";
     }
@@ -307,14 +307,14 @@ void report_surface_force(GradientStencil stencil) {
             psi[static_cast<std::size_t>(i) * n + j] = -std::tanh(r / kWidth);
         }
     }
-    force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::Periodic, &fx, &fy);
+    force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::PeriodicY, &fx, &fy);
     for (std::size_t k = 0; k < size; ++k) {
         total_x += fx[k];
         total_y += fy[k];
         scale += std::hypot(fx[k], fy[k]);
     }
     std::cout << "ellipse_net_force = " << std::hypot(total_x, total_y) / scale << "\n";
-    force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::Periodic, &fx, &fy, true);
+    force_field(psi, n, sigma, stencil, cglbm::lbm::Boundary::PeriodicY, &fx, &fy, true);
     total_x = total_y = scale = 0.0;
     for (std::size_t k = 0; k < size; ++k) {
         total_x += fx[k];

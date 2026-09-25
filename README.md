@@ -77,31 +77,92 @@ mkdir -p artifacts/laplace && cd artifacts/laplace
 ../../bin/solvers/color_gradient/laplace/laplace_opt | tee run.log
 ```
 
-To change a configuration — lattice size, viscosities, surface tension, number
-of steps — edit the constants block at the top of the program's `main_*.cpp`
-and rebuild. Set the thread count of the OpenMP program with `OMP_NUM_THREADS`;
-without it that case falls back to eight threads.
+Every solver takes its case as built-in defaults and accepts overrides on the
+command line, so a resolution or a run length is a flag rather than a rebuild:
 
-Every solver takes one optional argument, the isotropy order of the colour
-gradient — `E4`, `E6` or `E8`:
-
-```bash
-utilities/run_case.sh laplace            # the program's own default
-../../bin/solvers/color_gradient/laplace/laplace_opt E4   # the original stencil
+```
+  --stencil=E4|E6|E8  isotropy order of the colour gradient
+  --initial-profile=colour|normalised
+                      field the initial tanh profile is prescribed in
+  --interface-field=colour|normalised
+                      field the colour gradient is taken of
+  --surface-tension=perturbation|csf|stress
+                      capillary stress in Omega^(2), a body force from an
+                      explicit curvature (Ba et al. 2016), or the same force
+                      as the divergence of the capillary stress, which
+                      conserves momentum
+  --recolouring=width|latva-kokko
+                      segregation strength from the pressure and an interface
+                      width, or from the density and beta
+  --beta=X            segregation strength of `latva-kokko`, in (0, 1]
+  --nu=X, --nu-b=X    kinematic shear and bulk viscosity of component 1
+  --nu2=X, --nu-b2=X  the same for component 2; unset means equal to
+                      component 1's
+  --viscosity-mixing=kinematic|dynamic
+                      interpolate nu, or rho nu, on the volume fraction across
+                      the interface
+  --initial-state=equilibrium|eos|linear
+                      how rho and p are laid down at t = 0
+  --lattice=d3q19|d3q27
+                      three-dimensional velocity set
+  --bx=X, --by=X, --bz=X
+                      imposed magnetic field; any of them switches the
+                      inductionless MHD coupling on
+  --mhd, --no-mhd     switch that coupling on or off explicitly
+  --sigma-e1=X, --sigma-e2=X
+                      electrical conductivity of each component
+  --conductivity=harmonic|arithmetic
+                      how the two are averaged onto a face
+  --potential-solver=fv|lbm
+                      discretisation of the potential equation
+  --mhd-tolerance=X   what the potential solve stops at
+  --mhd-iterations=N  its iteration or sweep limit
+  --drive-x=X, --drive-y=X, --drive-z=X
+                      uniform body force density, e.g. a pressure gradient
+  --nx=N, --ny=N, --nz=N
+                      lattice size (--nz for the three-dimensional cases)
+  --steps=N           number of time steps
+  --interval=N        write the CSV grids every N steps
+  --precision=N       significant digits in the CSV output (default 6)
+  --vtk               also write the whole field as field_<t>.vtk, for ParaView
+                      or VisIt; three-dimensional cases only
+  --threads=N         OpenMP threads; implies parallel execution
+  --help              the same list
 ```
 
-`laplace` also takes the density ratio ρ₁/ρ₂ and the dynamic viscosity ratio
-μ₁/μ₂ after the stencil. They default to the shipped case, 20 and 20 (a single
-kinematic viscosity). The high-density-ratio benchmark is:
-
 ```bash
-../../bin/solvers/color_gradient/laplace/laplace_opt E8 1e4 1   # ρ₁/ρ₂ = 10⁴, μ₁ = μ₂
+utilities/run_case.sh laplace                    # the case as shipped
+bin/solvers/color_gradient/laplace/laplace_opt E4        # the original stencil
+bin/solvers/color_gradient/laplace/laplace_opt --nx=256 --steps=5000
 ```
 
-At large density ratios, give the viscosity ratio explicitly. With a single
-kinematic viscosity the droplet's relaxation time grows with the density ratio
-(τ ≈ 5×10⁴ at 10⁴), and the scheme does not survive that. See
-[`docs/numerics.md`](docs/numerics.md#the-high-density-ratio-scheme).
+The bare stencil name is still accepted as the first argument, as before.
+
+The run log opens with the full configuration as `key = value` lines, which is
+what `pycglbm` reads back:
+
+```python
+CaseOutput("artifacts/laplace").parameter("sigma")
+```
+
+The physical constants of a case — densities, viscosities, surface tension, the
+unit conversion factors `c_dx` and `c_dt` — are in the `*_case()` function at
+the top of its `main_*.cpp`. Set the thread count of the OpenMP program with
+`OMP_NUM_THREADS` or `--threads`; without either it falls back to eight.
+
+The high-density-ratio benchmark runs the same `laplace` program at a density
+ratio of 10⁴, with the same dynamic viscosity in both fluids:
+
+```bash
+bin/solvers/color_gradient/laplace/laplace_opt --rho1=1e4 \
+    --nu=1.6638e-4 --nu-b=1.6638e-4 --nu2=1.6638 --nu-b2=1.6638 \
+    --viscosity-mixing=dynamic --surface-tension=stress
+```
+
+`--viscosity-mixing=dynamic` is what makes this run: it keeps ρν, and with it
+τ, uniform across the interface, where interpolating ν leaves τ ≈ 10⁴ on the
+interface nodes. See
+[`docs/numerics.md`](docs/numerics.md#beyond-500-the-viscosity-mixing-and-the-capillary-stress).
 
 `droplet` is a separate, velocity-based solver for droplets that *move* at
 large density ratios, where the colour-gradient solvers diverge. It takes the
@@ -135,9 +196,20 @@ timestep:
 | `pressure_<t>.csv` | Ly × Lx | pressure p |
 
 One row per lattice row `j` (y), one column per node `i` (x), so `numpy` reads
-them as `array[y, x]`. `capillary` and `gravity_capillary` also append the
-interface position to `interface.csv`. A VTK writer (`outputVTK`) exists in
-every program for ParaView/VisIt, commented out of the time loop by default.
+them as `array[y, x]`. A three-dimensional case writes the `z = nz/2` slice into
+the same four files, so the post-processing reads it unchanged; `--vtk` adds the
+whole field as `field_<t>.vtk`, which is what ParaView or VisIt wants and what
+CSV cannot carry at these sizes.
+
+`capillary` and `gravity_capillary` also append the interface position to
+`interface.csv`, one line per interface node; `oscillation_3d` writes a
+different track into the same file, one line per step holding the droplet's
+three semi-axes. The header says which, and `CaseOutput.droplet_axes` reads the
+second. `cglbm::lbm::write_vtk` produces a ParaView/VisIt file from a
+two-dimensional state; no case calls it by default.
+
+Six significant digits is the default and loses about ten digits of a double.
+Pass `--precision=17` for output that round-trips.
 
 ### Programs
 
@@ -148,12 +220,18 @@ every program for ParaView/VisIt, commented out of the time loop by default.
 | `gravity_capillary` | 128×128 | 5×10⁴ | 4/1 | yes | droplet under gravity and surface tension |
 | `rayleigh_taylor` | 128×1028 | 5×10⁶ | 4/1 | yes | Rayleigh–Taylor instability, σ = 0, serial |
 | `rayleigh_taylor_omp` | 1024×4096 | 2×10⁶ | 4/1 | yes | same case, OpenMP, production resolution |
+| `laplace_high_ratio` | 100×100 | 4×10⁴ | 1000/1 | no | Laplace law at a density ratio of 1000, two-population solver |
+| `laplace_3d` | 48×48×48 | 1.5×10⁴ | 1000/1 | no | Laplace law in 3D, Δp = 2σ/R, two-population solver on D3Q19 |
+| `oscillation_3d` | 48×48×48 | 4×10³ | 10/1 | no | Lamb's mode-2 frequency of a ringing droplet, in 3D |
+| `rayleigh_taylor_3d` | 32×128×32 | 3×10³ | 3/1 | yes | Rayleigh–Taylor in 3D, single square-cell mode, σ = 0 |
+| `hartmann` | 8×64×8 | 2×10⁴ | 1/1 | no | Hartmann flow at Ha = 10, against its closed form |
+| `magnetic_rayleigh_taylor` | 128×128×4 | 8×10³ | 3.65/1 | yes | magnetic Rayleigh–Taylor, growth rate against the QS-MHD dispersion relation |
 | `droplet` | 128×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: static or moving droplet at large density ratio |
 | `layers` | 8×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: two layers sheared across their interfaces |
 
-> `rayleigh_taylor_omp` declares about 2 GB of static lattice arrays, which is
-> why `cmake/Exceptions.cmake` builds it with `-mcmodel=medium` on x86-64.
-> Check the available memory before launching it.
+> `rayleigh_taylor_omp` allocates several GB of lattice at its production
+> resolution. Check the available memory before launching it, or lower it with
+> `--nx` and `--ny`.
 
 ### Organization
 
@@ -174,19 +252,20 @@ Contains all the programs
 
 Contains all the sources for the library
 
-- `src/core` the constants
-- `src/lbm` the scheme itself: the two-component equation of state, the
-  isotropic colour-gradient stencils, the mixture quantities (volume fractions,
-  normalised colour field, consistent initial state, mixture viscosity), the
-  surface force as the divergence of a capillary stress, and the velocity-based
-  scheme of the `droplet` solver, each carrying its reference
+- `src/lbm` the schemes: the D2Q9, D3Q19 and D3Q27 lattices, the three
+  colour-gradient solvers and their time loops, the inductionless MHD module,
+  the two-component equation of state, the isotropic colour-gradient stencils,
+  the mixture quantities (volume fractions, mixture viscosity), the surface
+  force as the divergence of a capillary stress, the velocity-based scheme of
+  the `droplet` and `layers` solvers, the lattice storage and the output
+  writers — each carrying its reference
 - `src/omp` thread-level parallelism: thread count, ids, timing
 - `src/mpi` distributed memory: environment, Cartesian decomposition, halo
   exchange, error checking
+- `src/cuda` GPU support: device query, error checking, device memory
 
-The time loop still lives inside each program's `main_*.cpp`, and
-`src/main_cglbm.cpp` is the entry point waiting for it to move into the library.
-`src/lbm`, `src/omp` and `src/mpi` are complete and tested; see
+The time loop lives in `cglbm::lbm::Solver` (`src/lbm/solver.cpp`), and a
+program under `programs/solvers` is a case definition handed to it. See
 [`docs/numerics.md`](docs/numerics.md) and [`docs/parallel.md`](docs/parallel.md).
 
 #### The `artifacts` folder
@@ -201,6 +280,21 @@ discovers it automatically and builds the target `<name>_opt` / `<name>_dbg`
 from every source in that directory, so adding a case means adding a directory —
 no CMake edit. Its tests are `test_*.py` files placed beside it, usually in a
 `tests` subdirectory.
+
+A solver program fills a `cglbm::lbm::CaseConfig` and hands it to
+`cglbm::lbm::Solver`; the scheme itself is in the library and is not repeated
+per case:
+
+```cpp
+CaseConfig config;
+config.nx = 128;
+config.ny = 128;
+config.steps = 10000;
+config.physics.rho1 = 4.;
+config.physics.rho2 = 1.;
+config.boundary = Boundary::WallY;
+config.initial_phase = cosine_layer(0.2, /*inverted=*/true);
+```
 
 ## Testing
 
@@ -232,16 +326,92 @@ a solver are additionally marked `long` and skipped unless `--runlong` is given.
 `pycglbm.testing.run_program` runs a program in its own directory and returns
 the resulting `CaseOutput`.
 
-> **Where the Laplace case stands.** The shipped case relaxes to a stationary
-> jump of 1.021 σ/R, scored against the radius the density settles at. The
-> high-density-ratio case, `laplace E8 1e4 1`, relaxes to 1.015 σ/R at a density
-> ratio of 10⁴. The 2 % left is the finite interface width at R = 10. The
-> colour-gradient solvers are validated for static droplets only at large
-> density ratios: at 10⁴ a droplet moving at 10⁻³ lattice units per step
-> diverges. The velocity-based `droplet` solver runs it at 10⁻², and up to
-> 10⁻¹, with momentum conserved to rounding, and its static droplet carries
-> 0.998 σ/R. See
-> [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
+> **Where the Laplace case stands.** The shipped `laplace` case relaxes to a
+> stationary pressure jump of about 1.02 σ/R instead of σ/R, measured against
+> the radius the density field settles at, which is the surface where the two
+> components occupy equal volume. The jump is exact at t = 0 by construction.
+> The validation test pins this measured value to catch regressions; it does not
+> certify the Laplace law. The 2 % is the finite interface width at R = 10. At a
+> density ratio of 10⁴, with matched dynamic viscosities and
+> `--viscosity-mixing=dynamic`, the same program reads 1.018 σ/R after 3 × 10⁴
+> steps and runs 1.2 × 10⁵ without diverging. The colour-gradient solvers are
+> validated for static droplets only at large density ratios: at 10⁴ a droplet
+> moving at 10⁻³ lattice units per step diverges. The velocity-based `droplet` solver runs it at 10⁻²,
+> and up to 10⁻¹, with momentum conserved to rounding, and its static droplet
+> carries 0.998 σ/R. See [`docs/numerics.md`](docs/numerics.md).
+
+### Density ratio
+
+There are two colour-gradient solvers here, and which one you want depends
+entirely on the density ratio.
+
+**`cglbm::lbm::Solver`** (`laplace`, `capillary`, `gravity_capillary`,
+`rayleigh_taylor`) is the improved method of Lafarge et al.: the density ratio
+comes from a two-component equation of state, so it is independent of the
+sound-speed ratio and the model is fully compressible. It is quantitative — a
+couple of per cent on the Laplace jump — and steady up to a density ratio of
+about **500**. Two things carry it there, and both come from
+[Ba et al. (2016)](docs/references.md):
+
+- the interface is located by the bulk-normalised phase field φ_N = 2c − 1,
+  whose zero contour is the surface where the two components occupy equal
+  volume, rather than by the colour field, whose zero sits at φ = 0.998 at a
+  ratio of 10³ — well inside the light fluid;
+- the surface tension is applied as a body force built from an explicit
+  curvature, rather than as a capillary stress inside the collision, which
+  needs the relaxation time to be uniform across the interface and it is not.
+
+On the shipped `laplace` case that moved the jump from 0.895 to 1.021 σ/R and
+cut the spurious currents by a factor of 72, to 1.7 × 10⁻⁵. The enhanced
+equilibrium of Leclaire et al. (2013) turned out to be already present — it is
+the same expression as the third-order Hermite term the scheme already had,
+agreeing to 10⁻¹⁴.
+
+**At 10³ and above, as configured, it diverges.** Be careful reading short runs
+here: a density ratio of 10³ looks healthy for its first 5 × 10⁴ steps and dies
+at 8.7 × 10⁴, which is how this repository came to claim 10³ and, before that,
+10⁵. Everything quoted now is from 1.2 × 10⁵ steps with the whole time series
+checked.
+
+Two options take it further. Give the two fluids the same *dynamic* viscosity,
+mix it across the interface as ρν (`--viscosity-mixing=dynamic`) rather than as
+ν, and apply the tension as the divergence of the capillary stress
+(`--surface-tension=stress`), which conserves momentum. Interpolating ν leaves
+τ ≈ 10⁴ on the interface nodes even when the bulks match. With both options the
+Laplace case is converged at 10³ (1.027 σ/R) and runs 1.2 × 10⁵ steps at 10⁴
+without diverging, still converging slowly there (1.018 σ/R at 3 × 10⁴ steps,
+1.025 at 1.2 × 10⁵). See
+[`docs/numerics.md`](docs/numerics.md#beyond-500-the-viscosity-mixing-and-the-capillary-stress).
+
+**`cglbm::lbm::TwoPopulationSolver`** (`laplace_high_ratio`) is the classical
+model of Grunau, Reis & Phillips, Leclaire et al. and Ba et al.: one
+distribution per fluid, and the density ratio carried by the equilibrium's
+rest-particle weight. The two bulk pressures then match identically, so the
+pressure is continuous across the interface at any ratio, and each fluid's
+density has its own smooth profile. On Ba et al.'s own static-droplet
+benchmark it gives
+
+| density ratio | σ measured / σ | spurious currents | Ba et al. |
+|---|---|---|---|
+| 100 | 1.0024 | 2.9 × 10⁻⁵ | 1.0069, 6.8 × 10⁻⁵ |
+| 1000 | 1.0030 | 4.0 × 10⁻⁵ | 1.0074, 1.25 × 10⁻⁴ |
+
+converged, with the last half of the run flat to every digit. The price is the
+limitation the first model exists to avoid: the density ratio and the
+sound-speed ratio are tied together, so at 10³ the heavy fluid's sound speed is
+0.022 in lattice units. Use it for static or slow flows at high contrast, and
+`Solver` for anything acoustic below a few hundred.
+
+**In three dimensions** the two-population model is available as
+`cglbm::lbm::TwoPopulationSolver3D` on D3Q19 (`laplace_3d`). Laplace's law there
+is Δp = 2σ/R, and the case measures 1.026 of it at a density ratio of 1000 with
+spurious currents of 2 × 10⁻⁵ — 1.011 at R = 15, the error being second order in
+the resolution and flat in the density ratio. Only that model is extended: the
+equation-of-state solver's Hermite equilibrium and its corrective source terms
+would need a full three-dimensional re-derivation, which is not attempted here.
+
+The measurements, the derivations and what is still missing are in
+[`docs/numerics.md`](docs/numerics.md#how-far-the-density-ratio-goes).
 
 ## PyCGLBM
 
@@ -257,6 +427,10 @@ case.pressure_jump(30000, inner=5, outer=30)
 
 ## Documentation
 
+- [`docs/report/report.tex`](docs/report/) — the reference document: user
+  guide, command-line and configuration reference, the derivation of both
+  schemes with proofs, and the validation results with figures. `make` in that
+  directory builds `report.pdf`
 - [`docs/numerics.md`](docs/numerics.md) — the discretisation, the collision
   operators, the time loop, and where each step lives in the code
 - [`docs/parallel.md`](docs/parallel.md) — the OpenMP and MPI modules

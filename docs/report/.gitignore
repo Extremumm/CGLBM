@@ -1,0 +1,15 @@
+# LaTeX intermediates and the locally built data generator. report.pdf and the
+# figures are committed: the report is meant to be read without a LaTeX
+# installation, and the figures are what report.tex includes.
+*.aux
+*.log
+*.out
+*.toc
+*.fls
+*.fdb_latexmk
+report_data
+
+# The repository ignores *.csv, which is right for simulation output but not for
+# the measurements this report plots: those are inputs to the figures and are
+# meant to be versioned with them.
+!figures/data/*.csv

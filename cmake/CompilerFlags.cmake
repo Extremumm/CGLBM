@@ -11,6 +11,16 @@ message(
 )
 message(STATUS "")
 
+# Floating-point policy, applied to every compiler below.
+#
+# The recoloring step divides by the norm of the colour gradient, which goes to zero away from the
+# interface: keep IEEE semantics, never -ffast-math.
+#
+# -ffp-contract=off additionally stops the compiler fusing a*b+c into an FMA. Contraction is
+# value-changing and applied inconsistently, so without it the same source gives different last bits
+# at -O2 and at -O3, and an inlining decision alone can move a result. Pinning it is what lets a
+# refactor be checked against a recorded run bit for bit.
+
 if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
     set(COMMON_FLAGS
         "-g"
@@ -19,9 +29,8 @@ if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
         "-Wuninitialized"
         "-Wshadow"
         "-pedantic"
+        "-ffp-contract=off"
     )
-    # The recoloring step divides by the norm of the colour gradient, which goes to zero away from
-    # the interface: keep IEEE semantics, never -ffast-math.
     set(RELEASE_FLAGS "-O3" "-fno-fast-math" "-fno-finite-math-only")
     set(DEBUG_FLAGS
         "-Og"
@@ -43,6 +52,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
         "-Wuninitialized"
         "-Wshadow"
         "-pedantic"
+        "-ffp-contract=off"
     )
     set(RELEASE_FLAGS "-O3" "-fno-fast-math")
     set(DEBUG_FLAGS "-O0" "-g3" "-fno-fast-math" "-D_GLIBCXX_ASSERTIONS")
@@ -52,7 +62,7 @@ elseif(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 
 elseif(CMAKE_CXX_COMPILER_ID MATCHES "Intel")
     # icpx compiler (LINUX)
-    set(COMMON_FLAGS "-g" "-traceback" "-Wall")
+    set(COMMON_FLAGS "-g" "-traceback" "-Wall" "-ffp-contract=off")
     set(RELEASE_FLAGS "-O3" "-fp-model=precise")
     set(DEBUG_FLAGS "-O0" "-check=stack,uninit" "-fp-model=precise")
     if(ARCH)

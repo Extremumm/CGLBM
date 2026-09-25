@@ -3,7 +3,8 @@
 Six runs of programs/solvers/velocity_based/droplet:
 
 - `droplet E8 1e4 0`: a static droplet, the Laplace benchmark, to compare with
-  the colour-gradient `laplace E8 1e4 1`;
+  the colour-gradient `laplace` at a density ratio of 1e4
+  (test_laplace_high_density_ratio.py);
 - `droplet E8 1e4 0.01`: the same droplet launched at 0.01 lattice units per
   step into a fluid at rest. The colour-gradient solver diverges on this case
   within a few hundred steps, at any speed from 1e-3 up;
