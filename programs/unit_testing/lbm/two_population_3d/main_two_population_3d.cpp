@@ -33,6 +33,7 @@
 //
 //   main_two_population_3d [stencil]
 
+#include <algorithm>
 #include <cmath>
 #include <iostream>
 #include <string>
