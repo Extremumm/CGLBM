@@ -239,7 +239,9 @@ struct MhdPhysics {
     /// Which discretisation of the potential equation to use.
     PotentialSolver solver = PotentialSolver::FiniteVolume;
 
-    /// Relative residual, or relative change per sweep, the solve stops at.
+    /// What the solve stops at: the relative residual for the finite volume,
+    /// the largest change of the potential since the previous check relative
+    /// to its largest value for the lattice-Boltzmann march.
     double tolerance = 1e-10;
 
     /// Iteration or sweep limit of the potential solve.
@@ -267,7 +269,7 @@ struct MhdPhysics {
     int lbm_check_interval = 16;
 };
 
-/// The velocity at which magnetic damping acts, `rho / (sigma B^2)`.
+/// The time scale on which magnetic damping acts, `rho / (sigma B^2)`.
 ///
 /// Returns infinity for a vanishing field or conductivity, so a case can
 /// compare against it unconditionally.

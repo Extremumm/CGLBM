@@ -62,7 +62,7 @@ int stencil_reach_3d(GradientStencil3D stencil);
 /// Name of the stencil, as accepted by :func:`stencil_from_name_3d`.
 const char* stencil_name_3d(GradientStencil3D stencil);
 
-/// Parse "E4" or "E6", case-insensitively.
+/// Parse "E4" or "E6", or the same in lower case.
 bool stencil_from_name_3d(const char* name, GradientStencil3D* stencil);
 
 /// Gradient of a triply periodic field at node (i, j, k).

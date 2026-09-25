@@ -166,7 +166,7 @@ inline const Lattice3D& lattice_3d(Lattice3DKind kind) {
     return kind == Lattice3DKind::D3Q27 ? kLatticeD3Q27 : kLatticeD3Q19;
 }
 
-/// Parse "D3Q19" or "D3Q27", case-insensitively.
+/// Parse "D3Q19" or "D3Q27", or the same in lower case.
 bool lattice_3d_from_name(const char* name, Lattice3DKind* kind);
 
 /// Name of `kind`, as accepted by :func:`lattice_3d_from_name`.

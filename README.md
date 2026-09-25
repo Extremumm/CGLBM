@@ -266,6 +266,7 @@ Contains all the sources for the library
 
 The time loop lives in `cglbm::lbm::Solver` (`src/lbm/solver.cpp`), and a
 program under `programs/solvers` is a case definition handed to it. See
+[`docs/code/`](docs/code/README.md) for the code reference,
 [`docs/numerics.md`](docs/numerics.md) and [`docs/parallel.md`](docs/parallel.md).
 
 #### The `artifacts` folder
@@ -431,6 +432,10 @@ case.pressure_jump(30000, inner=5, outer=30)
   guide, command-line and configuration reference, the derivation of both
   schemes with proofs, and the validation results with figures. `make` in that
   directory builds `report.pdf`
+- [`docs/code/`](docs/code/README.md) — the code reference: every file, type
+  and function of the library, the memory layout, each solver's time step
+  stage by stage, every command-line flag, the programs, the build and the
+  test suite
 - [`docs/numerics.md`](docs/numerics.md) — the discretisation, the collision
   operators, the time loop, and where each step lives in the code
 - [`docs/parallel.md`](docs/parallel.md) — the OpenMP and MPI modules

@@ -68,7 +68,7 @@ int stencil_reach(GradientStencil stencil);
 /// Name of the stencil, as accepted by :func:`stencil_from_name`.
 const char* stencil_name(GradientStencil stencil);
 
-/// Parse "E4", "E6" or "E8", case-insensitively.
+/// Parse "E4", "E6" or "E8", or the same in lower case.
 ///
 /// Returns false and leaves `stencil` untouched when `name` matches none.
 bool stencil_from_name(const char* name, GradientStencil* stencil);

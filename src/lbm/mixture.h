@@ -78,12 +78,14 @@ struct MixtureState {
 /// The mixture holding volume fraction `alpha1` of component 1 at pressure `p`.
 ///
 /// Both components sit at the same pressure, each at its own density
-/// rho_k(p), so that :func:`pressure` returns `p` for the result: this is the
-/// initial state that does not start the run with a pressure transient. A
-/// density linear in phi, which is how the programs other than `laplace` still
-/// initialise, puts the interface nodes far from that equilibrium -- at a
-/// density ratio of 1000 their pressure comes out about 300 times the ambient
-/// one.
+/// rho_k(p), so that :func:`pressure` returns `p` for the result: an initial
+/// state that does not start the run with a pressure transient. A density
+/// linear in phi (`InitialState::LinearDensity`) puts the interface nodes far
+/// from that equilibrium -- at a density ratio of 1000 their pressure comes out
+/// about 300 times the ambient one. `Solver` itself starts from
+/// `InitialState::MechanicalEquilibrium`, which solves the same problem by
+/// bisection on the density; this function is what the unit tests check the
+/// equation of state against.
 MixtureState mixture_from_volume_fraction(double alpha1, double p, const ComponentPair& components);
 
 /// Kinematic viscosity of the mixture, nu = Y_1 nu_1 + Y_2 nu_2.

@@ -19,8 +19,8 @@
 /// `depth == 1` field.
 ///
 /// Storage is value-initialised to zero, matching the `.bss` the arrays came
-/// from. Two solvers rely on that: the wall-bounded cases never write the
-/// source term on the `j == 0` row and read the zeros back.
+/// from. (The wall-bounded cases used to rely on that for the source term on
+/// the `j == 0` row, which `Solver::force()` now computes like any other.)
 
 namespace cglbm {
 namespace lbm {

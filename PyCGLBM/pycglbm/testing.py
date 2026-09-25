@@ -18,12 +18,12 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 
 def bin_dir() -> Path:
-    """Where CMake put the executables (``BIN_DIR``, default ``<root>/bin``)."""
+    """Where CMake put the executables: ``CGLBM_BIN_DIR``, default ``<root>/bin``."""
     return Path(os.environ.get("CGLBM_BIN_DIR", PROJECT_ROOT / "bin"))
 
 
 def artifacts_dir() -> Path:
-    """Where runs are written (``ARTIFACTS_DIR``, default ``<root>/artifacts``)."""
+    """Where runs are written: ``CGLBM_ARTIFACTS_DIR``, default ``<root>/artifacts``."""
     return Path(os.environ.get("CGLBM_ARTIFACTS_DIR", PROJECT_ROOT / "artifacts"))
 
 
