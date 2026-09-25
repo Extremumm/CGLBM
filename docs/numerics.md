@@ -239,7 +239,7 @@ So, plainly:
 
 That is with one kinematic viscosity for both fluids. With matched dynamic
 viscosities mixed as ρν, `--viscosity-mixing=dynamic`, 10³ and 10⁴ hold Laplace's
-law to 2–3 %; see
+law to 2–3 % and run 1.2 × 10⁵ steps without diverging; see
 [Beyond 500](#beyond-500-the-viscosity-mixing-and-the-capillary-stress).
 
 The 10³ run *looks* healthy for its first 5 × 10⁴ steps — it reads 0.96, then
@@ -686,7 +686,7 @@ than in an equation of state. That is a different model, not a missing term.
 | Ba et al. 2016 | 10³, dynamic, high Re; 0.74 % on σ, u_max 1.3 × 10⁻⁴ | MRT collision, CSF perturbation, normalised phase field |
 | Saito et al. 2023 | 10 accurately, 10³ marginally | sixth-order Hermite equilibria, central moments |
 | **this code, `TwoPopulationSolver`** | **10³ at 0.3 %, converged; 10⁴–10⁵ stable but not steady** | alpha_k equilibrium, isotropic gradient, CSF tension, recolouring adapted to the density ratio |
-| **this code, `Solver`** | **500, converged; 10³ and 10⁴ with dynamic viscosity mixing** | two-component equation of state, phi_N interface, CSF or capillary-stress tension |
+| **this code, `Solver`** | **500, converged; with dynamic viscosity mixing, 10³ converged and 10⁴ stable to 1.2 × 10⁵ steps** | two-component equation of state, phi_N interface, CSF or capillary-stress tension |
 
 Ratios of 10⁵ and beyond are reported by other families — chemical-potential
 pseudopotential models (> 6.5 × 10⁴), phase-field Allen–Cahn models, entropic
@@ -1568,7 +1568,7 @@ of Ba et al. (2016) are the same expression as the one already in
 monolithic `laplace` program, which reached the same conclusions as the sections
 above on where the interface is and how to start it, and differed on the two
 points below. With both, the Laplace case holds Laplace's law to 2–3 % at 10³
-and 10⁴:
+and 10⁴, and neither diverges in 1.2 × 10⁵ steps:
 
 ```bash
 laplace --rho1=1e4 --nu=1.6638e-4 --nu-b=1.6638e-4 --nu2=1.6638 --nu-b2=1.6638 \
@@ -1641,9 +1641,24 @@ the density settles at:
 
 The earlier program gave 1.023 at 10³ and 1.015 at 10⁴ on the same case.
 
-Whether they hold to 1.2 × 10⁵ steps, where the configurations of
-[How far the density ratio goes](#how-far-the-density-ratio-goes) diverge at
-10³, is not recorded here yet.
+The same four runs to 1.2 × 10⁵ steps, which is where
+[How far the density ratio goes](#how-far-the-density-ratio-goes) found 10³
+diverging at 8.7 × 10⁴ and 10⁴ collapsing its pressure:
+
+| ρ₁/ρ₂ | force | Δp / (σ/R(ρ)) at 3, 6, 9, 12 × 10⁴ steps | max &#124;u&#124; at 1.2 × 10⁵ | min p over the run |
+|---|---|---|---|---|
+| 10³ | CSF | 1.024, 1.024, 1.024, 1.024 | 2.4 × 10⁻⁵ | 0.334 |
+| 10³ | stress | 1.027, 1.027, 1.027, 1.027 | 2.0 × 10⁻⁵ | 0.334 |
+| 10⁴ | CSF | 1.015, 1.019, 1.021, 1.022 | 4.1 × 10⁻⁵ | 0.330 |
+| 10⁴ | stress | 1.018, 1.022, 1.024, 1.025 | 4.5 × 10⁻⁵ | 0.330 |
+
+At 10³ the state is stationary to four digits from 3 × 10⁴ steps on. At 10⁴ it
+is still converging, and towards the 10³ state: the density radius moves from
+9.98 to 10.01, the currents fall fifteenfold from 6.5 × 10⁻⁴, and the minimum
+pressure rises back to the 0.334 of the lower ratio instead of collapsing. The
+jump at 10⁴ is therefore good to about a per cent at 3 × 10⁴ steps, which is
+what `tests/test_laplace_high_density_ratio.py` pins; a converged figure needs
+a longer run than this one.
 
 The split between the phase and density interfaces follows
 $\tfrac{W}{2}\ln(\rho_1/\rho_2)$ (5.53 at 10³, 7.37 at 10⁴) but falls

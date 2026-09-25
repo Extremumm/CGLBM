@@ -23,7 +23,10 @@ What is checked:
 - the relaxed jump obeys Laplace's law against the radius the density settles at;
 - the spurious currents stay at their measured level.
 
-30 000 steps is 5.5e3 relaxation times at tau = 5.5.
+30 000 steps is 5.5e3 relaxation times at tau = 5.5. The same case run to 1.2e5
+steps does not diverge but is still converging towards the 1e3 state (the jump
+reaches 1.025, the currents fall to 4.5e-5), which docs/numerics.md records;
+this test pins the state at 3e4 steps.
 
 Only static droplets are claimed at this ratio. A droplet translating faster
 than about 1e-4 lattice units per step still breaks the colour-gradient scheme

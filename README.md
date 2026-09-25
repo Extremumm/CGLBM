@@ -333,9 +333,10 @@ the resulting `CaseOutput`.
 > The validation test pins this measured value to catch regressions; it does not
 > certify the Laplace law. The 2 % is the finite interface width at R = 10. At a
 > density ratio of 10⁴, with matched dynamic viscosities and
-> `--viscosity-mixing=dynamic`, the same program relaxes to 1.018 σ/R. The colour-gradient solvers are validated for static
-> droplets only at large density ratios: at 10⁴ a droplet moving at 10⁻³ lattice
-> units per step diverges. The velocity-based `droplet` solver runs it at 10⁻²,
+> `--viscosity-mixing=dynamic`, the same program reads 1.018 σ/R after 3 × 10⁴
+> steps and runs 1.2 × 10⁵ without diverging. The colour-gradient solvers are
+> validated for static droplets only at large density ratios: at 10⁴ a droplet
+> moving at 10⁻³ lattice units per step diverges. The velocity-based `droplet` solver runs it at 10⁻²,
 > and up to 10⁻¹, with momentum conserved to rounding, and its static droplet
 > carries 0.998 σ/R. See [`docs/numerics.md`](docs/numerics.md).
 
@@ -366,10 +367,21 @@ equilibrium of Leclaire et al. (2013) turned out to be already present — it is
 the same expression as the third-order Hermite term the scheme already had,
 agreeing to 10⁻¹⁴.
 
-**At 10³ and above it diverges.** Be careful reading short runs here: a density
-ratio of 10³ looks healthy for its first 5 × 10⁴ steps and dies at 8.7 × 10⁴,
-which is how this repository came to claim 10³ and, before that, 10⁵. Everything
-quoted now is from 1.2 × 10⁵ steps with the whole time series checked.
+**At 10³ and above, as configured, it diverges.** Be careful reading short runs
+here: a density ratio of 10³ looks healthy for its first 5 × 10⁴ steps and dies
+at 8.7 × 10⁴, which is how this repository came to claim 10³ and, before that,
+10⁵. Everything quoted now is from 1.2 × 10⁵ steps with the whole time series
+checked.
+
+Two options take it further. Give the two fluids the same *dynamic* viscosity,
+mix it across the interface as ρν (`--viscosity-mixing=dynamic`) rather than as
+ν, and apply the tension as the divergence of the capillary stress
+(`--surface-tension=stress`), which conserves momentum. Interpolating ν leaves
+τ ≈ 10⁴ on the interface nodes even when the bulks match. With both options the
+Laplace case is converged at 10³ (1.027 σ/R) and runs 1.2 × 10⁵ steps at 10⁴
+without diverging, still converging slowly there (1.018 σ/R at 3 × 10⁴ steps,
+1.025 at 1.2 × 10⁵). See
+[`docs/numerics.md`](docs/numerics.md#beyond-500-the-viscosity-mixing-and-the-capillary-stress).
 
 **`cglbm::lbm::TwoPopulationSolver`** (`laplace_high_ratio`) is the classical
 model of Grunau, Reis & Phillips, Leclaire et al. and Ba et al.: one
