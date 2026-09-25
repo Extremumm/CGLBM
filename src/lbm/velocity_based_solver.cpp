@@ -152,7 +152,7 @@ void Solver::acceleration() {
                           i,
                           j,
                           stencil,
-                          Boundary::Periodic,
+                          Boundary::PeriodicY,
                           &fx,
                           &fy);
             double dx = 0.0, dy = 0.0;

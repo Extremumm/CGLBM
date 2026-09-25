@@ -31,30 +31,33 @@
 
 namespace vb = cglbm::lbm::velocity_based;
 
-const int Lx = 128; // Number of lattice nodes in the x-direction
-const int Ly = 128; // Number of lattice nodes in the y-direction
+const int Lx = 128;  // Number of lattice nodes in the x-direction
+const int Ly = 128;  // Number of lattice nodes in the y-direction
 
-const double dx = 1.; // Lattice spacing
+const double dx = 1.;  // Lattice spacing
 
-const double c_dx = 1.e-5 ; // m : conversion factor from lattice units to physical units
-const double c_dt = c_dx/347./sqrt(3.); // s : conversion factor from lattice units to physical units
+const double c_dx = 1.e-5;  // m : conversion factor from lattice units to physical units
+const double c_dt =
+    c_dx / 347. / sqrt(3.);  // s : conversion factor from lattice units to physical units
 
-const int numSteps = 10000; // Number of simulation steps
-const int interval = 1000; // Output interval
+const int numSteps = 10000;  // Number of simulation steps
+const int interval = 1000;   // Output interval
 
-//parameters
-double rho1 = 1.e4; // kg * m-3 Density of the droplet, overridable from the command line
-const double rho2 = 1.;  // kg * m-3 Density of the surrounding fluid
-const double radius = 10.; // Radius of the droplet
-const double sigma = 1./(c_dx * c_dx * c_dx / c_dt / c_dt); // surface tension, as in the laplace case
-const double width = 1.6 * dx; // Interface width W: c = (1 + tanh(x/W))/2
-double velocity = 0.; // Initial velocity of the droplet, lattice units
+// parameters
+double rho1 = 1.e4;         // kg * m-3 Density of the droplet, overridable from the command line
+const double rho2 = 1.;     // kg * m-3 Density of the surrounding fluid
+const double radius = 10.;  // Radius of the droplet
+const double sigma =
+    1. / (c_dx * c_dx * c_dx / c_dt / c_dt);  // surface tension, as in the laplace case
+const double width = 1.6 * dx;                // Interface width W: c = (1 + tanh(x/W))/2
+double velocity = 0.;                         // Initial velocity of the droplet, lattice units
 
 // viscosities: the surrounding fluid gets a tenth of the laplace case's, which
 // puts its relaxation time at 1; the droplet's follows from the ratio
-const double nu2 = 1.e-3/(c_dx * c_dx / c_dt); // kinematic viscosity of component 2, lattice units
-const double mu2 = rho2 * nu2; // dynamic viscosity of component 2
-double mu1 = mu2; // dynamic viscosity of component 1
+const double nu2 =
+    1.e-3 / (c_dx * c_dx / c_dt);  // kinematic viscosity of component 2, lattice units
+const double mu2 = rho2 * nu2;     // dynamic viscosity of component 2
+double mu1 = mu2;                  // dynamic viscosity of component 1
 
 // Isotropy order of the gradients (surface tension, normals).
 cglbm::lbm::GradientStencil gradient_stencil = cglbm::lbm::GradientStencil::E8;
@@ -147,12 +150,14 @@ bool parseNumber(const char* text, double* value) {
 
 int main(int argc, char** argv) {
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &gradient_stencil)) {
-        std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8." << std::endl;
+        std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8."
+                  << std::endl;
         return 2;
     }
     double density_ratio = rho1 / rho2;
     if (argc > 2 && !(parseNumber(argv[2], &density_ratio) && density_ratio > 0.0)) {
-        std::cerr << "Invalid density ratio '" << argv[2] << "'; expected a positive number." << std::endl;
+        std::cerr << "Invalid density ratio '" << argv[2] << "'; expected a positive number."
+                  << std::endl;
         return 2;
     }
     if (argc > 3 && !parseNumber(argv[3], &velocity)) {
@@ -161,7 +166,8 @@ int main(int argc, char** argv) {
     }
     double viscosity_ratio = 1.0;
     if (argc > 4 && !(parseNumber(argv[4], &viscosity_ratio) && viscosity_ratio > 0.0)) {
-        std::cerr << "Invalid viscosity ratio '" << argv[4] << "'; expected a positive number." << std::endl;
+        std::cerr << "Invalid viscosity ratio '" << argv[4] << "'; expected a positive number."
+                  << std::endl;
         return 2;
     }
     rho1 = density_ratio * rho2;

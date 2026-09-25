@@ -101,10 +101,14 @@ void gradient_wall_y(const double* field,
                      double* grad_x,
                      double* grad_y);
 
-/// How the edges of the lattice are treated by a stencil.
+/// How the domain is closed along y. Both cases are periodic along x.
 enum class Boundary {
-    Periodic,  ///< both axes wrap, as in gradient_periodic
-    WallY      ///< x wraps, y is bounded by walls, as in gradient_wall_y
+    /// Periodic on both axes, as in gradient_periodic. The droplet cases
+    /// float in an unbounded fluid.
+    PeriodicY,
+    /// Resting walls at j = 0 and j = ny - 1, applied as half-way
+    /// bounce-back; the gradient is gradient_wall_y.
+    WallY
 };
 
 /// gradient_periodic or gradient_wall_y, whichever `boundary` names.
