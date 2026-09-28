@@ -92,15 +92,22 @@
    DOI: [10.1103/PhysRevE.106.045308](https://doi.org/10.1103/PhysRevE.106.045308)
 
    Velocity-based equilibrium; interface mobility independent of the density
-   ratio. Not implemented here — a candidate for the moving-interface limit
-   recorded in [`numerics.md`](numerics.md#what-is-not-solved).
+   ratio. The velocity-based `droplet` solver is this kind of model, a
+   colour-gradient segregation on a velocity-based hydrodynamics, and it sets
+   its mobility on its own too, through the phase carrier's temperature
+   (`SolverParameters::phase_temperature`; see
+   [`numerics.md`](numerics.md#oscillations-against-exact-normal-modes)).
 
 8. **S. Saito, N. Takada, S. Baba, S. Someya, H. Ito.** *Generalized equilibria
    for color-gradient lattice Boltzmann model based on higher-order Hermite
    polynomials.* Physical Review E **108**, 065305, 2023.
    [arXiv:2309.07801](https://arxiv.org/abs/2309.07801)
 
-   Also the clearest recent survey of this model family.
+   Also the clearest recent survey of this model family. Read in full: its
+   correction term is the one `Solver` takes as `S_Sp`, and at a density
+   ratio of 1000 a rising bubble stays stable but rises at the wrong speed,
+   which the authors put down to the finite-difference correction (see
+   [`literature.md`](literature.md#what-limits-the-density-ratio)).
 
 9. **S. Leclaire, M. Reggio, J.-Y. Trépanier.** *Progress and investigation on
    lattice Boltzmann modeling of multiple immiscible fluids or components with
@@ -365,6 +372,17 @@ entry above says otherwise, each is cited for what its abstract or Ba et al.
 
     Droplet splashing at a density ratio of 1000, Re 20–500: the test Ba et
     al. run with a colour-gradient model at 100.
+
+42. **B. Dorschner, F. Bösch, I. V. Karlin.** *Particles on demand for kinetic
+    theory.* Physical Review Letters **121**, 130602, 2018. And
+    **N. G. Kallikounis, B. Dorschner, I. V. Karlin.** *Particles on demand for
+    flows with strong discontinuities.* Physical Review E **106**, 015301,
+    2022. [arXiv:2203.05477](https://arxiv.org/abs/2203.05477)
+
+    Populations whose lattice follows each node's velocity and temperature,
+    which lifts the bound a fixed lattice puts on a cold fluid's speed
+    (`T + u² ≥ |u|`, [`literature.md`](literature.md#what-limits-the-density-ratio)).
+    Shown on compressible single-phase flows; not implemented here.
 
 ## Lattice Boltzmann background
 

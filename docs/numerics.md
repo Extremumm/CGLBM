@@ -1827,7 +1827,13 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
   $p/c_s^2$ against $\rho$: so $\rho|u| \lesssim p/c_s^2$ up to a weight,
   $|u| \lesssim p/\rho$. Raising the pressure level of both fluids moves it by
   at most a factor of 1.8, past which the light fluid's rest population goes
-  negative. The populations of $f$ carry $\rho$ and $\rho\vec u$,
+  negative. A larger lattice would not move it either. On any lattice whose
+  moving velocities have integer components, non-negative populations satisfy
+  $\sum f e_x^2 \ge \sum f |e_x| \ge |\sum f e_x|$. For a fluid at kinetic
+  temperature $T = p/\rho$ that reads $T + u_x^2 \ge |u_x|$: in lattice units
+  it cannot move much faster than it is hot. Saito et al. (2023) suggest D3Q39
+  for the finite-difference error of their correction term; that would not
+  lift this bound (see [`literature.md`](literature.md#what-limits-the-density-ratio)). The populations of $f$ carry $\rho$ and $\rho\vec u$,
   which jump by the density ratio across two or three nodes. Their moments pin
   the moving populations of the heavy fluid at $\approx p/3 \pm \rho u/2$, and
   keeping them non-negative needs $p/\rho \gtrsim u$: below
@@ -1886,6 +1892,25 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
   positivity bound a slowly moving interface at 10³ is a question of
   resolution in this solver, not a wall, and `--source-stencil=matched` is
   the setting that converges. The velocity-based solver gets there at λ = 64.
+
+  Three more measurements bound that. A wider interface stops helping at
+  λ = 128: with `--width=3.2 --width-init=2.2` the matched wave is damped
+  1.60 times the exact rate (over 3.8 × 10⁴ steps), against 1.57 at the
+  default width. The droplet does not converge at all. The mode-2 droplet at
+  1000, not damped with the matched stencil at R = 20 (−0.23 times the exact
+  rate), is still not damped at R = 40 (`oscillation --nx=256 --ny=256
+  --radius=40 --source-stencil=matched`, 5.5 × 10⁴ steps): −0.11 times the
+  exact rate, its deformation 0.0609 after one period where the exact mode's
+  has decayed from 0.060 to 0.049, with the frequency within 0.4 %. The
+  velocity-based solver goes from 1.132 at R = 20 to 1.026 at R = 40 (research
+  copy, carrier at `c_s²`), with the frequency at 0.997, as the heavy
+  fluid's boundary layer `(2ν₁/ω)^½` goes from 3.0 to 5.0 nodes. Nor does
+  changing the stencil where it straddles the interface help. Taking the
+  nine-point derivative instead wherever the density changes by more than
+  half within the matched stencil's reach makes the wave grow (−2.0 times
+  the exact rate) and damps the droplet 1.9 times too fast, 9 % off in
+  frequency: where the two derivatives meet, their difference is a source of
+  its own.
 - **A viscous heavy fluid at high density ratio.** Keep τ in the droplet of
   order 1–10. At $10^4$ with $\mu_1/\mu_2 = 20$ (τ ≈ 100 in the droplet), the
   jump wandered between 0.90 and 1.01 σ/R over 30 000 steps and the currents
@@ -2019,9 +2044,9 @@ tension, μ₂ = 0.05, and the damping rate over the exact one:
 
 | case | ρ₁/ρ₂ | μ₁ | nine-point | matched | velocity-based |
 |---|---|---|---|---|---|
-| capillary wave, λ = 64, amplitude 0.3 | 100 | 0.5 | 1.50 | 1.16 | 1.04 |
-| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.73 | 2.65 | 1.08 |
-| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.90 | −0.23 | 1.13 |
+| capillary wave, λ = 64, amplitude 0.3 | 100 | 0.5 | 1.50 | 1.16 | 1.03 |
+| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.73 | 2.65 | 1.05 |
+| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.90 | −0.23 | 1.08 |
 
 and the frequency over the exact one, in the same order: 0.989, 0.980, 0.988;
 0.903, 0.882, 0.982; 0.963, 0.998, 0.987.
@@ -2293,16 +2318,18 @@ adding 5 % of the lattice's own viscosity to every link turns the offset into
 `capillary_wave_vb` and `oscillation_vb` ring down a capillary wave and a
 mode-2 droplet, the cases the colour-gradient solver fails at a density ratio
 of 1000 (see [The heavy fluid's extensional viscosity](#the-heavy-fluids-extensional-viscosity)),
-against the exact normal mode of two viscous fluids: damping 1.04 and 1.08
-times the exact rate for the wave at 100 and 1000 (λ = 64), 1.13 for the
+against the exact normal mode of two viscous fluids: damping 1.030 and 1.049
+times the exact rate for the wave at 100 and 1000 (λ = 64), 1.082 for the
 droplet at 1000 (R = 20), with the frequency within 2 %. Their long tests pin
-that.
+that. Before the phase carrier's temperature was lowered (below) they were
+1.043, 1.084 and 1.132.
 
 The excess damping is resolution. The same wave at λ = 128 is damped 1.003
-times the exact rate, with the frequency at 0.996 (research copy). At λ = 64
-the heavy fluid's oscillatory boundary layer, `(2ν₁/ω)^½ = 2.8` nodes, is
-thinner than the interface, and two parts of the scheme mis-read it; measured
-on the wave at 1000 over one period, 1.071 as shipped:
+times the exact rate, with the frequency at 0.996 (research copy, carrier at
+`c_s²`). At λ = 64 the heavy fluid's oscillatory boundary layer,
+`(2ν₁/ω)^½ = 2.8` nodes, is thinner than the interface, and two parts of the
+scheme mis-read it; measured on the wave at 1000 over one period, 1.071 with
+the carrier at `c_s²`:
 
 - *The hybrid collision.* With the populations' own non-equilibrium only
   (weight 1) the wave is damped 1.016 times the exact rate. But the blend is
@@ -2313,17 +2340,68 @@ on the wave at 1000 over one period, 1.071 as shipped:
   velocity vanishes. Faded out by τ instead (kept where τ − 1/2 < 0.01) it
   keeps `layers` at 2.5 % and does nothing for the wave, whose heavy fluid has
   τ − 1/2 = 0.006. So the blend stays as it is.
-- *The phase mobility.* The memoryless phase populations fix it at
-  `c_s²/2`; relaxing them with τ_h = 0.8 instead (mobility `c_s²(τ_h − 1/2)`)
-  gives 1.050 and 1.082 for the wave and the droplet, and τ_h = 1.5 gives
-  1.34 for the wave. But below τ_h = 1 the relaxation is no longer a convex
-  combination, the bound that keeps c in [0, 1] is lost, and the static
-  droplet's spurious currents triple to 7.7 × 10⁻⁶; the `layers` slip goes to
-  2.2 %. So the transport stays memoryless.
+- *The phase mobility.* Memoryless phase populations diffuse c with half
+  their carrier's lattice temperature: `c_s²/2` on the lattice's own
+  carrier. Relaxing them with τ_h = 0.8 instead (mobility
+  `c_s²(τ_h − 1/2)`) gives 1.050 and 1.082 for the wave and the droplet, and
+  τ_h = 1.5 gives 1.34 for the wave. But below τ_h = 1 the relaxation is no
+  longer a convex combination, the bound that keeps c in [0, 1] is lost, and
+  the static droplet's spurious currents triple to 7.7 × 10⁻⁶; the `layers`
+  slip goes to 2.2 %. Lowering the carrier's temperature lowers the mobility
+  just the same and keeps the populations memoryless and convex; that is
+  what ships (below).
 
 Neither the link dissipations (`β` off: 1.069; upwinding off: 1.071) nor the
 bulk relaxation (τ_b = 0.6: 1.071) contributes. A wider interface trades
 damping for frequency (W = 2.4: 1.020 and 0.975; W = 1.2: 1.088 and 0.985).
+
+**The phase carrier's temperature.** `SolverParameters::phase_temperature`,
+0.2 by default, is the lattice temperature `T` of the carrier the phase
+populations are built on (`phase_carrier` in `velocity_based.h`), and the
+mobility is `T/2`: 0.1 instead of 1/6. The idea that the interface mobility
+should be chosen for the interface and not inherited from the hydrodynamic
+lattice is Subhedar's (2022), who decouples it from the density ratio in a
+colour-gradient segregation; here it is decoupled from `c_s²`. On D2Q9 the
+second-order Hermite carrier has the moments 1, `u` and `T I + u u` only at
+`T = c_s²`. Below it the second moment is off by O(u²), and in `layers` that
+moved both interfaces by 10⁻⁶ nodes per step. `phase_carrier` puts the
+missing second moment back on the axis and diagonal pairs, with no mass and
+no momentum, and `link_momentum` reads the carrier's volume with the same
+`T`. With it, `layers` keeps its interfaces where they were and its slip at
+1.93 % and 0.25 %, as in the research copy. A product-form carrier, exact in
+its moments by construction, raised the slip to 2.8 %.
+On the wave at 1000 the damping goes from 1.084 to 1.049 times the exact
+rate over the full run, and from 1.071 to 1.036 over one period, with the
+frequency unchanged at 0.982. At 100 it goes from 1.043 to 1.030, and the
+droplet from 1.132 to 1.082. The static droplet (Δp = 0.998 σ/R, currents
+2.3 × 10⁻⁶), the droplets launched at 0.01 and 0.1 and `layers` are
+unchanged within their long tests' tolerances.
+
+The temperature stops at 0.2 because the carrier has to stay non-negative at
+the speeds the solver runs at. At 0.2 it does up to |u| = 0.225, which covers
+the 0.2 a research copy has launched a droplet at; at 0.15 only up to 0.152,
+and at 0.1 only up to 0.093, below the 0.1 of the fast-droplet tests. One period of the wave at
+1000 gives 1.023 at 0.15, against 1.036 at 0.2: a lower temperature would
+buy a little more, but it would give up the margin over the fastest runs.
+
+**Large amplitudes.** `capillary_wave_vb E8 1000 2 12500 8` starts the same
+wave with an amplitude of 8 nodes instead of 0.3, `k a = 0.79`. Its
+interface moves at about 4 × 10⁻³ and the largest velocity is 3.9 × 10⁻³. The
+colour-gradient solver's heavy populations go negative from about 3 × 10⁻⁴
+(see [What is not solved](#what-is-not-solved)), and its wave, with the
+matched stencil, diverges at amplitudes of 4, 6 and 8, at steps 4000, 3800
+and 3550: the light nodes next to the interface speed up first, to
+3.7 × 10⁻² at an amplitude of 8, and then the run produces NaN. At 1 and 2 it
+stays bounded for 1.2 × 10⁴ steps, damped 2.36 and 1.86 times the linear
+rate against 2.52 at 0.3 over the same steps, and 8 % and 5 % low in
+frequency. Past an amplitude of about 1 its error changes with the
+amplitude, on the way to diverging at 4. The velocity-based wave stays
+bounded, its phase field within [−1, 1], and rings down at 1.090 times the
+linear mode's damping rate. Its
+frequency is 0.907 of the linear one; at an amplitude of 4 the two are 1.062
+and 0.961. The frequency falls as the wave stops being linear, and the
+damping stays within 9 % of the linear rate. The long test pins the run at 8.
+
 
 ## Structure of the solver
 

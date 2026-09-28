@@ -8,9 +8,10 @@ section says which of those ingredients this code has, and what the
 measurements here add to the picture.
 
 A note on sources. Ba et al. (2016) was read in full, from the author's
-accepted manuscript. Every other entry is from its abstract, from the
-publisher's summary, or from how Ba et al. and others describe it, and it is
-quoted only for what those say. Full references are in
+accepted manuscript, and so was Saito et al. (2023), from its arXiv
+version. Every other entry is from its abstract, from the publisher's
+summary, or from how Ba et al. and others describe it, and it is quoted only
+for what those say. Full references are in
 [`references.md`](references.md).
 
 ## Three families, sorted by where the density ratio lives
@@ -99,6 +100,7 @@ moving interface stops carrying the density in its populations**.
 | Recolouring for unequal rest weights | Leclaire et al. 2012 | not applicable | yes, `rest_weight` |
 | Viscosity mixed as ρν | — | `--viscosity-mixing=dynamic` | on the volume fraction |
 | Velocity-based equilibrium | Zu & He 2013; Fakhari et al. 2017; Subhedar 2022 | no | no — the `droplet` solver |
+| Interface mobility set on its own | Subhedar 2022 | no | no — `phase_temperature` in the `droplet` solver |
 
 Before this review, MRT was the one ingredient of Ba et al. neither
 colour-gradient solver had, and the two-population solver also lacked the
@@ -161,6 +163,34 @@ the populations, and together they explain the table above.
    model's kinematics of the terms ... which correct its dynamics for large
    density differences".
 
+**What Saito et al. (2023) find with the same scheme.** Theirs is the most
+recent colour-gradient model of family 1 tested at 10³ with a moving
+interface, and it carries the same correction as `Solver`,
+`Q = −3∇·[(p − ρc_s²)u]` (their Eq. (65)), taken by a finite difference.
+Its equilibria are exact to sixth order in the velocity and its collision is
+in central moments. At 10³ a rising bubble stays stable for 728 000 steps.
+Its centre of mass follows the reference, but its rise velocity does not, and
+they conclude that "further improvements are required to solve it more
+accurately within the framework of the CG model". The error they point at is
+the second limit: "the gradient computation of the correction term Q by
+finite differences introduces numerical errors that distort the droplet",
+and "a higher-order lattice (e.g., D3Q39 lattice) and the corresponding
+third-order equilibrium may be needed to solve it completely". The matched
+stencil here makes the same repair inside the heavy fluid without a new
+lattice. Neither touches the first limit, which no lattice can lift. On any
+lattice whose moving velocities have integer components, non-negative
+populations satisfy `Σ f e_x² ≥ Σ f |e_x| ≥ |Σ f e_x|`, so a fluid carried
+by them has `T + u_x² ≥ |u_x|`, with `T = p/ρ` its kinetic temperature: it
+cannot move, in lattice units, much faster than it is hot. The heavy fluid's
+`T` is the light fluid's divided by the density ratio. The one kinetic
+formulation without that bound is Particles on Demand (Dorschner, Bösch &
+Karlin 2018; Kallikounis, Dorschner & Karlin 2022). It moves the lattice to
+each node's own velocity and temperature, so every fluid is carried at the
+lattice's own temperature. It has been shown on compressible single-phase
+flows with near-vacuum regions, not on two immiscible fluids. It also
+replaces exact streaming with an interpolation or a finite-volume step, so
+it would be a different code rather than a change to this one.
+
 Neither limit is a missing term. Both come from asking D2Q9 populations to
 carry a fluid whose kinetic temperature is far below the lattice's. Family 3
 does not: its populations carry the velocity, or the momentum, at the lattice
@@ -185,10 +215,20 @@ has gone. In this code it is the velocity-based
   brings a capillary wave at a ratio of 100 from 1.50 to 1.16 times its
   damping, but at 10³ the moving interface is wrong with either stencil —
   3.7 and 2.6 times for the wave, and a mode-2 droplet damped eight times too
-  fast or not at all — where the velocity-based solver is within 13 %. That is
-  resolution rather than a wall, below the positivity bound: at twice the
-  resolution the wave is at 2.9 with the nine-point source and 1.6 with the
-  matched one.
+  fast or not at all — where the velocity-based solver is within 8 %. For
+  the wave that is resolution rather than a wall, below the positivity bound:
+  at twice the resolution it is at 2.9 with the nine-point source and 1.6
+  with the matched one, and a wider interface no longer helps. The droplet
+  with the matched source is not damped at twice the radius either (−0.11
+  times the exact rate at R = 40), so for it resolution is no cure. Above the bound
+  the wave diverges: at 1000 from an amplitude of 4 nodes, where the
+  velocity-based solver rings down an amplitude of 8 at 1.09 times the linear
+  damping rate.
 - Flows with moving interfaces at 10³ and above belong to the velocity-based
   solver, which is the colour-gradient segregation on a family-3
-  hydrodynamics — the model Subhedar (2022) describes.
+  hydrodynamics — the model Subhedar (2022) describes. As Subhedar also
+  argues, its interface mobility is set on its own rather than inherited from
+  the lattice: the phase populations are built on a carrier at a lattice
+  temperature of 0.2 instead of `c_s²`, which takes the capillary wave at
+  1000 from 1.084 to 1.049 times the exact damping rate
+  ([`numerics.md`](numerics.md#oscillations-against-exact-normal-modes)).

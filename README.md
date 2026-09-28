@@ -196,7 +196,12 @@ conserved to rounding at any density ratio; at 10⁴ a droplet can be launched a
 up to 0.1 lattice units per step, at viscosity ratios from 1 to 100. A static
 droplet carries 0.998 σ/R. `layers` shears two layers 10⁴ apart across their
 interfaces, with the same scheme and the same arguments (the third is the peak
-velocity). See
+velocity). `capillary_wave_vb` and `oscillation_vb` ring down a capillary
+wave and a droplet at a density ratio of 1000 against the exact viscous normal
+modes, within 8 % in damping and 2 % in frequency; a fifth argument sets the
+wave's amplitude, and at 8 nodes (`capillary_wave_vb E8 1000 2 12500 8`) the
+wave still rings down, where the colour-gradient `capillary_wave` diverges from
+4. See
 [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
 
 ### About the generated files
@@ -250,7 +255,7 @@ Pass `--precision=17` for output that round-trips.
 | `magnetic_rayleigh_taylor` | 128×128×4 | 8×10³ | 3.65/1 | yes | magnetic Rayleigh–Taylor, growth rate against the QS-MHD dispersion relation |
 | `droplet` | 128×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: static or moving droplet at large density ratio |
 | `layers` | 8×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: two layers sheared across their interfaces |
-| `capillary_wave_vb` | 64×128 | 2.5×10⁴ | 1000/1 | no | velocity-based solver: the `capillary_wave` case |
+| `capillary_wave_vb` | 64×128 | 2.5×10⁴ | 1000/1 | no | velocity-based solver: the `capillary_wave` case, at any amplitude |
 | `oscillation_vb` | 128×128 | 2.4×10⁴ | 1000/1 | no | velocity-based solver: the `oscillation` case |
 
 > `rayleigh_taylor_omp` allocates several GB of lattice at its production
