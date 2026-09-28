@@ -20,8 +20,14 @@ PROGRAM = "two_population"
 
 STENCILS = ("E4", "E6", "E8")
 
-#: Density ratios the solver is exercised at, as they appear in the report.
-RATIOS = ("r20", "r1000", "r100000")
+#: Density ratios the solver is exercised at, as they appear in the report. The
+#: ``mrt_`` runs use the MRT collision and the third-moment source, with Ba et
+#: al.'s equal kinematic viscosities: tau reaches 348 in the droplet at 1000.
+RATIOS = ("r20", "r1000", "r100000", "mrt_r1000", "mrt_r100000")
+
+#: Absolute error allowed in the MRT kernel and the third-moment source, whose
+#: inputs are of order 0.1 and 1e-4. Measured: 5e-16 and below.
+KERNEL_TOLERANCE = 1.0e-14
 
 #: Relative error allowed in the equilibrium's moments. Measured: 2e-16.
 MOMENT_TOLERANCE = 1.0e-12
@@ -115,3 +121,91 @@ def test_unit_test_two_population_keeps_the_phase_field_bounded(report, stencil,
 def test_unit_test_two_population_leaves_a_uniform_fluid_at_rest(report, stencil):
     """No interface and no gravity: nothing may start moving."""
     assert float(report[stencil]["rest_max_speed"]) < REST_SPEED_TOLERANCE
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_mrt_is_bgk_at_one_rate(report, stencil):
+    """With every rate equal, the MRT collision is BGK with Guo's forcing.
+
+    That is what makes the MRT an extension rather than a different model: the
+    moment basis only changes *which* moments relax at which rate.
+    """
+    assert float(report[stencil]["mrt_bgk_difference"]) < KERNEL_TOLERANCE
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_mrt_relaxes_each_moment_at_its_own_rate(report, stencil):
+    """Each moment of the result is ``m - s (m - m_eq) + (1 - s/2) m_S``.
+
+    And the basis is orthogonal, so its transpose over the row norms inverts it.
+    """
+    values = report[stencil]
+    assert float(values["mrt_moment_error"]) < KERNEL_TOLERANCE
+    assert float(values["mrt_orthogonality_error"]) == 0.0
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_third_moment_source_is_ba_eqs_17_18(report, stencil):
+    """The source carries no mass, no momentum and no shear.
+
+    It adds ``(1 - s_e/2) div Q`` to the trace of the second moment and
+    ``(1 - s_nu/2) (d_x Q_x - d_y Q_y)`` to its normal difference -- the two
+    places D2Q9's diagonal third moment reaches the viscous stress.
+    """
+    values = report[stencil]
+    assert float(values["third_moment_mass"]) < KERNEL_TOLERANCE
+    assert float(values["third_moment_momentum"]) < KERNEL_TOLERANCE
+    assert float(values["third_moment_shear"]) < KERNEL_TOLERANCE
+    assert float(values["third_moment_trace_error"]) < 1.0e-12
+    assert float(values["third_moment_normal_error"]) < 1.0e-12
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("stencil", STENCILS)
+def test_unit_test_two_population_mrt_conserves_mass_and_momentum(report, stencil):
+    """Node by node, on a droplet at 1000 with tau = 348 in the heavy fluid.
+
+    The collision must leave the mass alone and give the momentum exactly the
+    force, ``2 rho u - sum f e`` with Guo's half-force velocity, whatever the
+    rates and with the third-moment source on.
+    """
+    values = report[stencil]
+    assert float(values["mrt_solver_mass_error"]) < 1.0e-13
+    assert float(values["mrt_solver_momentum_error"]) < 1.0e-13
+
+
+@pytest.mark.unit_test
+def test_unit_test_two_population_third_moment_source_repairs_the_normal_stress(report):
+    """A Taylor-Green vortex in one fluid decays at ``2 nu k^2`` only with the source.
+
+    The vortex's strain is purely normal, so its decay measures the normal
+    viscous stress alone. D2Q9 gives it ``(1 - c_k^2) / (2 c_k^2)`` times its
+    value for a fluid of sound speed ``c_k``: 0.5417 at ``c_k^2 = 0.48`` (a
+    density ratio of 1 with alpha = 0.2) and 9.917 at 0.048 (a ratio of 10),
+    against 0.5427 and 9.922 measured. The source brings the first to 0.996.
+
+    What it cannot do is cancel the error exactly, because it is a nine-point
+    finite difference of a quantity ``1 / c_k^2`` times larger than the stress
+    it leaves behind, and the streaming that made the error is not that
+    stencil. The difference is of order ``k^2 / c_k^2``: 1.141 at a ratio of 10
+    on this 32^2 lattice, 1.037 on 64^2, 17.7 at a ratio of 1000. Pinned as
+    measured, so a change to either operator shows up here.
+    """
+    values = report["E8"]
+    assert float(values["tg_r1_uncorrected"]) == pytest.approx(0.5427, abs=2e-3)
+    assert float(values["tg_r10_uncorrected"]) == pytest.approx(9.922, abs=0.02)
+    assert float(values["tg_r1_corrected"]) == pytest.approx(0.9955, abs=2e-3)
+    assert float(values["tg_r10_corrected"]) == pytest.approx(1.1411, abs=2e-3)
+
+
+@pytest.mark.unit_test
+def test_unit_test_two_population_shear_stress_is_right_at_any_density_ratio(report):
+    """A shear wave in the heavy fluid decays at ``nu k^2`` without any source.
+
+    The off-diagonal third moment is the one the enhanced equilibrium repairs,
+    so the shear viscosity is right unaided even at a density ratio of 1000.
+    """
+    assert float(report["E8"]["tg_r1000_shear"]) == pytest.approx(1.0, abs=5e-3)

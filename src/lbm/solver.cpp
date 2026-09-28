@@ -630,8 +630,13 @@ void Solver::initialize() {
                 phi_local = phase_from_normalised(phi_local, physics.rho1, physics.rho2);
             }
             phi_(i, j) = phi_local;
-            u_(i, j, 0) = 0.0;  // the flow starts at rest
-            u_(i, j, 1) = 0.0;
+            // The flow starts at rest unless the case says otherwise.
+            double u_x = 0.0, u_y = 0.0;
+            if (config_.initial_velocity) {
+                config_.initial_velocity(config_, i, j, &u_x, &u_y);
+            }
+            u_(i, j, 0) = u_x;
+            u_(i, j, 1) = u_y;
 
             double rho_local =
                 physics.rho1 * (0.5 + 0.5 * phi_local) + physics.rho2 * (0.5 - 0.5 * phi_local);

@@ -5,6 +5,7 @@
 #include <stdexcept>
 
 #include "lbm/isotropic_gradient.h"
+#include "lbm/mrt.h"
 
 namespace cglbm {
 namespace lbm {
@@ -38,6 +39,14 @@ TwoPopulationSolver::TwoPopulationSolver(CaseConfig config)
     cs2_ = config_.units.cs2();
     wall_y_ = config_.boundary == Boundary::WallY;
     parallel_ = config_.parallel;
+    mrt_ = config_.collision == Collision::MRT;
+    correction_ = config_.third_moment_correction;
+    const double rates[3] = {physics.s_e, physics.s_eps, physics.s_q};
+    for (double rate : rates) {
+        if (mrt_ && !(rate > 0.0 && rate < 2.0)) {
+            throw std::invalid_argument("MRT relaxation rates must lie in (0, 2)");
+        }
+    }
 
     // The density ratio is carried by the rest weights:
     //     rho1 / rho2 = (1 - alpha_2) / (1 - alpha_1).
@@ -74,6 +83,10 @@ TwoPopulationSolver::TwoPopulationSolver(CaseConfig config)
     grad_y_ = Field(nx_, ny_);
     normal_x_ = Field(nx_, ny_);
     normal_y_ = Field(nx_, ny_);
+    if (correction_) {
+        q_x_ = Field(nx_, ny_);
+        q_y_ = Field(nx_, ny_);
+    }
     f1_ = Field(nx_, ny_, kQ);
     f2_ = Field(nx_, ny_, kQ);
 }
@@ -211,44 +224,128 @@ void TwoPopulationSolver::update_velocity() {
     }
 }
 
+void TwoPopulationSolver::third_moment_error() {
+    const bool parallel = parallel_;
+    // 1 - 3 (c_s^k)^2 in lattice units: zero for a fluid at the lattice sound
+    // speed, and 1.8 alpha_k - 0.8 in Ba et al.'s notation.
+    const double weight1 = 1.0 - cs_squared_[0] / cs2_;
+    const double weight2 = 1.0 - cs_squared_[1] / cs2_;
+#pragma omp parallel for collapse(2) if (parallel)
+    for (int i = 0; i < nx_; i++) {
+        for (int j = 0; j < ny_; j++) {
+            const double mass = weight1 * rho_1_(i, j) + weight2 * rho_2_(i, j);
+            q_x_(i, j) = mass * u_(i, j, 0);
+            q_y_(i, j) = mass * u_(i, j, 1);
+        }
+    }
+}
+
+void TwoPopulationSolver::collide_node(int i, int j, double* out1, double* out2) const {
+    const double u_x = u_(i, j, 0);
+    const double u_y = u_(i, j, 1);
+    const double density = rho_(i, j);
+    const double fraction = 0.5 * (1.0 + phi_n_(i, j));  // volume fraction of fluid 1
+    // Ba et al. Eq. (19): mu = dt (1/s_nu - 1/2) p, with mu interpolated
+    // across the interface (their Eq. 22 blends the rate parabolically;
+    // the volume fraction is used here, as in `Solver`).
+    const double mu = fraction * mu_[0] + (1.0 - fraction) * mu_[1];
+    const double tau = mu / (p_(i, j) * dt_) + 0.5;
+    const double omega = 1.0 / tau;
+    const double guo = (1.0 - 0.5 * omega) * dt_;
+
+    const double f_x = force_(i, j, 0);
+    const double f_y = force_(i, j, 1);
+
+    double eq1[kQ], eq2[kQ];
+    equilibrium(0, rho_1_(i, j), u_x, u_y, eq1);
+    equilibrium(1, rho_2_(i, j), u_x, u_y, eq2);
+
+    // Guo's forcing. It is split between the fluids in proportion to their
+    // share of the mass, so the total momentum comes out right.
+    double source[kQ];
+    for (int k = 0; k < kQ; k++) {
+        const double xi_x = kXi[k][0], xi_y = kXi[k][1];
+        const double eu = xi_x * u_x + xi_y * u_y;
+        source[k] =
+            kW[k] *
+            (((xi_x - u_x) + eu * xi_x / cs2_) * f_x + ((xi_y - u_y) + eu * xi_y / cs2_) * f_y) /
+            cs2_;
+    }
+    const double share1 = rho_1_(i, j) / density;
+    const double s_e = mrt_ ? config_.physics.s_e : omega;
+
+    // Ba et al. Eqs. (17)-(18): the divergence of Q added back into the trace
+    // of the stress and its normal difference. Their Eq. (20) is the
+    // nine-point isotropic derivative, which is E4 here.
+    double correction[kQ] = {0., 0., 0., 0., 0., 0., 0., 0., 0.};
+    if (correction_) {
+        double dqx_dx = 0.0, dqx_dy = 0.0, dqy_dx = 0.0, dqy_dy = 0.0;
+        if (wall_y_) {
+            gradient_wall_y(q_x_.data(), nx_, ny_, i, j, GradientStencil::E4, &dqx_dx, &dqx_dy);
+            gradient_wall_y(q_y_.data(), nx_, ny_, i, j, GradientStencil::E4, &dqy_dx, &dqy_dy);
+        } else {
+            gradient_periodic(q_x_.data(), nx_, ny_, i, j, GradientStencil::E4, &dqx_dx, &dqx_dy);
+            gradient_periodic(q_y_.data(), nx_, ny_, i, j, GradientStencil::E4, &dqy_dx, &dqy_dy);
+        }
+        add_third_moment_source(dqx_dx, dqy_dy, s_e, omega, dt_, correction);
+    }
+
+    if (!mrt_) {
+        for (int k = 0; k < kQ; k++) {
+            const double f1 = f1_(i, j, k);
+            const double f2 = f2_(i, j, k);
+            out1[k] = f1 + (-omega * (f1 - eq1[k]) + guo * share1 * source[k]);
+            out2[k] = f2 + (-omega * (f2 - eq2[k]) + guo * (1.0 - share1) * source[k]);
+            if (correction_) {
+                out1[k] += share1 * correction[k];
+                out2[k] += (1.0 - share1) * correction[k];
+            }
+        }
+        return;
+    }
+
+    // MRT on the total, which is all the recolouring reads.
+    double rates[kQ];
+    mrt_rates(omega, s_e, config_.physics.s_eps, config_.physics.s_q, rates);
+    double total[kQ], total_eq[kQ], post[kQ];
+    for (int k = 0; k < kQ; k++) {
+        total[k] = f1_(i, j, k) + f2_(i, j, k);
+        total_eq[k] = eq1[k] + eq2[k];
+    }
+    mrt_collide(total, total_eq, source, rates, dt_, post);
+    for (int k = 0; k < kQ; k++) {
+        post[k] += correction[k];
+        out1[k] = share1 * post[k];
+        out2[k] = post[k] - out1[k];
+    }
+}
+
 void TwoPopulationSolver::collide() {
+    if (correction_) {
+        third_moment_error();
+    }
     const bool parallel = parallel_;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
-            const double u_x = u_(i, j, 0);
-            const double u_y = u_(i, j, 1);
-            const double density = rho_(i, j);
-            const double fraction = 0.5 * (1.0 + phi_n_(i, j));  // volume fraction of fluid 1
-            // Ba et al. Eq. (19): mu = dt (1/s_nu - 1/2) p, with mu interpolated
-            // across the interface (their Eq. 22 blends the rate parabolically;
-            // the volume fraction is used here, as in `Solver`).
-            const double mu = fraction * mu_[0] + (1.0 - fraction) * mu_[1];
-            const double tau = mu / (p_(i, j) * dt_) + 0.5;
-            const double omega = 1.0 / tau;
-            const double guo = (1.0 - 0.5 * omega) * dt_;
-
-            const double f_x = force_(i, j, 0);
-            const double f_y = force_(i, j, 1);
-
-            double eq1[kQ], eq2[kQ];
-            equilibrium(0, rho_1_(i, j), u_x, u_y, eq1);
-            equilibrium(1, rho_2_(i, j), u_x, u_y, eq2);
-
+            double out1[kQ], out2[kQ];
+            collide_node(i, j, out1, out2);
             for (int k = 0; k < kQ; k++) {
-                const double xi_x = kXi[k][0], xi_y = kXi[k][1];
-                const double eu = xi_x * u_x + xi_y * u_y;
-                // Guo's forcing, split between the fluids in proportion to
-                // their share of the mass so the total momentum comes out right.
-                const double source = kW[k] *
-                                      (((xi_x - u_x) + eu * xi_x / cs2_) * f_x +
-                                       ((xi_y - u_y) + eu * xi_y / cs2_) * f_y) /
-                                      cs2_;
-                const double share1 = rho_1_(i, j) / density;
-                f1_(i, j, k) += -omega * (f1_(i, j, k) - eq1[k]) + guo * share1 * source;
-                f2_(i, j, k) += -omega * (f2_(i, j, k) - eq2[k]) + guo * (1.0 - share1) * source;
+                f1_(i, j, k) = out1[k];
+                f2_(i, j, k) = out2[k];
             }
         }
+    }
+}
+
+void TwoPopulationSolver::collide_node_for_test(int i, int j, double* out) {
+    if (correction_) {
+        third_moment_error();
+    }
+    double out1[kQ], out2[kQ];
+    collide_node(i, j, out1, out2);
+    for (int k = 0; k < kQ; k++) {
+        out[k] = out1[k] + out2[k];
     }
 }
 
@@ -339,10 +436,14 @@ void TwoPopulationSolver::initialize() {
             const double fraction = 0.5 * (1.0 + indicator);
             const double rho_1 = fraction * physics.rho1;
             const double rho_2 = (1.0 - fraction) * physics.rho2;
+            double u_x = 0.0, u_y = 0.0;
+            if (config_.initial_velocity) {
+                config_.initial_velocity(config_, i, j, &u_x, &u_y);
+            }
 
             double eq1[kQ], eq2[kQ];
-            equilibrium(0, rho_1, 0.0, 0.0, eq1);
-            equilibrium(1, rho_2, 0.0, 0.0, eq2);
+            equilibrium(0, rho_1, u_x, u_y, eq1);
+            equilibrium(1, rho_2, u_x, u_y, eq2);
             for (int k = 0; k < kQ; k++) {
                 f1_(i, j, k) = eq1[k];
                 f2_(i, j, k) = eq2[k];

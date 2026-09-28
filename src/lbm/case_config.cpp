@@ -76,6 +76,16 @@ void print_usage(const std::string& program_name) {
               << "                      segregation strength from the pressure and an\n"
               << "                      interface width, or from the density and beta\n"
               << "  --beta=X            segregation strength of `latva-kokko`, in (0, 1]\n"
+              << "  --collision=bgk|mrt collision of the two-population solver: one rate,\n"
+              << "                      or each moment at its own (Lallemand & Luo)\n"
+              << "  --s-e=X, --s-eps=X, --s-q=X\n"
+              << "                      MRT rates of the energy, its square and the energy\n"
+              << "                      flux, in (0, 2); Ba et al. use 1.25, 1.14, 1.6\n"
+              << "  --third-moment-correction, --no-third-moment-correction\n"
+              << "                      add Ba et al.'s source term for the diagonal third\n"
+              << "                      moment D2Q9 cannot carry (two-population solver)\n"
+              << "  --alpha2=X          rest weight of component 2 in the two-population\n"
+              << "                      solver, in [0, 1)\n"
               << "  --rho1=X, --rho2=X  bulk densities of the two components\n"
               << "  --sigma=X           surface tension\n"
               << "  --radius=X          prescribed interface radius\n"
@@ -472,6 +482,58 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             config.physics.beta = beta;
             continue;
         }
+        if (option_value(argument, "collision", &value)) {
+            if (value == "bgk") {
+                config.collision = Collision::BGK;
+            } else if (value == "mrt") {
+                config.collision = Collision::MRT;
+            } else {
+                std::cerr << "Unknown collision '" << value << "'; expected bgk or mrt."
+                          << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
+        {
+            // The three MRT rates share one rule: a relaxation rate outside
+            // (0, 2) is an unstable or a frozen moment, never a setting.
+            const char* names[3] = {"s-e", "s-eps", "s-q"};
+            double* rates[3] = {&config.physics.s_e, &config.physics.s_eps, &config.physics.s_q};
+            bool matched = false;
+            for (int r = 0; r < 3; r++) {
+                if (!option_value(argument, names[r], &value)) {
+                    continue;
+                }
+                const double rate = std::atof(value.c_str());
+                if (!(rate > 0.0 && rate < 2.0)) {
+                    std::cerr << "--" << names[r] << " must lie in (0, 2); got '" << value << "'."
+                              << std::endl;
+                    return CommandLineResult::Error;
+                }
+                *rates[r] = rate;
+                matched = true;
+            }
+            if (matched) {
+                continue;
+            }
+        }
+        if (argument == "--third-moment-correction") {
+            config.third_moment_correction = true;
+            continue;
+        }
+        if (argument == "--no-third-moment-correction") {
+            config.third_moment_correction = false;
+            continue;
+        }
+        if (option_value(argument, "alpha2", &value)) {
+            const double alpha2 = std::atof(value.c_str());
+            if (!(alpha2 >= 0.0 && alpha2 < 1.0)) {
+                std::cerr << "alpha2 must lie in [0, 1); got '" << value << "'." << std::endl;
+                return CommandLineResult::Error;
+            }
+            config.physics.alpha2 = alpha2;
+            continue;
+        }
         if (option_value(argument, "initial-state", &value)) {
             if (value == "equilibrium") {
                 config.initial_state = InitialState::MechanicalEquilibrium;
@@ -685,6 +747,9 @@ std::string describe(const CaseConfig& config) {
         << (config.viscosity_mixing == ViscosityMixing::Dynamic ? "dynamic" : "kinematic") << "\n"
         << "recolouring = "
         << (config.recolouring == Recolouring::LatvaKokko ? "latva-kokko" : "width") << "\n"
+        << "collision = " << (config.collision == Collision::MRT ? "mrt" : "bgk") << "\n"
+        << "third_moment_correction = " << (config.third_moment_correction ? "true" : "false")
+        << "\n"
         << "dx = " << config.units.dx << "\n"
         << "dt = " << config.units.dt << "\n"
         << "rho1 = " << physics.rho1 << "\n"
@@ -702,6 +767,9 @@ std::string describe(const CaseConfig& config) {
         << "ch_width_ope = " << physics.ch_width_ope << "\n"
         << "beta = " << physics.beta << "\n"
         << "alpha2 = " << physics.alpha2 << "\n"
+        << "s_e = " << physics.s_e << "\n"
+        << "s_eps = " << physics.s_eps << "\n"
+        << "s_q = " << physics.s_q << "\n"
         << "p1_inf = " << physics.p1_inf << "\n"
         << "p2_inf = " << physics.p2_inf << "\n"
         << "body_force_x = " << physics.body_force[0] << "\n"

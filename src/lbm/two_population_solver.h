@@ -44,6 +44,13 @@
 /// split that way because the velocity carries half the capillary force
 /// (Ba et al. Eq. 29) while the force itself is built from the densities.
 ///
+/// The collision is BGK by default and Lallemand & Luo's MRT on request
+/// (`CaseConfig::collision`), optionally with Ba et al.'s source term for the
+/// diagonal third moment (`CaseConfig::third_moment_correction`). Only the sum
+/// of the two fluids' post-collision populations matters: the recolouring
+/// splits it again by mass share straight afterwards. So the collision acts on
+/// the total, and the MRT needs no per-fluid rates.
+///
 /// References
 ///  - D. Grunau, S. Chen, K. Eggert, "A lattice Boltzmann model for multiphase
 ///    fluid flows", Phys. Fluids A 5, 2557 (1993). The alpha_k equilibrium.
@@ -132,6 +139,13 @@ public:
         return alpha2_;
     }
 
+    /// Post-collision populations of one node, for the unit tests.
+    ///
+    /// The sum of the two fluids' populations after `collide()` at (i, j),
+    /// before the recolouring splits it, into `out[kQ]`. The macroscopic
+    /// fields must be current (`refresh()`).
+    void collide_node_for_test(int i, int j, double* out);
+
 private:
     /// rho_k, rho, p and phi_N from the distributions.
     void densities();
@@ -139,7 +153,16 @@ private:
     void update_velocity();
     void update_colour_gradient();
     void surface_force();
+    /// Fill `q_x_`, `q_y_` with `sum_k (1 - 3 (c_s^k)^2) rho_k u`, the part of
+    /// the diagonal third moment D2Q9 gets wrong; see
+    /// `CaseConfig::third_moment_correction`.
+    void third_moment_error();
     void collide();
+    /// Collide one node, each fluid's post-collision populations into
+    /// `out1[kQ]` and `out2[kQ]`. Under BGK each fluid relaxes on its own, as
+    /// it always has; under MRT the total does and is split by mass share,
+    /// which is all the recolouring that follows reads anyway.
+    void collide_node(int i, int j, double* out1, double* out2) const;
     void recolor();
     void stream();
 
@@ -185,6 +208,8 @@ private:
     double cs2_;
     bool wall_y_;
     bool parallel_;
+    bool mrt_;         ///< config_.collision == Collision::MRT
+    bool correction_;  ///< config_.third_moment_correction
 
     double alpha1_;         ///< rest weight of fluid 1, from the density ratio
     double alpha2_;         ///< rest weight of fluid 2, a free parameter
@@ -205,6 +230,8 @@ private:
     Field grad_y_;    ///< colour gradient, y
     Field normal_x_;  ///< interface normal, x
     Field normal_y_;  ///< interface normal, y
+    Field q_x_;       ///< third-moment error Q, x; allocated only when corrected
+    Field q_y_;       ///< third-moment error Q, y
 
     Field f1_;  ///< distribution of fluid 1
     Field f2_;  ///< distribution of fluid 2

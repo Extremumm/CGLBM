@@ -236,3 +236,28 @@ def test_unit_test_lbm_solver_high_density_ratio_keeps_phase_bounded(solver_repo
     """phi must stay in [-1, 1] at high density ratio too."""
     values = solver_report["E8"]
     assert float(values[f"ratio_1e{exponent}_max_abs_phase"]) <= 1.0 + PHASE_TOLERANCE
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_solver_heavy_fluid_extensional_viscosity(solver_report):
+    """The normal viscous stress of a fluid far below ``rho c_s^2``, as measured.
+
+    A Taylor-Green vortex in one component decays at ``2 nu k^2`` in the
+    Navier-Stokes equations, and since its strain is purely normal that rate
+    measures the normal stress alone. At a density ratio of 1 the scheme gets
+    it (1.0004). For the heavy component it does not: its pressure is
+    ``rho_2 c_s^2``, far below its ``rho_1 c_s^2``, so D2Q9's diagonal third
+    moment is out by nearly the whole of ``rho u``. ``S_Sp`` cancels that with a
+    nine-point finite difference, and the streaming that made the error is not
+    that stencil; what is left is of order ``k^2 rho_1 / rho_2``. Measured on
+    32^2: 1.21 at a density ratio of 10 (1.053 on 64^2), 24.8 at 1000 -- the
+    heavy fluid resists extension 25 times more than it should at a
+    wavelength of 32 nodes. A shear wave in the same fluid is exact.
+
+    Pinned as measured, per the rule for a known gap; see docs/numerics.md.
+    """
+    values = solver_report["E8"]
+    assert float(values["tg_r1"]) == pytest.approx(1.0, abs=2e-3)
+    assert float(values["tg_r10"]) == pytest.approx(1.2119, abs=2e-3)
+    assert float(values["tg_r1000"]) == pytest.approx(24.82, rel=1e-3)
+    assert float(values["tg_r1000_shear"]) == pytest.approx(1.0, abs=2e-3)
