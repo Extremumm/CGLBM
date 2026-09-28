@@ -49,7 +49,8 @@ jobs:
       - name: Run the long tests
         run: |
           python -m pytest programs/solvers/color_gradient/laplace \
-            programs/solvers/velocity_based --runlong -v
+            programs/solvers/velocity_based/droplet \
+            programs/solvers/velocity_based/layers --runlong -v
 
       - name: Record what was measured
         if: always()
@@ -163,5 +164,95 @@ jobs:
           # The CSV grids are tens of megabytes; the logs say what happened.
           path: |
             artifacts/**/run.log
+          if-no-files-found: warn
+          retention-days: 30
+
+  oscillations:
+    name: Oscillation benchmarks
+    runs-on: ubuntu-latest
+    # nine runs of three to ten minutes each: the capillary wave at density
+    # ratios of 100 and 1000 and the droplet at 1000, in the colour-gradient
+    # solver with both source stencils and in the velocity-based solver
+    timeout-minutes: 120
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install the toolchain
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            cmake g++ libopenmpi-dev openmpi-bin
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install the Python tooling
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+          python -m pip install -e PyCGLBM
+
+      - name: Configure and build
+        run: |
+          cmake --preset gnu -DDEBUG=OFF -DPython3_EXECUTABLE="$(which python)"
+          cmake --build --preset gnu --target capillary_wave_opt oscillation_opt \
+            capillary_wave_vb_opt oscillation_vb_opt
+
+      - name: Run the long tests
+        run: |
+          python -m pytest programs/solvers/color_gradient/capillary_wave \
+            programs/solvers/color_gradient/oscillation \
+            programs/solvers/velocity_based/capillary_wave_vb \
+            programs/solvers/velocity_based/oscillation_vb --runlong -v
+
+      - name: Record what was measured
+        if: always()
+        run: |
+          python - <<'PY' >> "$GITHUB_STEP_SUMMARY"
+          import math, pathlib
+          from pycglbm import CaseOutput
+          from pycglbm.normal_modes import capillary_wave, droplet_mode
+          from pycglbm.oscillation import fit_damped_oscillation
+
+          print("## Oscillation benchmarks\n")
+          print("Decay rate and angular frequency over the exact viscous normal mode's.\n")
+          print("| run | damping | frequency |")
+          print("| --- | --- | --- |")
+          for rundir in sorted(pathlib.Path("artifacts").glob("*")):
+              if not (rundir / "mode.csv").is_file():
+                  continue
+              case = CaseOutput(rundir)
+              rho1, rho2 = case.parameter("rho1"), case.parameter("rho2")
+              if "mu1" in case.config:
+                  mu1, mu2 = case.parameter("mu1"), case.parameter("mu2")
+              else:
+                  mu1, mu2 = rho1 * case.parameter("nu"), rho2 * case.parameter("nu2")
+              if "radius" in case.config and math.isfinite(case.parameter("radius")):
+                  exact = droplet_mode(2, case.parameter("radius"), rho1, rho2, mu1, mu2,
+                                       case.parameter("sigma"))
+              else:
+                  exact = capillary_wave(2 * math.pi / case.parameter("nx"), rho1, rho2, mu1,
+                                         mu2, case.parameter("sigma"))
+              timesteps, signal = case.mode_track()
+              keep = timesteps >= 500
+              try:
+                  fit = fit_damped_oscillation(signal[keep], dt=timesteps[1] - timesteps[0])
+              except ValueError as error:
+                  print(f"| `{rundir.name}` | {error} | |")
+                  continue
+              print(f"| `{rundir.name}` | {fit.decay_rate / exact.decay_rate:.3f} "
+                    f"| {fit.angular_frequency / exact.angular_frequency:.4f} |")
+          PY
+
+      - name: Upload the run logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: oscillation-logs
+          path: |
+            artifacts/**/run.log
+            artifacts/**/mode.csv
           if-no-files-found: warn
           retention-days: 30

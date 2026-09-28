@@ -1956,18 +1956,23 @@ solutions say how. The references are the normal modes of two viscous fluids
 separated by a sharp interface of tension σ — for the capillary wave between
 two half-spaces, and for the mode-2 oscillation of a two-dimensional drop —
 solved numerically from the full linearised Navier–Stokes equations in both
-fluids; the familiar weak-damping formulas miss the boundary layer the
-tangential slip of the potential flows leaves at the interface, by up to 15 %
-here. Dynamic viscosities mixed as ρν, capillary-stress tension, μ₂ = 0.05,
-and the damping rate over the exact one (measured with research programs that
-are not in the repository, the velocity-based solver of the next section
-alongside):
+fluids (`pycglbm.normal_modes`, numpy only; its unit tests check it against an
+independent scipy solution and the single-fluid limits). The familiar
+weak-damping formulas miss the boundary layer the tangential slip of the
+potential flows leaves at the interface, by up to 15 % here. The cases are the
+programs `capillary_wave` and `oscillation`, and `capillary_wave_vb` and
+`oscillation_vb` for the velocity-based solver of the next section; their long
+tests pin what follows. Dynamic viscosities mixed as ρν, capillary-stress
+tension, μ₂ = 0.05, and the damping rate over the exact one:
 
 | case | ρ₁/ρ₂ | μ₁ | nine-point | matched | velocity-based |
 |---|---|---|---|---|---|
-| capillary wave, λ = 64, amplitude 0.5 | 100 | 0.5 | 1.50 | 1.16 | 1.04 |
-| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.72 | 2.63 | 1.08 |
-| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.9 | −0.2 | 1.13 |
+| capillary wave, λ = 64, amplitude 0.3 | 100 | 0.5 | 1.50 | 1.16 | 1.04 |
+| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.73 | 2.65 | 1.08 |
+| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.90 | −0.23 | 1.13 |
+
+and the frequency over the exact one, in the same order: 0.989, 0.980, 0.988;
+0.903, 0.882, 0.982; 0.963, 0.998, 0.987.
 
 At 100 the interior of the heavy fluid is what was wrong, and the option
 removes most of it. At 1000 the interface is, and the option cannot help: the

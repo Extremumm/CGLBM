@@ -158,6 +158,21 @@ class CaseOutput:
             raise ValueError(f"{path} is not a droplet track; its header reads {header!r}")
         return np.loadtxt(path, delimiter=",", skiprows=1, ndmin=2)
 
+    def mode_track(self) -> tuple[np.ndarray, np.ndarray]:
+        """The timesteps and the signal of ``mode.csv``, as two arrays.
+
+        The oscillation cases -- ``capillary_wave``, ``oscillation`` and their
+        velocity-based counterparts -- record one scalar every few steps: the
+        first Fourier coefficient of a wave's height, or a droplet's mode-2
+        deformation. A run that has diverged writes ``nan``, which is returned
+        as such for the caller to assert against.
+        """
+        path = self.rundir / "mode.csv"
+        if not path.is_file():
+            raise FileNotFoundError(f"No mode track in {self.rundir}: {path}")
+        data = np.genfromtxt(path, delimiter=",", skip_header=1, ndmin=2)
+        return data[:, 0], data[:, 1]
+
     def droplet_radius(self, timestep: int) -> float:
         """Effective radius of the ``phi > 0`` region, from its area."""
         area = float((self.phase(timestep) > 0).sum())

@@ -221,7 +221,11 @@ CSV cannot carry at these sizes.
 `interface.csv`, one line per interface node; `oscillation_3d` writes a
 different track into the same file, one line per step holding the droplet's
 three semi-axes. The header says which, and `CaseOutput.droplet_axes` reads the
-second. `cglbm::lbm::write_vtk` produces a ParaView/VisIt file from a
+second. The two-dimensional oscillation cases (`capillary_wave`, `oscillation`
+and their `_vb` counterparts) write `mode.csv` instead: one line every 50 steps
+holding a wave's first Fourier coefficient or a droplet's mode-2 deformation,
+which `CaseOutput.mode_track` reads and `pycglbm.normal_modes` scores against
+the exact viscous normal mode. `cglbm::lbm::write_vtk` produces a ParaView/VisIt file from a
 two-dimensional state; no case calls it by default.
 
 Six significant digits is the default and loses about ten digits of a double.
@@ -239,11 +243,15 @@ Pass `--precision=17` for output that round-trips.
 | `laplace_high_ratio` | 100×100 | 4×10⁴ | 1000/1 | no | Laplace law at a density ratio of 1000, two-population solver |
 | `laplace_3d` | 48×48×48 | 1.5×10⁴ | 1000/1 | no | Laplace law in 3D, Δp = 2σ/R, two-population solver on D3Q19 |
 | `oscillation_3d` | 48×48×48 | 4×10³ | 10/1 | no | Lamb's mode-2 frequency of a ringing droplet, in 3D |
+| `capillary_wave` | 64×128 | 2.5×10⁴ | 1000/1 | no | capillary wave on a heavy layer, against the exact viscous normal mode |
+| `oscillation` | 128×128 | 2.4×10⁴ | 1000/1 | no | mode-2 oscillation of a 2D droplet, against the exact viscous normal mode |
 | `rayleigh_taylor_3d` | 32×128×32 | 3×10³ | 3/1 | yes | Rayleigh–Taylor in 3D, single square-cell mode, σ = 0 |
 | `hartmann` | 8×64×8 | 2×10⁴ | 1/1 | no | Hartmann flow at Ha = 10, against its closed form |
 | `magnetic_rayleigh_taylor` | 128×128×4 | 8×10³ | 3.65/1 | yes | magnetic Rayleigh–Taylor, growth rate against the QS-MHD dispersion relation |
 | `droplet` | 128×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: static or moving droplet at large density ratio |
 | `layers` | 8×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: two layers sheared across their interfaces |
+| `capillary_wave_vb` | 64×128 | 2.5×10⁴ | 1000/1 | no | velocity-based solver: the `capillary_wave` case |
+| `oscillation_vb` | 128×128 | 2.4×10⁴ | 1000/1 | no | velocity-based solver: the `oscillation` case |
 
 > `rayleigh_taylor_omp` allocates several GB of lattice at its production
 > resolution. Check the available memory before launching it, or lower it with
