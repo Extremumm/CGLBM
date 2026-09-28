@@ -17,9 +17,9 @@ jobs:
   laplace:
     name: Laplace benchmark
     runs-on: ubuntu-latest
-    # three full laplace runs of about ten minutes each (density ratio 20 with E8
-    # and E4, density ratio 1e4), six droplet runs of about five and a layers
-    # run of under one
+    # five full laplace runs of about ten minutes each (density ratio 20 with E8
+    # and E4, density ratios 1e4, 1e5 and 1e6), six droplet runs of about five
+    # and a layers run of under one
     timeout-minutes: 120
 
     steps:
@@ -67,6 +67,8 @@ jobs:
           runs = {
               "density ratio 20 (`laplace`)": pathlib.Path("artifacts/laplace"),
               "density ratio 1e4 (`laplace --rho1=1e4 ... --viscosity-mixing=dynamic --surface-tension=stress`)": pathlib.Path("artifacts/laplace_ratio_1e4"),
+              "density ratio 1e5 (the same, `--rho1=1e5`)": pathlib.Path("artifacts/laplace_ratio_1e5"),
+              "density ratio 1e6 (the same, `--rho1=1e6`)": pathlib.Path("artifacts/laplace_ratio_1e6"),
           }
           for title, rundir in runs.items():
               print(f"### {title}\n")

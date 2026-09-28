@@ -1,7 +1,8 @@
-"""Laplace-law benchmark at a density ratio of 10^4.
+"""Laplace-law benchmark at density ratios of 10^4, 10^5 and 10^6.
 
-The same program as test_laplace_color_gradient.py, with a droplet 10^4 times
-denser than its surroundings and the same dynamic viscosity in both fluids:
+The same program as test_laplace_color_gradient.py, with a droplet 10^4, 10^5
+or 10^6 times denser than its surroundings and the same dynamic viscosity in
+both fluids:
 
     laplace --rho1=1e4 --nu=<nu/1e4> --nu-b=<nu/1e4> --nu2=<nu> --nu-b2=<nu>
             --viscosity-mixing=dynamic --surface-tension=stress
@@ -26,9 +27,11 @@ What is checked:
 30 000 steps is 5.5e3 relaxation times at tau = 5.5. The same case run to 1.2e5
 steps does not diverge but is still converging towards the 1e3 state (the jump
 reaches 1.025, the currents fall to 4.5e-5), which docs/numerics.md records;
-this test pins the state at 3e4 steps.
+this test pins the state at 3e4 steps. At 10^5 and 10^6 the jump at 3e4 steps
+is the same to three digits, 1.021; the currents are larger, 1.2e-3 and 3.5e-3.
+docs/numerics.md has what the longer runs do.
 
-Only static droplets are claimed at this ratio. A droplet translating faster
+Only static droplets are claimed at these ratios. A droplet translating faster
 than about 1e-4 lattice units per step still breaks the colour-gradient scheme
 at 10^4; the velocity-based droplet solver is the one for that.
 """
@@ -44,31 +47,40 @@ C_DT = C_DX / 347.0 / math.sqrt(3.0)
 #: The shipped kinematic viscosity, in lattice units, given to the light fluid.
 NU_LIGHT = 1.0e-2 / (C_DX**2 / C_DT)
 
-DENSITY_RATIO = 1.0e4
-#: Same dynamic viscosity in both fluids: nu_heavy = nu_light / ratio.
-NU_HEAVY = NU_LIGHT / DENSITY_RATIO
-ARGS = (
-    "--rho1=1e4",
-    f"--nu={NU_HEAVY!r}",
-    f"--nu-b={NU_HEAVY!r}",
-    f"--nu2={NU_LIGHT!r}",
-    f"--nu-b2={NU_LIGHT!r}",
-    "--viscosity-mixing=dynamic",
-    "--surface-tension=stress",
-)
-
-# Measured on this case, pinned to catch regressions.
-#: Delta p / (sigma / R_rho) at the end of the run.
-MEASURED_JUMP_RATIO = 1.018
+#: The density ratios run, each with what it measured at the end of the run,
+#: pinned to catch regressions: Delta p / (sigma / R_rho), and the largest
+#: spurious velocity in lattice units.
+MEASURED = {
+    "1e4": {"jump": 1.018, "max_velocity": 6.5e-4},
+    "1e5": {"jump": 1.021, "max_velocity": 1.24e-3},
+    "1e6": {"jump": 1.021, "max_velocity": 3.46e-3},
+}
 MEASURED_JUMP_TOLERANCE = 0.02
-#: Largest spurious velocity at the end of the run, lattice units.
-MEASURED_MAX_VELOCITY = 6.5e-4
 
 
-@pytest.fixture(scope="module")
-def high_ratio_run():
-    """One shared run of the Laplace case at density ratio 1e4."""
-    return run_program("laplace", artifacts_dir() / "laplace_ratio_1e4", args=ARGS, timeout=2400)
+def arguments(ratio: str) -> tuple[str, ...]:
+    """The shipped case at `ratio`, with the same dynamic viscosity in both fluids."""
+    nu_heavy = NU_LIGHT / float(ratio)
+    return (
+        f"--rho1={ratio}",
+        f"--nu={nu_heavy!r}",
+        f"--nu-b={nu_heavy!r}",
+        f"--nu2={NU_LIGHT!r}",
+        f"--nu-b2={NU_LIGHT!r}",
+        "--viscosity-mixing=dynamic",
+        "--surface-tension=stress",
+    )
+
+
+@pytest.fixture(scope="module", params=sorted(MEASURED))
+def high_ratio_run(request):
+    """One shared run of the Laplace case per density ratio."""
+    ratio = request.param
+    run = run_program(
+        "laplace", artifacts_dir() / f"laplace_ratio_{ratio}", args=arguments(ratio), timeout=2400
+    )
+    run.ratio_name = ratio
+    return run
 
 
 @pytest.fixture(scope="module")
@@ -77,6 +89,8 @@ def case(high_ratio_run):
     sigma = high_ratio_run.parameter("sigma")
     radius = high_ratio_run.parameter("radius")
     return {
+        "ratio": float(high_ratio_run.ratio_name),
+        "measured": MEASURED[high_ratio_run.ratio_name],
         "sigma": sigma,
         "radius": radius,
         "steps": high_ratio_run.parameter("steps", int),
@@ -91,9 +105,10 @@ def case(high_ratio_run):
 
 @pytest.mark.long
 @pytest.mark.verification
-def test_verification_laplace_high_density_ratio_runs_the_intended_case(high_ratio_run):
+def test_verification_laplace_high_density_ratio_runs_the_intended_case(high_ratio_run, case):
     """The options reached the solver: a flag lost on the way is a different case."""
-    assert high_ratio_run.parameter("rho1") / high_ratio_run.parameter("rho2") == DENSITY_RATIO
+    ratio = high_ratio_run.parameter("rho1") / high_ratio_run.parameter("rho2")
+    assert ratio == case["ratio"]
     assert high_ratio_run.config["viscosity_mixing"] == "dynamic"
     assert high_ratio_run.config["surface_tension"] == "stress"
     assert high_ratio_run.config["interface_field"] == "normalised"
@@ -107,12 +122,12 @@ def test_verification_laplace_high_density_ratio_initial_state(high_ratio_run, c
     assert jump == pytest.approx(case["jump"], rel=1.0e-3)
 
     density = high_ratio_run.density(0)
-    assert density.max() == pytest.approx(DENSITY_RATIO, rel=1.0e-5)
+    assert density.max() == pytest.approx(case["ratio"], rel=1.0e-5)
     density_radius = high_ratio_run.density_interface_radius(0)
     assert density_radius == pytest.approx(case["radius"], abs=0.1)
 
     # phi is a mass fraction: its zero sits (W/2) ln(rho_1/rho_2) further out
-    offset = 0.5 * case["width_init"] * math.log(DENSITY_RATIO)
+    offset = 0.5 * case["width_init"] * math.log(case["ratio"])
     assert high_ratio_run.phase_interface_radius(0) == pytest.approx(
         density_radius + offset, abs=0.1
     )
@@ -153,14 +168,14 @@ def test_validation_laplace_high_density_ratio_pressure_jump(high_ratio_run, cas
 
     The remaining couple of percent is the finite interface width at R = 10,
     not the density ratio: the shipped case gives 1.021 at a density ratio of
-    20, and the force alone integrates to 1.007 sigma/R at R = 20 (unit test of
-    lbm/mixture).
+    20, the same 1.021 at 10^5 and 10^6, and the force alone integrates to
+    1.007 sigma/R at R = 20 (unit test of lbm/mixture).
     """
     radius = high_ratio_run.density_interface_radius(case["steps"])
     jump = high_ratio_run.pressure_jump(case["steps"], inner=case["inner"], outer=case["outer"])
 
     ratio = jump / (case["sigma"] / radius)
-    assert ratio == pytest.approx(MEASURED_JUMP_RATIO, abs=MEASURED_JUMP_TOLERANCE)
+    assert ratio == pytest.approx(case["measured"]["jump"], abs=MEASURED_JUMP_TOLERANCE)
     assert ratio == pytest.approx(1.0, abs=0.05)
 
 
@@ -170,4 +185,4 @@ def test_validation_laplace_high_density_ratio_spurious_currents(high_ratio_run,
     """Parasitic currents stay at their measured level, and well below c_s."""
     velocity = high_ratio_run.velocity(case["steps"])
     speed = np.hypot(velocity[..., 0], velocity[..., 1])
-    assert speed.max() < 3.0 * MEASURED_MAX_VELOCITY
+    assert speed.max() < 3.0 * case["measured"]["max_velocity"]
