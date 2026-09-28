@@ -1834,6 +1834,42 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
   $U$, flooring the pressure. The
   [velocity-based solver](#the-velocity-based-droplet-solver) streams
   continuous moments instead, and removes the divergence.
+
+  Below the divergence the error is still large, and the capillary-wave and
+  droplet benchmarks put numbers on it at 1000 (see
+  [The heavy fluid's extensional viscosity](#the-heavy-fluids-extensional-viscosity)):
+  the wave damped 3.7 times too fast, the droplet 7.9. Three more attempts
+  were measured on the wave (one period, research copies):
+
+  - *A wider interface*, `--width=3.2 --width-init=2.2`: the damping goes
+    from 3.7 to 3.0 times the exact rate with the nine-point source and from
+    2.7 to 2.3 with the matched one, the frequency from 0.90 to 0.93 and from
+    0.88 to 0.95. Part of the error is the checkerboard component of the
+    interface's `Ψ`, which no source can cancel -- split half before and half
+    after the collision, a source cancels itself there -- and a smoother
+    interface has less of it. Most of the error is not that.
+  - *The cold momentum exchanged at the lighter end.* Streaming moves the
+    axis populations' cold momentum `± M u / 2`, `M = ρ − p/c_s²`, between
+    neighbours, so a light node beside a heavy one gains `M u / 2` of it per
+    step. Replacing that exchange, link by link, by the lighter end's `M`
+    times the velocity difference -- the weighting the velocity-based solver
+    uses -- diverges within 150 steps with either stencil: the streaming's
+    second difference of `M u` is what keeps the scheme stable there.
+  - *Where the source enters.* Placed wholly before the collision rather
+    than split, the third-moment source is Guo's rescaled by
+    `(2τ − 2)/(2τ − 1)`, −2/3 at τ = 0.8, which the linear analysis bears out
+    (2488 instead of 24.8 at 1000); no placement reaches the checkerboard.
+
+  What does help is resolution. The same wave at λ = 128 (`capillary_wave
+  --nx=128 --ny=256`, 4 × 10⁴ steps) is damped 2.94 times the exact rate with
+  the nine-point source and 1.57 with the matched one, at 0.979 and 0.958 of
+  the frequency, against 3.73 and 2.65, 0.903 and 0.882 at λ = 64. With the
+  matched stencil the excess falls by a factor of three per doubling; with the
+  nine-point one by 1.4, because what it adds is the heavy fluid's extensional
+  error, `k² ρ₁/ρ₂`, which a wave of this length still sees. So below the
+  positivity bound a slowly moving interface at 10³ is a question of
+  resolution in this solver, not a wall, and `--source-stencil=matched` is
+  the setting that converges. The velocity-based solver gets there at λ = 64.
 - **A viscous heavy fluid at high density ratio.** Keep τ in the droplet of
   order 1–10. At $10^4$ with $\mu_1/\mu_2 = 20$ (τ ≈ 100 in the droplet), the
   jump wandered between 0.90 and 1.01 σ/R over 30 000 steps and the currents
@@ -1956,22 +1992,29 @@ solutions say how. The references are the normal modes of two viscous fluids
 separated by a sharp interface of tension σ — for the capillary wave between
 two half-spaces, and for the mode-2 oscillation of a two-dimensional drop —
 solved numerically from the full linearised Navier–Stokes equations in both
-fluids; the familiar weak-damping formulas miss the boundary layer the
-tangential slip of the potential flows leaves at the interface, by up to 15 %
-here. Dynamic viscosities mixed as ρν, capillary-stress tension, μ₂ = 0.05,
-and the damping rate over the exact one (measured with research programs that
-are not in the repository, the velocity-based solver of the next section
-alongside):
+fluids (`pycglbm.normal_modes`, numpy only; its unit tests check it against an
+independent scipy solution and the single-fluid limits). The familiar
+weak-damping formulas miss the boundary layer the tangential slip of the
+potential flows leaves at the interface, by up to 15 % here. The cases are the
+programs `capillary_wave` and `oscillation`, and `capillary_wave_vb` and
+`oscillation_vb` for the velocity-based solver of the next section; their long
+tests pin what follows. Dynamic viscosities mixed as ρν, capillary-stress
+tension, μ₂ = 0.05, and the damping rate over the exact one:
 
 | case | ρ₁/ρ₂ | μ₁ | nine-point | matched | velocity-based |
 |---|---|---|---|---|---|
-| capillary wave, λ = 64, amplitude 0.5 | 100 | 0.5 | 1.50 | 1.16 | 1.04 |
-| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.72 | 2.63 | 1.08 |
-| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.9 | −0.2 | 1.13 |
+| capillary wave, λ = 64, amplitude 0.3 | 100 | 0.5 | 1.50 | 1.16 | 1.04 |
+| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.73 | 2.65 | 1.08 |
+| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.90 | −0.23 | 1.13 |
+
+and the frequency over the exact one, in the same order: 0.989, 0.980, 0.988;
+0.903, 0.882, 0.982; 0.963, 0.998, 0.987.
 
 At 100 the interior of the heavy fluid is what was wrong, and the option
-removes most of it. At 1000 the interface is, and the option cannot help: the
-capillary wave's frequency is 10–12 % low with either stencil, and in the
+removes most of it. At 1000, at this resolution, the interface is: the
+capillary wave's frequency is 10–12 % low with either stencil (twice as
+finely resolved, the option matters more -- 1.57 against 2.94 -- see
+[What is not solved](#what-is-not-solved)), and in the
 droplet the velocity on the light side of the interface reaches 10 to 20 times
 the physical one (1.4 to 5 × 10⁻³, where the velocity-based solver has 2 ×
 10⁻⁴) — the moving-interface limit listed above, reached at a fraction of the
@@ -1983,8 +2026,11 @@ matched one leaves the oscillation slightly undamped. With ε = 0.1 and the
 light fluid at τ = 0.65 the matched run diverges after 4800 steps, and the
 nine-point one does not. Hence the default. The option is for flows whose
 heavy phase deforms in its interior — at a density ratio up to a few hundred,
-or at any ratio where the interfaces do not move — and moving interfaces at
-10³ and above belong to the velocity-based solver.
+or at any ratio where the interfaces do not move — and for slowly moving
+interfaces at 10³ resolved twice as finely as here, where it converges and the
+nine-point derivative does not; whether the droplet's missing damping also
+goes with resolution has not been checked. Moving interfaces at 10³ and above
+are otherwise the velocity-based solver's.
 
 Two earlier attempts at this, before the symbol was known, are worth keeping
 for what they show. The axis-only centred difference, which matches the
@@ -2225,6 +2271,43 @@ $\beta$ the light layer would be free to slide (a research copy measured 3.6 %
 for the first version, 14 % with the lighter-density weighting alone), and
 adding 5 % of the lattice's own viscosity to every link turns the offset into
 2.2 % the other way.
+
+### Oscillations against exact normal modes
+
+`capillary_wave_vb` and `oscillation_vb` ring down a capillary wave and a
+mode-2 droplet, the cases the colour-gradient solver fails at a density ratio
+of 1000 (see [The heavy fluid's extensional viscosity](#the-heavy-fluids-extensional-viscosity)),
+against the exact normal mode of two viscous fluids: damping 1.04 and 1.08
+times the exact rate for the wave at 100 and 1000 (λ = 64), 1.13 for the
+droplet at 1000 (R = 20), with the frequency within 2 %. Their long tests pin
+that.
+
+The excess damping is resolution. The same wave at λ = 128 is damped 1.003
+times the exact rate, with the frequency at 0.996 (research copy). At λ = 64
+the heavy fluid's oscillatory boundary layer, `(2ν₁/ω)^½ = 2.8` nodes, is
+thinner than the interface, and two parts of the scheme mis-read it; measured
+on the wave at 1000 over one period, 1.071 as shipped:
+
+- *The hybrid collision.* With the populations' own non-equilibrium only
+  (weight 1) the wave is damped 1.016 times the exact rate. But the blend is
+  not optional where τ is within 10⁻⁴ of 1/2: faded out below a speed of
+  0.01, it takes the wave to 1.027 at 1000 and leaves every moving droplet
+  case bounded, and it takes the light layer of `layers` from a 1.9 % slip to
+  74 %, because the stress there has to cross the interface exactly where the
+  velocity vanishes. Faded out by τ instead (kept where τ − 1/2 < 0.01) it
+  keeps `layers` at 2.5 % and does nothing for the wave, whose heavy fluid has
+  τ − 1/2 = 0.006. So the blend stays as it is.
+- *The phase mobility.* The memoryless phase populations fix it at
+  `c_s²/2`; relaxing them with τ_h = 0.8 instead (mobility `c_s²(τ_h − 1/2)`)
+  gives 1.050 and 1.082 for the wave and the droplet, and τ_h = 1.5 gives
+  1.34 for the wave. But below τ_h = 1 the relaxation is no longer a convex
+  combination, the bound that keeps c in [0, 1] is lost, and the static
+  droplet's spurious currents triple to 7.7 × 10⁻⁶; the `layers` slip goes to
+  2.2 %. So the transport stays memoryless.
+
+Neither the link dissipations (`β` off: 1.069; upwinding off: 1.071) nor the
+bulk relaxation (τ_b = 0.6: 1.071) contributes. A wider interface trades
+damping for frequency (W = 2.4: 1.020 and 0.975; W = 1.2: 1.088 and 0.985).
 
 ## Structure of the solver
 

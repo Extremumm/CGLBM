@@ -12,6 +12,7 @@ This package turns such a directory into arrays and figures:
 """
 
 from pycglbm.files import CaseOutput, load_field, load_velocity
+from pycglbm.normal_modes import capillary_wave, droplet_mode
 from pycglbm.oscillation import fit_damped_oscillation, lamb_frequency
 from pycglbm.version import __version__
 
@@ -21,5 +22,7 @@ __all__ = [
     "load_velocity",
     "fit_damped_oscillation",
     "lamb_frequency",
+    "capillary_wave",
+    "droplet_mode",
     "__version__",
 ]

@@ -296,10 +296,12 @@ enum class Recolouring {
 /// why it is not the default. Against the exact normal modes of two viscous
 /// fluids, a capillary wave at a density ratio of 100 is damped 1.50 times too
 /// fast with `Isotropic` and 1.16 with `StreamingMatched`; at 1000 the moving
-/// interface is wrong with either (3.7 and 2.6), and a mode-2 droplet, whose
-/// interior strain neither stencil gets wrong, is damped eight times too fast
-/// with `Isotropic` and not at all with `StreamingMatched` -- whose run
-/// diverges where the other does not once the light fluid's tau is 0.65.
+/// interface is wrong with either (3.7 and 2.6; resolved twice as finely,
+/// 2.9 and 1.6, so it converges, and faster with this one), and a mode-2
+/// droplet, whose interior strain neither stencil gets wrong, is damped eight
+/// times too fast with `Isotropic` and not at all with `StreamingMatched` --
+/// whose run diverges where the other does not once the light fluid's tau is
+/// 0.65.
 enum class SourceStencil {
     Isotropic,        ///< the nine-point isotropic derivative, as published
     StreamingMatched  ///< the deviatoric part on the stencil the streaming uses
