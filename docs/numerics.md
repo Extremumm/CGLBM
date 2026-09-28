@@ -690,7 +690,7 @@ than in an equation of state. That is a different model, not a missing term.
 | Ba et al. 2016 | 10³, dynamic, high Re; 0.74 % on σ, u_max 1.3 × 10⁻⁴ | MRT collision, CSF perturbation, normalised phase field |
 | Saito et al. 2023 | 10 accurately, 10³ marginally | sixth-order Hermite equilibria, central moments |
 | **this code, `TwoPopulationSolver`** | **10³ at 0.3 %, converged; 10⁴–10⁵ stable but not steady; with MRT and the third-moment source, Ba et al.'s equal-viscosity case at 10³** | alpha_k equilibrium, isotropic gradient, CSF tension, recolouring adapted to the density ratio, MRT |
-| **this code, `Solver`** | **500, converged; with dynamic viscosity mixing, 10³ converged, 10⁴ stable to 1.2 × 10⁵ steps, and 10⁵ and 10⁶ holding 2 % on Laplace's law as far as they have been run, 5–6 × 10⁴ steps** | two-component equation of state, phi_N interface, CSF or capillary-stress tension |
+| **this code, `Solver`** | **500, converged; with dynamic viscosity mixing, 10³ converged, and 10⁴, 10⁵ and 10⁶ stable to 1.2 × 10⁵ steps, within 2.5 % of Laplace's law** | two-component equation of state, phi_N interface, CSF or capillary-stress tension |
 
 Ratios of 10⁵ and beyond are reported by other families — chemical-potential
 pseudopotential models (> 6.5 × 10⁴), phase-field Allen–Cahn models, entropic
@@ -1774,24 +1774,25 @@ it. The same case at 10⁵ and 10⁶ — the heavy fluid's kinematic viscosity
 divided accordingly, everything else unchanged — scored as
 `tests/test_laplace_high_density_ratio.py` scores it:
 
-| ρ₁/ρ₂ | Δp / (σ/R(ρ)) at 3 × 10⁴ steps | latest reading | max &#124;u&#124; at 3 × 10⁴ steps | latest | min p over the run |
-|---|---|---|---|---|---|
-| 10⁴ | 1.018 | 1.025 at 1.2 × 10⁵ | 6.5 × 10⁻⁴ | 4.5 × 10⁻⁵ | 0.330 |
-| 10⁵ | 1.021 | 1.021 at 6 × 10⁴ | 1.2 × 10⁻³ | 1.7 × 10⁻³ | 0.305 |
-| 10⁶ | 1.021 | 1.022 at 5 × 10⁴ | 3.5 × 10⁻³ | 3.2 × 10⁻³ | 0.279 |
+| ρ₁/ρ₂ | Δp / (σ/R(ρ)) at 3, 6, 12 × 10⁴ steps | max &#124;u&#124; at 3, 6, 12 × 10⁴ steps | R(ρ) at 0 and 1.2 × 10⁵ | min p over the run |
+|---|---|---|---|---|
+| 10⁴ | 1.018, 1.022, 1.025 | 6.5 × 10⁻⁴, —, 4.5 × 10⁻⁵ | 9.98 → 10.01 | 0.330 |
+| 10⁵ | 1.021, 1.021, 1.019 | 1.2, 1.7, 1.2 × 10⁻³ | 10.05 → 10.00 | 0.305 |
+| 10⁶ | 1.021, 1.022, 1.023 | 3.5, 3.0, 2.1 × 10⁻³ | 10.05 → 10.05 | 0.279 |
 
-The jump at 3 × 10⁴ steps is the same to three digits across two decades of
-density ratio, which says again that the 2 % is the interface width at R = 10
-and not the contrast, and it holds there as the runs go on. What grows with
-the ratio is the spurious currents, roughly doubling per decade at 3 × 10⁴
-steps. They do not settle the way the 10⁴ run's do: at 10⁶ they fall slowly,
-and at 10⁵ they turn back up after 3 × 10⁴ steps, 1.2 to 1.7 × 10⁻³ by
-6 × 10⁴, while the density radius drifts inward by 0.004 per 10⁴ steps. So these
-two ratios are held to Laplace's law as well as 10⁴ is, and are less settled
-than it. The phase field stays in [−1, 1], the minimum pressure stays positive,
-and the φ = 0 contour starts where `(W/2) ln(ρ₁/ρ₂)` puts it, 6.33 and 7.60
-nodes out at 10⁵ and 10⁶ against 6.30 and 7.53 measured. The long test runs all
-three ratios for 3 × 10⁴ steps.
+All three run the 1.2 × 10⁵ steps without diverging and hold Laplace's law to
+2.5 %. The jump at 3 × 10⁴ steps is the same to three digits across two decades
+of density ratio, which says again that the 2 % is the interface width at
+R = 10 and not the contrast. What grows with the ratio is the spurious
+currents, roughly doubling per decade at 3 × 10⁴ steps, and they settle more
+slowly than at 10⁴: at 10⁶ they fall steadily to 2.1 × 10⁻³, and at 10⁵ they
+rise to 1.7 × 10⁻³ at 6 × 10⁴ steps before falling back, while the density
+radius drifts inward by 0.004 per 10⁴ steps and the jump eases from 1.021 to
+1.019 with it. Neither is a converged state the way 10³ is; both are bounded
+and holding. The phase field stays in [−1, 1], the minimum pressure stays
+positive, and the φ = 0 contour starts where `(W/2) ln(ρ₁/ρ₂)` puts it, 6.33
+and 7.60 nodes out at 10⁵ and 10⁶ against 6.30 and 7.53 measured. The long test
+runs all three ratios for 3 × 10⁴ steps.
 
 The φ = 0 contour sits in the far tail of the profile at these ratios — at 10⁶
 the half-volume point is `φ = 1 − 2 × 10⁻⁶` — so the scheme is resolving a

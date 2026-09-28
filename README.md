@@ -392,8 +392,9 @@ mix it across the interface as ρν (`--viscosity-mixing=dynamic`) rather than a
 Laplace case is converged at 10³ (1.027 σ/R) and runs 1.2 × 10⁵ steps at 10⁴
 without diverging, still converging slowly there (1.018 σ/R at 3 × 10⁴ steps,
 1.025 at 1.2 × 10⁵). The same case at 10⁵ and 10⁶ reads 1.021 σ/R at 3 × 10⁴
-steps — the same to three digits — and holds it, with spurious currents that
-grow with the ratio and settle less than they do at 10⁴. See
+steps — the same to three digits — and 1.019 and 1.023 at 1.2 × 10⁵, with
+spurious currents that grow with the ratio and settle more slowly than they do
+at 10⁴. See
 [`docs/numerics.md`](docs/numerics.md#beyond-500-the-viscosity-mixing-and-the-capillary-stress).
 
 **`cglbm::lbm::TwoPopulationSolver`** (`laplace_high_ratio`) is the classical
