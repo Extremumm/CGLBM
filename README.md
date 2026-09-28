@@ -95,6 +95,15 @@ command line, so a resolution or a run length is a flag rather than a rebuild:
                       segregation strength from the pressure and an interface
                       width, or from the density and beta
   --beta=X            segregation strength of `latva-kokko`, in (0, 1]
+  --collision=bgk|mrt collision of the two-population solver: one rate for
+                      every moment, or each at its own (Lallemand & Luo)
+  --s-e=X, --s-eps=X, --s-q=X
+                      its MRT rates for the energy, its square and the
+                      energy flux; Ba et al. use 1.25, 1.14, 1.6
+  --third-moment-correction
+                      Ba et al.'s source term for the diagonal third moment
+                      D2Q9 cannot carry, in the two-population solver
+  --alpha2=X          rest weight of component 2 in the two-population solver
   --nu=X, --nu-b=X    kinematic shear and bulk viscosity of component 1
   --nu2=X, --nu-b2=X  the same for component 2; unset means equal to
                       component 1's
@@ -151,7 +160,8 @@ the top of its `main_*.cpp`. Set the thread count of the OpenMP program with
 `OMP_NUM_THREADS` or `--threads`; without either it falls back to eight.
 
 The high-density-ratio benchmark runs the same `laplace` program at a density
-ratio of 10⁴, with the same dynamic viscosity in both fluids:
+ratio of 10⁴ — or 10⁵, or 10⁶, dividing the first viscosity accordingly — with
+the same dynamic viscosity in both fluids:
 
 ```bash
 bin/solvers/color_gradient/laplace/laplace_opt --rho1=1e4 \
@@ -215,7 +225,7 @@ Pass `--precision=17` for output that round-trips.
 
 | Program | Lattice | Steps | ρ₁/ρ₂ | Gravity | Purpose |
 |---|---|---|---|---|---|
-| `laplace` | 128×128 | 3×10⁴ | 20/1, up to 10⁴/1 | no | Laplace law Δp = σ/R across a static droplet |
+| `laplace` | 128×128 | 3×10⁴ | 20/1, up to 10⁶/1 | no | Laplace law Δp = σ/R across a static droplet |
 | `capillary` | 128×128 | 10⁴ | 4/1 | no | oscillation period of a perturbed droplet |
 | `gravity_capillary` | 128×128 | 5×10⁴ | 4/1 | yes | droplet under gravity and surface tension |
 | `rayleigh_taylor` | 128×1028 | 5×10⁶ | 4/1 | yes | Rayleigh–Taylor instability, σ = 0, serial |
@@ -334,7 +344,8 @@ the resulting `CaseOutput`.
 > certify the Laplace law. The 2 % is the finite interface width at R = 10. At a
 > density ratio of 10⁴, with matched dynamic viscosities and
 > `--viscosity-mixing=dynamic`, the same program reads 1.018 σ/R after 3 × 10⁴
-> steps and runs 1.2 × 10⁵ without diverging. The colour-gradient solvers are
+> steps and runs 1.2 × 10⁵ without diverging; at 10⁵ and 10⁶ it reads 1.021
+> after 3 × 10⁴ steps. The colour-gradient solvers are
 > validated for static droplets only at large density ratios: at 10⁴ a droplet
 > moving at 10⁻³ lattice units per step diverges. The velocity-based `droplet` solver runs it at 10⁻²,
 > and up to 10⁻¹, with momentum conserved to rounding, and its static droplet
@@ -380,7 +391,9 @@ mix it across the interface as ρν (`--viscosity-mixing=dynamic`) rather than a
 τ ≈ 10⁴ on the interface nodes even when the bulks match. With both options the
 Laplace case is converged at 10³ (1.027 σ/R) and runs 1.2 × 10⁵ steps at 10⁴
 without diverging, still converging slowly there (1.018 σ/R at 3 × 10⁴ steps,
-1.025 at 1.2 × 10⁵). See
+1.025 at 1.2 × 10⁵). The same case at 10⁵ and 10⁶ reads 1.021 σ/R at 3 × 10⁴
+steps — the same to three digits — and holds it, with spurious currents that
+grow with the ratio and settle less than they do at 10⁴. See
 [`docs/numerics.md`](docs/numerics.md#beyond-500-the-viscosity-mixing-and-the-capillary-stress).
 
 **`cglbm::lbm::TwoPopulationSolver`** (`laplace_high_ratio`) is the classical
@@ -401,6 +414,28 @@ limitation the first model exists to avoid: the density ratio and the
 sound-speed ratio are tied together, so at 10³ the heavy fluid's sound speed is
 0.022 in lattice units. Use it for static or slow flows at high contrast, and
 `Solver` for anything acoustic below a few hundred.
+
+The table matches the dynamic viscosities. Ba et al. matched the *kinematic*
+ones, which puts τ at 348 in the heavy fluid, and with BGK that case reads
+0.38 σ/R and falling. `--collision=mrt --third-moment-correction` adds their
+MRT collision and their source term for the third moment D2Q9 cannot carry,
+and runs it as they did: 0.999 σ/R at 1.2 × 10⁵ steps, still creeping up, with
+spurious currents of 7.9 × 10⁻⁶ against their 1.0074 and 1.25 × 10⁻⁴.
+
+**Moving interfaces at a large density ratio are a different matter**, and the
+literature agrees: the colour-gradient results with a moving interface stop at
+100 (Ba et al.'s splashing droplet) to a few hundred (Lishchuk et al., "more
+than 500"), and every model reported at 10³ with one has stopped carrying the
+density in its populations. Two things stand in the way, both structural. The
+mass flux across a moving interface needs `u ρ₁/ρ₂` of order one to stay
+positive. And the heavy fluid, held at the light fluid's pressure, is a lattice
+gas far colder than the lattice, whose D2Q9 third moment is wrong by nearly the
+whole of its momentum; the finite-difference corrections for it leave an error
+the density ratio amplifies. On a Taylor–Green vortex in the heavy fluid at
+1000, `Solver` gets the extensional viscosity 25 times too large on a 32²
+lattice. The velocity-based `droplet` solver is free of both by construction:
+its populations carry the velocity at the lattice temperature, not the density.
+See [`docs/literature.md`](docs/literature.md).
 
 **In three dimensions** the two-population model is available as
 `cglbm::lbm::TwoPopulationSolver3D` on D3Q19 (`laplace_3d`). Laplace's law there
@@ -433,6 +468,8 @@ case.pressure_jump(30000, inner=5, outer=30)
   directory builds `report.pdf`
 - [`docs/numerics.md`](docs/numerics.md) — the discretisation, the collision
   operators, the time loop, and where each step lives in the code
+- [`docs/literature.md`](docs/literature.md) — how two-phase lattice Boltzmann
+  models reach high density ratios, what limits them, and what this code has
 - [`docs/parallel.md`](docs/parallel.md) — the OpenMP and MPI modules
 - [`docs/references.md`](docs/references.md) — bibliography and unit conversion
 - [`CONTRIBUTING.md`](CONTRIBUTING.md) — coding standards and workflow
