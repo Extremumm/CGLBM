@@ -1821,7 +1821,13 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
   | $10^4$ | 10⁻⁴ | bounded | 1.03 U | 3.2 × 10⁻² |
   | $10^4$ | 10⁻³ | diverges | — | — |
 
-  The limit is structural. The populations of $f$ carry $\rho$ and $\rho\vec u$,
+  The limit is structural. Moving populations can carry no more momentum
+  than their own mass times the lattice speed, and in a heavy fluid held at
+  the light fluid's pressure the moving populations hold a mass of about
+  $p/c_s^2$ against $\rho$: so $\rho|u| \lesssim p/c_s^2$ up to a weight,
+  $|u| \lesssim p/\rho$. Raising the pressure level of both fluids moves it by
+  at most a factor of 1.8, past which the light fluid's rest population goes
+  negative. The populations of $f$ carry $\rho$ and $\rho\vec u$,
   which jump by the density ratio across two or three nodes. Their moments pin
   the moving populations of the heavy fluid at $\approx p/3 \pm \rho u/2$, and
   keeping them non-negative needs $p/\rho \gtrsim u$: below
@@ -1853,8 +1859,18 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
     neighbours, so a light node beside a heavy one gains `M u / 2` of it per
     step. Replacing that exchange, link by link, by the lighter end's `M`
     times the velocity difference -- the weighting the velocity-based solver
-    uses -- diverges within 150 steps with either stencil: the streaming's
-    second difference of `M u` is what keeps the scheme stable there.
+    uses -- diverges within 150 steps with either stencil. The reason is
+    general. For the cold part, streaming is a Lax–Friedrichs scheme: a
+    node's new cold momentum is the mean of its neighbours', `½(J(x+1) +
+    J(x−1))` with `J = M u`, while its density changes by the centred
+    difference `−½(J(x+1) − J(x−1))`. The averaging is what keeps the
+    density update stable; without it the update is forward-time,
+    centred-space, which is unconditionally unstable. A conservative
+    replacement would exchange `D (u(x+1) − u(x))` over each link. The heavy
+    node needs `D ≈ M/2` there to keep its averaging, and the light node needs
+    `D` well below its own mass for its explicit diffusion to be stable. No
+    single `D` does both, so in this model the error can only be spread over
+    more nodes: a finer lattice or a wider interface.
   - *Where the source enters.* Placed wholly before the collision rather
     than split, the third-moment source is Guo's rescaled by
     `(2τ − 2)/(2τ − 1)`, −2/3 at τ = 0.8, which the linear analysis bears out
