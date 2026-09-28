@@ -19,12 +19,12 @@
 ///
 /// both continuous across the interface, and the density follows from the
 /// volume fraction c of component 1, rho = rho_2 + c (rho_1 - rho_2). c is
-/// carried by a second, memoryless set of populations h whose carrier is the
-/// Maxwellian Gamma_i(u) >= 0, so c stays in [0, 1]; the sharpening along the
-/// interface normal is the colour-gradient recolouring, and together they
-/// solve the conservative Allen-Cahn equation
+/// carried by a second, memoryless set of populations h whose carrier is a
+/// discrete Maxwellian Gamma_i(u) >= 0 at lattice temperature T, so c stays in
+/// [0, 1]; the sharpening along the interface normal is the colour-gradient
+/// recolouring, and together they solve the conservative Allen-Cahn equation
 ///
-///     dc/dt + div(c u) = div( M (grad c - 2 c (1 - c) / W  n) ),   M = cs^2 / 2,
+///     dc/dt + div(c u) = div( M (grad c - 2 c (1 - c) / W  n) ),   M = T / 2,
 ///
 /// whose equilibrium is c = (1 + tanh(x / W)) / 2. The components are
 /// incompressible: the lattice sound speed cs is an artificial compressibility
@@ -144,22 +144,23 @@ void phase_carrier(double ux, double uy, double temperature, double* gamma);
 /// g_i^eq = w_i P + Gamma_i(u) - w_i, with moments P, u and P cs^2 I + u u.
 void hydrodynamic_equilibrium(double pressure_number, double ux, double uy, double* equilibrium);
 
-/// Post-collision phase populations c Gamma_i(u) + theta w_i A (xi_i . n) / cs^2.
+/// Post-collision phase populations c Gamma_i(u) + theta w_i A (xi_i . n) / T.
 ///
-/// A = M 2 c (1 - c) / W with M = cs^2 / 2 is the sharpening flux along the
+/// A = M 2 c (1 - c) / W with M = T / 2 is the sharpening flux along the
 /// unit normal n that balances the diffusion of the memoryless transport on
 /// the profile c = (1 + tanh(x / W)) / 2. Streamed, they give the new c.
 ///
 /// theta in [0, 1] is the largest weight that keeps every population between
 /// 0 and Gamma_i(u), and with them the component-2 populations Gamma_i - h_i,
 /// non-negative. Then the new c is a sum of non-negative parts, and so is
-/// 1 - c up to the compressibility of the carriers. It is 1 at rest and
-/// below |u| ~ 0.03 with W = 1.6; faster, the carrier against the flow drops
+/// 1 - c up to the compressibility of the carriers. It is 1 at rest and, at
+/// cs^2, below |u| ~ 0.03 with W = 1.6; faster, the carrier against the flow drops
 /// below the sharpening on the far side of the interface, and a population a
 /// thousandth of a unit negative there is a negative mass as large as the
 /// light node's own at a density ratio of 1e4.
 ///
-/// `temperature` is that of phase_carrier; the mobility is half of it.
+/// T is `temperature`, that of phase_carrier, and w_i are the weights at T;
+/// the defaults are the lattice's own, cs^2 and its weights.
 void phase_populations(double c,
                        double ux,
                        double uy,

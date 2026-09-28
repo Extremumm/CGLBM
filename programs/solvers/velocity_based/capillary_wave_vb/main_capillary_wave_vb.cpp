@@ -11,12 +11,18 @@
 // src/lbm/velocity_based.h: the same case as the colour-gradient
 // `capillary_wave`, against the same exact viscous normal mode.
 //
-// Usage: capillary_wave_vb [E4|E6|E8] [density_ratio] [mu1] [steps]
+// Usage: capillary_wave_vb [E4|E6|E8] [density_ratio] [mu1] [steps] [amplitude]
 //
 //   density_ratio  rho1/rho2, default 1000.
 //   mu1            dynamic viscosity of the heavy layer, lattice units,
 //                  default 2. The light fluid's is 0.05.
 //   steps          default 25000.
+//   amplitude      initial displacement of the lower interface, nodes,
+//                  default 0.3, where the wave is linear. At 1000 the
+//                  colour-gradient solver's wave diverges from 4 upwards,
+//                  where the interface moves at about 2e-3; this one does not
+//                  (docs/numerics.md, "Oscillations against exact normal
+//                  modes").
 //
 // A band of component 1 fills Ly/4 < y < 3Ly/4 of a doubly periodic box. The
 // lower interface is displaced by `amplitude cos(2 pi x / Lx)` and released;
@@ -37,8 +43,7 @@ const double c_dt = c_dx / 347. / std::sqrt(3.);  // s
 const double rho2 = 1.;
 const double mu2 = 0.05;
 const double sigma = 1. / (c_dx * c_dx * c_dx / c_dt / c_dt);  // as in the laplace case
-const double amplitude = 0.3;  // initial displacement of the lower interface, nodes
-const int interval = 5000;     // grid output interval
+const int interval = 5000;                                     // grid output interval
 const int track_interval = 50;
 
 // Four ASCII grids per output, as the other programs write them.
@@ -92,6 +97,7 @@ int main(int argc, char** argv) {
     double density_ratio = 1000.0;
     double mu1 = 2.0;
     double steps = 25000.0;
+    double amplitude = 0.3;
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &stencil)) {
         std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8."
                   << std::endl;
@@ -109,6 +115,12 @@ int main(int argc, char** argv) {
     }
     if (argc > 4 && !(parse_number(argv[4], &steps) && steps >= 0.0)) {
         std::cerr << "Invalid step count '" << argv[4] << "'." << std::endl;
+        return 2;
+    }
+    // at most a quarter of the layer, so the interface stays inside it
+    if (argc > 5 && !(parse_number(argv[5], &amplitude) && std::fabs(amplitude) < Ly / 8.0)) {
+        std::cerr << "Invalid amplitude '" << argv[5] << "'; expected a number below " << Ly / 8
+                  << " in magnitude." << std::endl;
         return 2;
     }
 

@@ -12,6 +12,13 @@ does to within a few per cent.
 The measured values are pinned, so a change in the scheme shows up; the
 closeness to the exact mode is asserted separately, with room for the
 resolution: the interface is four nodes wide on a wavelength of 64.
+
+A third run starts the same wave at 1000 with an amplitude of 8 nodes instead
+of 0.3, for one period. Its interface moves at about 4e-3, thirteen times the
+speed at which the colour-gradient solver's heavy populations go negative;
+that solver's wave diverges from an amplitude of 4 upwards. This one stays
+bounded. At `k a = 0.79` the wave is no longer linear, so its frequency is
+held only to the value it measured, which is 9 % below the linear mode's.
 """
 
 import numpy as np
@@ -23,33 +30,44 @@ from pycglbm.testing import artifacts_dir, run_program
 #: Steps skipped before the fit: the acoustic start-up of the release.
 SETTLING_STEPS = 500
 
-#: Dynamic viscosity of the heavy layer and the run length, per density ratio.
-HEAVY_VISCOSITY = {"100": 0.5, "1000": 2.0}
-STEPS = {"100": 16000, "1000": 25000}
+#: Density ratio, dynamic viscosity of the heavy layer, run length and initial
+#: amplitude (nodes) of each run.
+CASES = {
+    "100": {"ratio": "100", "mu1": 0.5, "steps": 16000, "amplitude": 0.3},
+    "1000": {"ratio": "1000", "mu1": 2.0, "steps": 25000, "amplitude": 0.3},
+    "1000_large": {"ratio": "1000", "mu1": 2.0, "steps": 12500, "amplitude": 8.0},
+}
 
-#: Measured decay rate and angular frequency, over the exact mode's.
+#: Measured decay rate and angular frequency, over the exact linear mode's.
 MEASURED = {
-    "100": {"damping": 1.043, "frequency": 0.988},
-    "1000": {"damping": 1.084, "frequency": 0.982},
+    "100": {"damping": 1.030, "frequency": 0.988},
+    "1000": {"damping": 1.049, "frequency": 0.982},
+    "1000_large": {"damping": 1.090, "frequency": 0.907},
 }
 MEASURED_TOLERANCE = 0.02
 
 #: How close to the exact mode the solver has to be, whatever it measured.
 DAMPING_BOUND = 0.15
-FREQUENCY_BOUND = 0.03
+FREQUENCY_BOUND = {"100": 0.03, "1000": 0.03, "1000_large": 0.12}
 
 
-@pytest.fixture(scope="module", params=sorted(MEASURED))
+@pytest.fixture(scope="module", params=sorted(CASES))
 def wave_run(request):
-    """One shared run per density ratio."""
-    ratio = request.param
+    """One shared run per case."""
+    case = CASES[request.param]
     run = run_program(
         "capillary_wave_vb",
-        artifacts_dir() / f"capillary_wave_vb_{ratio}",
-        args=("E8", ratio, str(HEAVY_VISCOSITY[ratio]), str(STEPS[ratio])),
+        artifacts_dir() / f"capillary_wave_vb_{request.param}",
+        args=(
+            "E8",
+            case["ratio"],
+            str(case["mu1"]),
+            str(case["steps"]),
+            str(case["amplitude"]),
+        ),
         timeout=2400,
     )
-    run.key = ratio
+    run.key = request.param
     return run
 
 
@@ -73,25 +91,37 @@ def result(wave_run):
         "fit": fit,
         "signal": signal,
         "measured": MEASURED[wave_run.key],
+        "key": wave_run.key,
     }
+
+
+def initial_amplitude(wave_run):
+    """The first Fourier coefficient of the lower interface at t = 0."""
+    return wave_run.mode_track()[1][0]
 
 
 @pytest.mark.long
 @pytest.mark.verification
 def test_verification_capillary_wave_vb_runs_the_intended_case(wave_run):
     """The arguments reached the solver."""
-    assert wave_run.parameter("rho1") / wave_run.parameter("rho2") == float(wave_run.key)
-    assert wave_run.parameter("mu1") == HEAVY_VISCOSITY[wave_run.key]
-    assert wave_run.parameter("steps", int) == STEPS[wave_run.key]
+    case = CASES[wave_run.key]
+    assert wave_run.parameter("rho1") / wave_run.parameter("rho2") == float(case["ratio"])
+    assert wave_run.parameter("mu1") == case["mu1"]
+    assert wave_run.parameter("steps", int) == case["steps"]
+    assert wave_run.parameter("amplitude") == case["amplitude"]
+    assert initial_amplitude(wave_run) == pytest.approx(case["amplitude"], rel=1.0e-3)
 
 
 @pytest.mark.long
 @pytest.mark.verification
 def test_verification_capillary_wave_vb_stays_bounded(wave_run, result):
-    """No NaN in the track or the last fields."""
+    """No NaN in the track or the last fields, and the phase field in its bounds."""
     assert np.isfinite(result["signal"]).all()
     for field in wave_run.fields(wave_run.last_timestep).values():
         assert np.isfinite(field).all()
+    phase = wave_run.phase(wave_run.last_timestep)
+    assert phase.min() >= -1.0 - 1.0e-9
+    assert phase.max() <= 1.0 + 1.0e-9
 
 
 @pytest.mark.long
@@ -106,7 +136,7 @@ def test_verification_capillary_wave_vb_is_one_mode(result):
 def test_validation_capillary_wave_vb_against_the_normal_mode(result):
     """Decay rate and frequency close to the exact mode's, and at their measured values."""
     assert result["damping"] == pytest.approx(1.0, abs=DAMPING_BOUND)
-    assert result["frequency"] == pytest.approx(1.0, abs=FREQUENCY_BOUND)
+    assert result["frequency"] == pytest.approx(1.0, abs=FREQUENCY_BOUND[result["key"]])
     assert result["damping"] == pytest.approx(result["measured"]["damping"], abs=MEASURED_TOLERANCE)
     assert result["frequency"] == pytest.approx(
         result["measured"]["frequency"], abs=MEASURED_TOLERANCE / 4

@@ -46,9 +46,17 @@ struct SolverParameters {
     /// Stencil of the gradients: colour field, normals and capillary stress.
     GradientStencil stencil = GradientStencil::E8;
     /// Lattice temperature of the phase populations' carrier, which sets the
-    /// interface mobility M = phase_temperature / 2 (phase_carrier). Below
-    /// 0.6, where the carrier's rest weight is still positive.
-    double phase_temperature = kSoundSpeedSquared;
+    /// interface mobility M = phase_temperature / 2 (phase_carrier).
+    ///
+    /// 0.2 rather than the lattice's own cs^2 = 1/3. The slower interface
+    /// diffusion takes the capillary wave at a density ratio of 1000 from 1.084
+    /// to 1.049 times the exact damping rate and leaves the static, moving and
+    /// fast droplets and the sheared layers where they were. 0.2 is the lowest
+    /// round value at which the carrier stays non-negative up to |u| = 0.2,
+    /// the fastest a droplet has been launched in a research copy (that needs
+    /// 0.184; the 0.1 of the long tests needs 0.106). Must lie below 0.6,
+    /// where the rest weight is still positive.
+    double phase_temperature = 0.2;
 };
 
 /// The state of one node, to initialise from.
