@@ -388,6 +388,88 @@ void report_link_momentum() {
     std::cout << "dissipation_force_uniform = " << uniform / force_scale << "\n";
 }
 
+/// The phase carrier at a lattice temperature below cs^2: exact moments 1, u
+/// and T I + u u, non-negative at the speeds the droplet cases reach, and the
+/// phase populations built on it carrying c and c u + A n with A at mobility
+/// T / 2. At cs^2 it has to be velocity_equilibrium exactly.
+void report_phase_carrier() {
+    const double temperature = 0.2;
+    double moment_error = 0.0;
+    double lowest = 1.0;
+    double identity = 0.0;
+    for (double speed : {0.01, 0.05, 0.1}) {
+        for (int n = 0; n < 72; ++n) {
+            const double angle = 2.0 * M_PI * n / 72.0;
+            const double ux = speed * std::cos(angle);
+            const double uy = speed * std::sin(angle);
+            double gamma[vb::kQ];
+            vb::phase_carrier(ux, uy, temperature, gamma);
+            double m0 = 0.0, mx = 0.0, my = 0.0, pxx = 0.0, pyy = 0.0, pxy = 0.0;
+            for (int k = 0; k < vb::kQ; ++k) {
+                const double ex = vb::kVelocity[k][0];
+                const double ey = vb::kVelocity[k][1];
+                m0 += gamma[k];
+                mx += gamma[k] * ex;
+                my += gamma[k] * ey;
+                pxx += gamma[k] * ex * ex;
+                pyy += gamma[k] * ey * ey;
+                pxy += gamma[k] * ex * ey;
+                lowest = std::min(lowest, gamma[k]);
+            }
+            for (double e : {m0 - 1.0,
+                             mx - ux,
+                             my - uy,
+                             pxx - temperature - ux * ux,
+                             pyy - temperature - uy * uy,
+                             pxy - ux * uy}) {
+                moment_error = std::max(moment_error, std::fabs(e));
+            }
+            double standard[vb::kQ];
+            double same[vb::kQ];
+            vb::velocity_equilibrium(ux, uy, standard);
+            vb::phase_carrier(ux, uy, kCs2, same);
+            for (int k = 0; k < vb::kQ; ++k) {
+                identity = std::max(identity, std::fabs(standard[k] - same[k]));
+            }
+        }
+    }
+    std::cout << "phase_carrier_moment_error = " << moment_error << "\n";
+    std::cout << "phase_carrier_min_10 = " << lowest << "\n";
+    std::cout << "phase_carrier_cs2_identity = " << identity << "\n";
+
+    const double c = 0.3;
+    const double ux = 0.02, uy = -0.01, nx = 0.6, ny = -0.8, width = 1.6;
+    double phase[vb::kQ];
+    vb::phase_populations(c, ux, uy, nx, ny, width, phase, temperature);
+    double m0 = 0.0, mx = 0.0, my = 0.0;
+    for (int k = 0; k < vb::kQ; ++k) {
+        m0 += phase[k];
+        mx += phase[k] * vb::kVelocity[k][0];
+        my += phase[k] * vb::kVelocity[k][1];
+    }
+    const double A = 0.5 * temperature * 2.0 * c * (1.0 - c) / width;
+    double perr = std::fabs(m0 - c);
+    perr = std::max(perr, std::fabs(mx - (c * ux + A * nx)));
+    perr = std::max(perr, std::fabs(my - (c * uy + A * ny)));
+    std::cout << "phase_carrier_populations_error = " << perr << "\n";
+
+    // the link exchange read with this carrier is still equal and opposite
+    std::mt19937 random(13);
+    double antisymmetry = 0.0;
+    for (int trial = 0; trial < 200; ++trial) {
+        for (int k = 1; k < vb::kQ; ++k) {
+            const vb::LinkEnd a = random_end(random, 1.0e4, 1.0);
+            const vb::LinkEnd b = random_end(random, 1.0e4, 1.0);
+            double jx = 0.0, jy = 0.0, kx = 0.0, ky = 0.0, da = 0.0, db = 0.0;
+            vb::link_momentum(k, a, b, 1.0e4, 1.0, &jx, &jy, &da, temperature);
+            vb::link_momentum(vb::kOpposite[k], b, a, 1.0e4, 1.0, &kx, &ky, &db, temperature);
+            const double scale = std::max(std::hypot(jx, jy), 1e-300);
+            antisymmetry = std::max(antisymmetry, std::hypot(jx + kx, jy + ky) / scale);
+        }
+    }
+    std::cout << "phase_carrier_link_antisymmetry = " << antisymmetry << "\n";
+}
+
 /// The hybrid collision is collide at sigma = 1, conserves P and u, and does
 /// not depend on sigma when the populations' non-equilibrium is the one the
 /// velocity gradient predicts.
@@ -586,6 +668,7 @@ int main() {
     std::cout.precision(12);
     report_moments();
     report_carrier();
+    report_phase_carrier();
     report_pressure_force();
     report_link_momentum();
     report_collide_hybrid();

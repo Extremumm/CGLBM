@@ -126,6 +126,21 @@ constexpr double kSoundSpeedSquared = 1.0 / 3.0;
 /// and cs^2 I + u u, and it is non-negative for |u| below about 0.4.
 void velocity_equilibrium(double ux, double uy, double* gamma);
 
+/// The carrier of the phase populations at lattice temperature `temperature`:
+/// moments 1, u and temperature I + u u.
+///
+/// Memoryless phase populations diffuse c with the mobility
+/// `M = temperature / 2`, so this is what sets the interface mobility, and it
+/// does so without giving up the bound that keeps c in [0, 1]: the populations
+/// stay a convex mixture of carrier and sharpening, as they do at cs^2. At
+/// `temperature = cs^2` this is velocity_equilibrium, bit for bit. Below it
+/// the weights are the D2Q9 ones for that temperature,
+/// `1 - 5 T / 3, T / 3, T / 12` for rest, axes and diagonals, and the second
+/// moment the second-order Hermite form leaves wrong on D2Q9 away from cs^2 --
+/// by O(u^2), enough to shift a sheared interface by 1e-6 nodes per step -- is
+/// put back with no mass and no momentum on the axis and diagonal pairs.
+void phase_carrier(double ux, double uy, double temperature, double* gamma);
+
 /// g_i^eq = w_i P + Gamma_i(u) - w_i, with moments P, u and P cs^2 I + u u.
 void hydrodynamic_equilibrium(double pressure_number, double ux, double uy, double* equilibrium);
 
@@ -143,13 +158,16 @@ void hydrodynamic_equilibrium(double pressure_number, double ux, double uy, doub
 /// below the sharpening on the far side of the interface, and a population a
 /// thousandth of a unit negative there is a negative mass as large as the
 /// light node's own at a density ratio of 1e4.
+///
+/// `temperature` is that of phase_carrier; the mobility is half of it.
 void phase_populations(double c,
                        double ux,
                        double uy,
                        double normal_x,
                        double normal_y,
                        double width,
-                       double* populations);
+                       double* populations,
+                       double temperature = kSoundSpeedSquared);
 
 /// Guo et al. forcing populations for an acceleration a (force per unit mass).
 void forcing(double ux, double uy, double ax, double ay, double* source);
@@ -255,6 +273,9 @@ struct LinkEnd {
 /// viscosities. Where the two densities are equal and the phase populations
 /// are those of a single component, M = rho K and D = 0: the exchange is the
 /// lattice's own, with its advection written as a mass flux.
+///
+/// `temperature` is the phase carrier's, so that K and M are read with the
+/// carrier the phase populations were built on.
 void link_momentum(int k,
                    const LinkEnd& donor,
                    const LinkEnd& receiver,
@@ -262,7 +283,8 @@ void link_momentum(int k,
                    double rho2,
                    double* jx,
                    double* jy,
-                   double* dissipation);
+                   double* dissipation,
+                   double temperature = kSoundSpeedSquared);
 
 /// Force density sum_k D_k (u(x - xi_k) - u(x)) at node (i, j), from the
 /// link coefficients link_momentum returns.

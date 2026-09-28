@@ -1,6 +1,7 @@
 #include "lbm/velocity_based_solver.h"
 
 #include <algorithm>
+#include <stdexcept>
 
 #include "lbm/surface_force.h"
 #include "lbm/velocity_based.h"
@@ -20,6 +21,9 @@ double bounded_fraction(double c) {
 }  // namespace
 
 Solver::Solver(const SolverParameters& parameters) : parameters_(parameters) {
+    if (!(parameters_.phase_temperature > 0.0 && parameters_.phase_temperature < 0.6)) {
+        throw std::invalid_argument("phase_temperature must lie in (0, 0.6)");
+    }
     const std::size_t nodes = static_cast<std::size_t>(parameters_.nx) * parameters_.ny;
     for (std::vector<double>* populations : {&g_, &h_, &g_new_, &h_new_, &dissipation_}) {
         populations->assign(nodes * kQ, 0.0);
@@ -60,7 +64,7 @@ void Solver::initialize(const std::function<NodeState(int i, int j)>& state) {
             double eq[kQ];
             double gamma[kQ];
             hydrodynamic_equilibrium(s.p / (rho * kCs2), s.ux, s.uy, eq);
-            velocity_equilibrium(s.ux, s.uy, gamma);
+            phase_carrier(s.ux, s.uy, parameters_.phase_temperature, gamma);
             for (int k = 0; k < kQ; ++k) {
                 g_[m * kQ + k] = eq[k];
                 h_[m * kQ + k] = s.c * gamma[k];
@@ -213,7 +217,8 @@ void Solver::momentum() {
                               parameters_.rho2,
                               &link_x,
                               &link_y,
-                              &dissipation_[m * kQ + k]);
+                              &dissipation_[m * kQ + k],
+                              parameters_.phase_temperature);
                 jx += link_x;
                 jy += link_y;
             }
@@ -267,8 +272,14 @@ void Solver::collide_and_stream() {
                            parameters_.hybrid_weight,
                            gradient,
                            post);
-            phase_populations(
-                c_[m], ux_[m], uy_[m], normal_x_[m], normal_y_[m], parameters_.width, phase);
+            phase_populations(c_[m],
+                              ux_[m],
+                              uy_[m],
+                              normal_x_[m],
+                              normal_y_[m],
+                              parameters_.width,
+                              phase,
+                              parameters_.phase_temperature);
             for (int k = 0; k < kQ; ++k) {
                 const int target =
                     node((i + kVelocity[k][0] + nx) % nx, (j + kVelocity[k][1] + ny) % ny);

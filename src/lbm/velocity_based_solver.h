@@ -5,6 +5,7 @@
 #include <vector>
 
 #include "lbm/isotropic_gradient.h"
+#include "lbm/velocity_based.h"
 
 /// The time step of the velocity-based two-phase scheme of velocity_based.h,
 /// on a doubly periodic lattice.
@@ -44,6 +45,10 @@ struct SolverParameters {
     double hybrid_weight = 0.7;
     /// Stencil of the gradients: colour field, normals and capillary stress.
     GradientStencil stencil = GradientStencil::E8;
+    /// Lattice temperature of the phase populations' carrier, which sets the
+    /// interface mobility M = phase_temperature / 2 (phase_carrier). Below
+    /// 0.6, where the carrier's rest weight is still positive.
+    double phase_temperature = kSoundSpeedSquared;
 };
 
 /// The state of one node, to initialise from.

@@ -52,6 +52,24 @@ def test_unit_test_lbm_velocity_based_carrier_is_positive(values):
 
 
 @pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_phase_carrier_at_lower_temperature(values):
+    """The phase carrier at T = 0.2 has the moments 1, u and T I + u u exactly.
+
+    The second-order Hermite form on D2Q9 has them only at cs^2; away from it
+    the second moment is off by O(u^2), which moved a sheared interface by
+    1e-6 nodes per step, so the carrier puts it back. Its populations stay
+    non-negative up to |u| = 0.1, it is velocity_equilibrium itself at cs^2,
+    the phase populations built on it carry c and c u + A n at mobility T / 2,
+    and the link exchange read with it is still equal and opposite.
+    """
+    assert float(values["phase_carrier_moment_error"]) < 1e-15
+    assert float(values["phase_carrier_min_10"]) > 0.0
+    assert float(values["phase_carrier_cs2_identity"]) == 0.0
+    assert float(values["phase_carrier_populations_error"]) < 1e-15
+    assert float(values["phase_carrier_link_antisymmetry"]) < 1e-14
+
+
+@pytest.mark.unit_test
 def test_unit_test_lbm_velocity_based_uniform_pressure_exerts_no_force(values):
     """Across a density jump of 1e4, a uniform p gives no force, to rounding.
 

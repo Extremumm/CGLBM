@@ -19,6 +19,68 @@ void velocity_equilibrium(double ux, double uy, double* gamma) {
     }
 }
 
+namespace {
+
+/// D2Q9 weight of direction k at lattice temperature `temperature`.
+double phase_weight(int k, double temperature) {
+    if (temperature == kCs2) {
+        return kWeight[k];
+    }
+    if (k == 0) {
+        return 1.0 - 5.0 * temperature / 3.0;
+    }
+    return k <= 4 ? temperature / 3.0 : temperature / 12.0;
+}
+
+/// What the second-order Hermite carrier at `temperature` misses of
+/// temperature I + u u on D2Q9: the diagonal components on the axis pairs
+/// against the rest population, the off-diagonal one on the diagonals, with
+/// no mass and no momentum. Zero at cs^2.
+double moment_correction(int k, double ux, double uy, double temperature) {
+    const double ax =
+        ux * ux * (1.5 - 0.5 / temperature) + uy * uy * (0.5 - 1.0 / (6.0 * temperature));
+    const double ay =
+        uy * uy * (1.5 - 0.5 / temperature) + ux * ux * (0.5 - 1.0 / (6.0 * temperature));
+    const double b = ux * uy * (1.0 - 1.0 / (3.0 * temperature));
+    const int ex = kVelocity[k][0];
+    const int ey = kVelocity[k][1];
+    if (ex == 0 && ey == 0) {
+        return -ax - ay;
+    }
+    if (ey == 0) {
+        return 0.5 * ax;
+    }
+    if (ex == 0) {
+        return 0.5 * ay;
+    }
+    return 0.25 * b * ex * ey;
+}
+
+/// Gamma_k(u) at `temperature`, for one direction.
+double carrier(int k, double ux, double uy, double temperature) {
+    const double eu = kVelocity[k][0] * ux + kVelocity[k][1] * uy;
+    if (temperature == kCs2) {
+        return kWeight[k] *
+               (1.0 + eu / kCs2 + 0.5 * eu * eu / kCs4 - 0.5 * (ux * ux + uy * uy) / kCs2);
+    }
+    return phase_weight(k, temperature) *
+               (1.0 + eu / temperature + 0.5 * eu * eu / (temperature * temperature) -
+                0.5 * (ux * ux + uy * uy) / temperature) +
+           moment_correction(k, ux, uy, temperature);
+}
+
+}  // namespace
+
+void phase_carrier(double ux, double uy, double temperature, double* gamma) {
+    if (temperature == kCs2) {
+        velocity_equilibrium(ux, uy, gamma);
+        return;
+    }
+    for (int k = 0; k < kQ; ++k) {
+        gamma[k] = carrier(k, ux, uy, temperature);
+    }
+}
+
 void hydrodynamic_equilibrium(double pressure_number, double ux, double uy, double* equilibrium) {
     velocity_equilibrium(ux, uy, equilibrium);
     for (int k = 0; k < kQ; ++k) {
@@ -32,19 +94,20 @@ void phase_populations(double c,
                        double normal_x,
                        double normal_y,
                        double width,
-                       double* populations) {
+                       double* populations,
+                       double temperature) {
     double gamma[kQ];
-    velocity_equilibrium(ux, uy, gamma);
+    phase_carrier(ux, uy, temperature, gamma);
     // the sharpening vanishes outside [0, 1], so a rounding overshoot of c is
     // not amplified
     const double bounded = (c < 0.0) ? 0.0 : ((c > 1.0) ? 1.0 : c);
-    const double mobility = 0.5 * kCs2;
+    const double mobility = 0.5 * temperature;
     const double sharpening = mobility * 2.0 * bounded * (1.0 - bounded) / width;
     double flux[kQ];
     double theta = 1.0;
     for (int k = 0; k < kQ; ++k) {
         const double en = kVelocity[k][0] * normal_x + kVelocity[k][1] * normal_y;
-        flux[k] = kWeight[k] * sharpening * en / kCs2;
+        flux[k] = phase_weight(k, temperature) * sharpening * en / temperature;
         // keep 0 <= c Gamma_k + theta flux_k <= Gamma_k
         if (flux[k] < 0.0 && bounded * gamma[k] < -theta * flux[k]) {
             theta = bounded * gamma[k] / -flux[k];
@@ -124,12 +187,6 @@ double advective_part(int k, double ux, double uy) {
     return kWeight[k] * (0.5 * eu * eu / kCs4 - 0.5 * (ux * ux + uy * uy) / kCs2);
 }
 
-/// Gamma_k(u) for one direction.
-double carrier(int k, double ux, double uy) {
-    const double eu = kVelocity[k][0] * ux + kVelocity[k][1] * uy;
-    return kWeight[k] * (1.0 + eu / kCs2 + 0.5 * eu * eu / kCs4 - 0.5 * (ux * ux + uy * uy) / kCs2);
-}
-
 }  // namespace
 
 void collide(const double* populations,
@@ -200,7 +257,8 @@ void link_momentum(int k,
                    double rho2,
                    double* jx,
                    double* jy,
-                   double* dissipation) {
+                   double* dissipation,
+                   double temperature) {
     const int opposite = kOpposite[k];
     const double ex = kVelocity[k][0];
     const double ey = kVelocity[k][1];
@@ -215,10 +273,11 @@ void link_momentum(int k,
 
     // advection: the mass the phase populations carry, less the quadratic part
     // of the carriers' volume at the lighter density, times the mean velocity
-    const double volume =
-        carrier(k, donor.ux, donor.uy) - carrier(opposite, receiver.ux, receiver.uy);
-    const double linear =
-        kWeight[k] * (ex * (donor.ux + receiver.ux) + ey * (donor.uy + receiver.uy)) / kCs2;
+    const double volume = carrier(k, donor.ux, donor.uy, temperature) -
+                          carrier(opposite, receiver.ux, receiver.uy, temperature);
+    const double linear = phase_weight(k, temperature) *
+                          (ex * (donor.ux + receiver.ux) + ey * (donor.uy + receiver.uy)) /
+                          temperature;
     const double mass = (rho1 - rho2) * (donor.phase - receiver.phase) + rho2 * volume;
     const double excess = mass - rho_link * volume;
     const double carried = rho_link * linear + excess;
