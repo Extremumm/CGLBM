@@ -310,7 +310,7 @@ void report_third_moment_source() {
     using cglbm::lbm::kXi;
     const double dqx_dx = 3.7e-4, dqy_dy = -1.1e-4, s_e = 1.25, s_nu = 0.8;
     double source[kQ] = {0., 0., 0., 0., 0., 0., 0., 0., 0.};
-    cglbm::lbm::add_third_moment_source(dqx_dx, dqy_dy, s_e, s_nu, 1.0, source);
+    cglbm::lbm::add_third_moment_source(dqx_dx + dqy_dy, dqx_dx - dqy_dy, s_e, s_nu, 1.0, source);
     double mass = 0.0, jx = 0.0, jy = 0.0, trace = 0.0, normal = 0.0, shear = 0.0;
     for (int i = 0; i < kQ; ++i) {
         const double ex = kXi[i][0], ey = kXi[i][1];
@@ -389,7 +389,7 @@ void report_mrt_conservation() {
 /// fluid off the lattice sound speed. `shear` instead runs a shear wave
 /// `u_x(y)`, which only the off-diagonal stress sees and which the enhanced
 /// equilibrium already gets right.
-double taylor_green_rate(double ratio, bool corrected, bool shear) {
+double taylor_green_rate(double ratio, bool corrected, bool shear, bool matched = false) {
     constexpr double pi = 3.14159265358979323846;
     CaseConfig config = droplet_case(ratio, GradientStencil::E4);
     config.nx = 32;
@@ -405,6 +405,9 @@ double taylor_green_rate(double ratio, bool corrected, bool shear) {
         *u_y = shear ? 0.0 : -amplitude * std::cos(k * x) * std::sin(k * y);
     };
     config.third_moment_correction = corrected;
+    if (matched) {
+        config.source_stencil = cglbm::lbm::SourceStencil::StreamingMatched;
+    }
     // tau = 0.8 in fluid 1: mu = (tau - 1/2) p with p = rho1 (c_s^1)^2.
     const double cs_squared = 0.6 * 0.8 / ratio;
     const double mu = 0.3 * ratio * cs_squared;
@@ -423,6 +426,11 @@ double taylor_green_rate(double ratio, bool corrected, bool shear) {
         }
         return energy;
     };
+    // Let the acoustic start-up pass: the equilibrium laid down at t = 0 has
+    // no viscous stress in it yet.
+    for (int step = 0; step < 50; ++step) {
+        solver.step();
+    }
     solver.refresh();
     const double start = kinetic();
     const int steps = 2000;
@@ -443,7 +451,9 @@ void report_taylor_green() {
         std::cout << prefix << "_uncorrected = " << taylor_green_rate(ratio, false, false) << "\n"
                   << prefix << "_corrected = " << taylor_green_rate(ratio, true, false) << "\n";
     }
-    std::cout << "tg_r1000_shear = " << taylor_green_rate(1000.0, false, true) << std::endl;
+    std::cout << "tg_r1000_shear = " << taylor_green_rate(1000.0, false, true) << "\n"
+              << "tg_matched_r10 = " << taylor_green_rate(10.0, true, false, true) << "\n"
+              << "tg_matched_r1000 = " << taylor_green_rate(1000.0, true, false, true) << std::endl;
 }
 
 }  // namespace

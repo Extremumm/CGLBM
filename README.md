@@ -103,6 +103,12 @@ command line, so a resolution or a run length is a flag rather than a rebuild:
   --third-moment-correction
                       Ba et al.'s source term for the diagonal third moment
                       D2Q9 cannot carry, in the two-population solver
+  --source-stencil=isotropic|matched
+                      finite difference of that source term, and of S_Sp in
+                      the equation-of-state solver: the nine-point isotropic
+                      one, or, for its deviatoric part, the one D2Q9's
+                      streaming uses, which gives the heavy fluid its
+                      extensional viscosity
   --alpha2=X          rest weight of component 2 in the two-population solver
   --nu=X, --nu-b=X    kinematic shear and bulk viscosity of component 1
   --nu2=X, --nu-b2=X  the same for component 2; unset means equal to
@@ -431,12 +437,20 @@ density in its populations. Two things stand in the way, both structural. The
 mass flux across a moving interface needs `u ρ₁/ρ₂` of order one to stay
 positive. And the heavy fluid, held at the light fluid's pressure, is a lattice
 gas far colder than the lattice, whose D2Q9 third moment is wrong by nearly the
-whole of its momentum; the finite-difference corrections for it leave an error
-the density ratio amplifies. On a Taylor–Green vortex in the heavy fluid at
-1000, `Solver` gets the extensional viscosity 25 times too large on a 32²
-lattice. The velocity-based `droplet` solver is free of both by construction:
-its populations carry the velocity at the lattice temperature, not the density.
-See [`docs/literature.md`](docs/literature.md).
+whole of its momentum. The published finite-difference corrections for it leave
+an error the density ratio amplifies: on a Taylor–Green vortex in the heavy
+fluid at 1000, `Solver` gets the extensional viscosity 25 times too large on a
+32² lattice. The correction has to be taken on the stencil the streaming made
+the error with, whose Fourier symbol is `2i tan(k/2)` rather than `ik`;
+`--source-stencil=matched` does that, in both colour-gradient solvers, and the
+same vortex decays at 0.998 of its Navier–Stokes rate at 1000 and 1.010 at
+10⁴. It fixes the heavy fluid's interior, not a moving interface: a capillary
+wave at a ratio of 100 goes from 1.50 to 1.16 times its exact damping, but at
+1000 the interface itself dominates, and the option is off by default. The
+velocity-based `droplet` solver is free of both limits by construction: its
+populations carry the velocity at the lattice temperature, not the density.
+See [`docs/literature.md`](docs/literature.md) and
+[`docs/numerics.md`](docs/numerics.md#the-heavy-fluids-extensional-viscosity).
 
 **In three dimensions** the two-population model is available as
 `cglbm::lbm::TwoPopulationSolver3D` on D3Q19 (`laplace_3d`). Laplace's law there

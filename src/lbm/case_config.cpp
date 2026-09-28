@@ -81,6 +81,12 @@ void print_usage(const std::string& program_name) {
               << "  --s-e=X, --s-eps=X, --s-q=X\n"
               << "                      MRT rates of the energy, its square and the energy\n"
               << "                      flux, in (0, 2); Ba et al. use 1.25, 1.14, 1.6\n"
+              << "  --source-stencil=isotropic|matched\n"
+              << "                      finite difference of the third-moment source term:\n"
+              << "                      the nine-point isotropic one, or, for its deviatoric\n"
+              << "                      part, the one D2Q9's streaming uses. `matched` gives\n"
+              << "                      the heavy fluid its extensional viscosity; it does not\n"
+              << "                      fix a moving interface at a ratio of 1e3 or more\n"
               << "  --third-moment-correction, --no-third-moment-correction\n"
               << "                      add Ba et al.'s source term for the diagonal third\n"
               << "                      moment D2Q9 cannot carry (two-population solver)\n"
@@ -482,6 +488,18 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
             config.physics.beta = beta;
             continue;
         }
+        if (option_value(argument, "source-stencil", &value)) {
+            if (value == "isotropic") {
+                config.source_stencil = SourceStencil::Isotropic;
+            } else if (value == "matched") {
+                config.source_stencil = SourceStencil::StreamingMatched;
+            } else {
+                std::cerr << "Unknown source stencil '" << value
+                          << "'; expected isotropic or matched." << std::endl;
+                return CommandLineResult::Error;
+            }
+            continue;
+        }
         if (option_value(argument, "collision", &value)) {
             if (value == "bgk") {
                 config.collision = Collision::BGK;
@@ -749,6 +767,9 @@ std::string describe(const CaseConfig& config) {
         << (config.recolouring == Recolouring::LatvaKokko ? "latva-kokko" : "width") << "\n"
         << "collision = " << (config.collision == Collision::MRT ? "mrt" : "bgk") << "\n"
         << "third_moment_correction = " << (config.third_moment_correction ? "true" : "false")
+        << "\n"
+        << "source_stencil = "
+        << (config.source_stencil == SourceStencil::StreamingMatched ? "matched" : "isotropic")
         << "\n"
         << "dx = " << config.units.dx << "\n"
         << "dt = " << config.units.dt << "\n"

@@ -144,10 +144,18 @@ the populations, and together they explain the table above.
    quantity `rho_1 / rho_2` times larger than the stress it corrects. On a
    Taylor–Green vortex in the heavy fluid — pure normal strain — `Solver`'s
    decay rate is **24.8 times** the Navier–Stokes one at a density ratio of
-   1000 on a 32² lattice, and the two-population solver's is 17.7 times with
-   Ba et al.'s source term and about 780 times without it; a shear wave in the
+   1000 on a 32² lattice, and the two-population solver's is 17.5 times with
+   Ba et al.'s source term and about 760 times without it; a shear wave in the
    same fluid is right to 0.5 %. The heavy fluid resists extension far more
-   than it should, at every wavelength a droplet cares about. Burgin et al.
+   than it should, at every wavelength a droplet cares about. That part has a
+   cure, found here: the source is split half before and half after the
+   collision, and a split source cancels what the streaming did only if its
+   derivative has the Fourier symbol `2i tan(k/2)` — the Cayley transform of
+   the streaming's shift — rather than `ik`. A reach-three axis stencil that
+   matches it through `k⁵` brings the vortex to 0.998 at 1000 and 1.010 at
+   10⁴ in both solvers (`--source-stencil=matched`). What it does not cure is
+   the interface: at 10³ a moving one is wrong whichever stencil the source
+   takes, which is the first limit again. Burgin et al.
    (2019) reach the same place from the other end: the reported restrictions
    on the density contrast "in rapid flow ... originate in the effect on the
    model's kinematics of the terms ... which correct its dynamics for large
@@ -171,12 +179,13 @@ has gone. In this code it is the velocity-based
   the two structural effects above, not by any ingredient the literature
   offers. The two-population solver's MRT and source term make it run Ba et
   al.'s benchmark correctly; they do not lift either limit, and the
-  measurements say so. Attempts here to rebuild the normal stress from the
-  finite-difference velocity gradient instead (a hybrid regularisation) made
-  the Taylor–Green error larger, not smaller, because the streaming's own
-  second-order term still carries the defect; an axis-only derivative in
-  `S_Sp`, which matches the streaming's first-order operator, cut the
-  error from 24.8 to 15.3 and went unstable at τ = 0.55. Neither is shipped.
+  measurements say so. The heavy fluid's extensional viscosity is fixed in
+  its interior by taking the source on the stencil the streaming uses
+  (`--source-stencil=matched`, off by default); against exact normal modes it
+  brings a capillary wave at a ratio of 100 from 1.50 to 1.16 times its
+  damping, but at 10³ the moving interface is wrong with either stencil —
+  3.7 and 2.6 times for the wave, and a mode-2 droplet damped eight times too
+  fast or not at all — where the velocity-based solver is within 13 %.
 - Flows with moving interfaces at 10³ and above belong to the velocity-based
   solver, which is the colour-gradient segregation on a family-3
   hydrodynamics — the model Subhedar (2022) describes.

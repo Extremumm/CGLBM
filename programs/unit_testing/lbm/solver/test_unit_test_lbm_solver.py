@@ -261,3 +261,23 @@ def test_unit_test_lbm_solver_heavy_fluid_extensional_viscosity(solver_report):
     assert float(values["tg_r10"]) == pytest.approx(1.2119, abs=2e-3)
     assert float(values["tg_r1000"]) == pytest.approx(24.82, rel=1e-3)
     assert float(values["tg_r1000_shear"]) == pytest.approx(1.0, abs=2e-3)
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_solver_matched_source_stencil_fixes_extensional_viscosity(solver_report):
+    """``--source-stencil=matched`` gives the heavy fluid its normal stress back.
+
+    Guo's half-before, half-after split turns a source into the Fourier symbol
+    ``2 i tan(k / 2)`` per axis, not ``i k``; evaluating the deviatoric part of
+    ``S_Sp`` with a three-point axis stencil that reproduces ``2 tan(k / 2)``
+    to ``O(k^7)`` cancels the streaming's error term for term. The vortex of
+    the test above then decays at ``2 nu k^2`` to within 1 % up to a density
+    ratio of 10^4 on the same 32^2 lattice, against 24.8 and 239 with the
+    nine-point stencil. At a ratio of 1 the source vanishes, so both agree.
+    """
+    values = solver_report["E8"]
+    assert float(values["tg_matched_r1"]) == pytest.approx(float(values["tg_r1"]), abs=1e-12)
+    assert float(values["tg_matched_r10"]) == pytest.approx(1.0, abs=5e-3)
+    assert float(values["tg_matched_r1000"]) == pytest.approx(1.0, abs=5e-3)
+    assert float(values["tg_matched_r10000"]) == pytest.approx(1.0, abs=0.015)
+    assert float(values["tg_matched_r1000_shear"]) == pytest.approx(1.0, abs=2e-3)

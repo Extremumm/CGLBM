@@ -293,6 +293,7 @@ void Solver::collide() {
 void Solver::force() {
     const bool parallel = parallel_;
     const bool wall = wall_y_;
+    const bool matched = config_.source_stencil == SourceStencil::StreamingMatched;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         // Every row, including j = 0: the neighbour loop below already drops
@@ -354,11 +355,46 @@ void Solver::force() {
             derive_x /= (dt_ * cs2_);
             derive_y /= (dt_ * cs2_);
 
-            for (int k = 0; k < kQ; k++) {
-                const double H_nu = (kXi[k][0] * kXi[k][0] - kXi[k][1] * kXi[k][1]) / 2.;
-                const double H_b = (kXi[k][0] * kXi[k][0] + kXi[k][1] * kXi[k][1]) / 2. - cs2_;
-                S_Sp[k] = kW[k] * (derive_y * (3. * H_nu - H_b) + derive_x * (-3. * H_nu - H_b)) /
-                          (2. * cs4_);
+            if (!matched) {
+                for (int k = 0; k < kQ; k++) {
+                    const double H_nu = (kXi[k][0] * kXi[k][0] - kXi[k][1] * kXi[k][1]) / 2.;
+                    const double H_b = (kXi[k][0] * kXi[k][0] + kXi[k][1] * kXi[k][1]) / 2. - cs2_;
+                    S_Sp[k] = kW[k] *
+                              (derive_y * (3. * H_nu - H_b) + derive_x * (-3. * H_nu - H_b)) /
+                              (2. * cs4_);
+                }
+            } else {
+                // The deviatoric part -- the one that reaches the shear and
+                // extensional stress -- on the stencil the streaming made the
+                // error with, axis by axis; see SourceStencil. The trace keeps
+                // the nine-point derivative, and so does the y derivative
+                // within kMatchedReach nodes of a wall, where the stencil does
+                // not fit.
+                auto psi = [this](int a, int b, int component) {
+                    return (p_(a, b) - rho_(a, b) * cs2_) * u_(a, b, component);
+                };
+                double normal_x = 0.0;
+                for (int m = 1; m <= kMatchedReach; m++) {
+                    normal_x += kMatchedDerivative[m - 1] *
+                                (psi((i + m) % nx_, j, 0) - psi((i - m + nx_) % nx_, j, 0));
+                }
+                normal_x /= dt_;
+                double normal_y = derive_y;
+                if (!wall || (j >= kMatchedReach && j < ny_ - kMatchedReach)) {
+                    normal_y = 0.0;
+                    for (int m = 1; m <= kMatchedReach; m++) {
+                        normal_y += kMatchedDerivative[m - 1] *
+                                    (psi(i, (j + m) % ny_, 1) - psi(i, (j - m + ny_) % ny_, 1));
+                    }
+                    normal_y /= dt_;
+                }
+                for (int k = 0; k < kQ; k++) {
+                    const double H_nu = (kXi[k][0] * kXi[k][0] - kXi[k][1] * kXi[k][1]) / 2.;
+                    const double H_b = (kXi[k][0] * kXi[k][0] + kXi[k][1] * kXi[k][1]) / 2. - cs2_;
+                    S_Sp[k] = kW[k] *
+                              (3. * H_nu * (normal_y - normal_x) - H_b * (derive_x + derive_y)) /
+                              (2. * cs4_);
+                }
             }
 
             for (int k = 0; k < kQ; k++) {

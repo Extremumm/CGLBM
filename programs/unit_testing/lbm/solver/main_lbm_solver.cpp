@@ -403,7 +403,7 @@ void report_density_ratios(int steps) {
 /// streaming's own, a truncation error of order `k^2` that the density ratio
 /// multiplies. `shear` runs a shear wave instead, which the equilibrium gets
 /// right unaided.
-double taylor_green_rate(double ratio, bool shear) {
+double taylor_green_rate(double ratio, bool shear, bool matched = false) {
     constexpr double pi = 3.14159265358979323846;
     CaseConfig config;
     config.name = "taylor_green";
@@ -415,6 +415,9 @@ double taylor_green_rate(double ratio, bool shear) {
     config.physics.radius = 10.0;
     config.physics.p1_inf = cglbm::lbm::matched_p1_inf(config.physics);
     config.stencil = GradientStencil::E4;
+    if (matched) {
+        config.source_stencil = cglbm::lbm::SourceStencil::StreamingMatched;
+    }
     config.initial_phase = [](const CaseConfig&, int, int) { return 1.0; };
     const double amplitude = 1.0e-4 / std::sqrt(ratio);
     config.initial_velocity = [amplitude,
@@ -461,7 +464,12 @@ void report_taylor_green() {
     std::cout << "tg_r1 = " << taylor_green_rate(1.0, false) << "\n"
               << "tg_r10 = " << taylor_green_rate(10.0, false) << "\n"
               << "tg_r1000 = " << taylor_green_rate(1000.0, false) << "\n"
-              << "tg_r1000_shear = " << taylor_green_rate(1000.0, true) << std::endl;
+              << "tg_r1000_shear = " << taylor_green_rate(1000.0, true) << "\n"
+              << "tg_matched_r1 = " << taylor_green_rate(1.0, false, true) << "\n"
+              << "tg_matched_r10 = " << taylor_green_rate(10.0, false, true) << "\n"
+              << "tg_matched_r1000 = " << taylor_green_rate(1000.0, false, true) << "\n"
+              << "tg_matched_r10000 = " << taylor_green_rate(10000.0, false, true) << "\n"
+              << "tg_matched_r1000_shear = " << taylor_green_rate(1000.0, true, true) << std::endl;
 }
 
 int main(int argc, char** argv) {

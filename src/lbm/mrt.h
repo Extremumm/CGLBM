@@ -87,9 +87,11 @@ void mrt_collide(const double* f,
 ///     C_e    = 3 (1 - s_e / 2) (d_x Q_x + d_y Q_y) dt
 ///     C_p_xx =   (1 - s_nu / 2) (d_x Q_x - d_y Q_y) dt
 ///
-/// It carries no mass and no momentum. Added to `out[kQ]`.
+/// The two brackets are passed separately, `divergence` and
+/// `normal_difference`, because they need not come from the same stencil:
+/// see `SourceStencil`. It carries no mass and no momentum. Added to `out[kQ]`.
 void add_third_moment_source(
-    double dqx_dx, double dqy_dy, double s_e, double s_nu, double dt, double* out);
+    double divergence, double normal_difference, double s_e, double s_nu, double dt, double* out);
 
 }  // namespace lbm
 }  // namespace cglbm

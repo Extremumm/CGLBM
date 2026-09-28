@@ -185,20 +185,24 @@ def test_unit_test_two_population_third_moment_source_repairs_the_normal_stress(
     viscous stress alone. D2Q9 gives it ``(1 - c_k^2) / (2 c_k^2)`` times its
     value for a fluid of sound speed ``c_k``: 0.5417 at ``c_k^2 = 0.48`` (a
     density ratio of 1 with alpha = 0.2) and 9.917 at 0.048 (a ratio of 10),
-    against 0.5427 and 9.922 measured. The source brings the first to 0.996.
+    against 0.5425 and 9.919 measured. The source brings the first to 0.995.
 
-    What it cannot do is cancel the error exactly, because it is a nine-point
-    finite difference of a quantity ``1 / c_k^2`` times larger than the stress
-    it leaves behind, and the streaming that made the error is not that
-    stencil. The difference is of order ``k^2 / c_k^2``: 1.141 at a ratio of 10
-    on this 32^2 lattice, 1.037 on 64^2, 17.7 at a ratio of 1000. Pinned as
-    measured, so a change to either operator shows up here.
+    With the nine-point isotropic stencil it cannot cancel the error exactly,
+    because it is a finite difference of a quantity ``1 / c_k^2`` times larger
+    than the stress it leaves behind, and the streaming that made the error is
+    not that stencil. The difference is of order ``k^2 / c_k^2``: 1.139 at a
+    ratio of 10 on this 32^2 lattice, 1.035 on 64^2, 17.5 at a ratio of 1000.
+    The stencil that matches the streaming (``--source-stencil=matched``)
+    removes it: 0.997 at a ratio of 10 and 0.998 at 1000. Pinned as measured,
+    so a change to either operator shows up here.
     """
     values = report["E8"]
-    assert float(values["tg_r1_uncorrected"]) == pytest.approx(0.5427, abs=2e-3)
-    assert float(values["tg_r10_uncorrected"]) == pytest.approx(9.922, abs=0.02)
-    assert float(values["tg_r1_corrected"]) == pytest.approx(0.9955, abs=2e-3)
-    assert float(values["tg_r10_corrected"]) == pytest.approx(1.1411, abs=2e-3)
+    assert float(values["tg_r1_uncorrected"]) == pytest.approx(0.5425, abs=2e-3)
+    assert float(values["tg_r10_uncorrected"]) == pytest.approx(9.919, abs=0.02)
+    assert float(values["tg_r1_corrected"]) == pytest.approx(0.9950, abs=2e-3)
+    assert float(values["tg_r10_corrected"]) == pytest.approx(1.1393, abs=2e-3)
+    assert float(values["tg_matched_r10"]) == pytest.approx(1.0, abs=5e-3)
+    assert float(values["tg_matched_r1000"]) == pytest.approx(1.0, abs=5e-3)
 
 
 @pytest.mark.unit_test

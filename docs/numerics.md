@@ -897,20 +897,22 @@ restores the jump.
 third moment; this diagonal one reaches only the **normal** viscous stress, and
 a Taylor–Green vortex in one fluid isolates it, since its strain `d_x u_x =
 −d_y u_y` has no shear at all. Its decay rate over the Navier–Stokes `2νk²`, on
-32², τ = 0.8:
+32², τ = 0.8, after 50 steps of acoustic start-up:
 
-| fluid | `c_k²` | without source | predicted, `(1 − c_k²)/(2c_k²)` | with source |
-|---|---|---|---|---|
-| density ratio 1 (α = 0.2) | 0.48 | 0.5427 | 0.5417 | 0.9955 |
-| density ratio 10 | 0.048 | 9.922 | 9.917 | 1.141 |
-| density ratio 1000 | 4.8 × 10⁻⁴ | 783 | 1041 | 17.7 |
+| fluid | `c_k²` | without source | predicted, `(1 − c_k²)/(2c_k²)` | with source | with source, `--source-stencil=matched` |
+|---|---|---|---|---|---|
+| density ratio 1 (α = 0.2) | 0.48 | 0.5425 | 0.5417 | 0.9950 | 1.002 |
+| density ratio 10 | 0.048 | 9.919 | 9.917 | 1.139 | 0.997 |
+| density ratio 1000 | 4.8 × 10⁻⁴ | 760 | 1041 | 17.5 | 0.998 |
+| density ratio 10⁴ | 4.8 × 10⁻⁵ | | | 167 | 1.006 |
 
 A shear wave in the same fluid decays at `νk²` to 0.5 % with or without the
 term. So the source is right, and it is the whole of the defect at a moderate
-contrast. At a large one it is not enough, and the residual is of order
-`k² / c_k²`: at a ratio of 10 it falls from 0.545 to 0.141 to 0.037 as the
-lattice goes from 16² to 32² to 64², and it does not depend on τ. That is the
-subject of
+contrast. Taken with the nine-point derivative Ba et al. use, at a large one it
+is not enough, and the residual is of order `k² / c_k²`: at a ratio of 10 it
+falls from 0.542 to 0.139 to 0.035 as the lattice goes from 16² to 32² to 64²,
+and it does not depend on τ (0.142 at τ = 1.5). The derivative that matches the
+streaming removes it; that is the subject of
 [The heavy fluid's extensional viscosity](#the-heavy-fluids-extensional-viscosity),
 because `Solver` has the same defect through `S_Sp`.
 
@@ -1803,6 +1805,9 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
 
 - **The heavy fluid's extensional viscosity**, below: wrong by a factor that
   grows with the density ratio, for any flow that stretches the heavy fluid.
+  `--source-stencil=matched` corrects it inside the heavy fluid (24.8 → 0.998
+  on a Taylor–Green vortex at 1000); at a moving interface at 10³ and above it
+  does not, and it is not the default.
 - **Moving interfaces at high density ratio.** In the earlier program, a
   droplet translating through a periodic box with velocity $U$ (the whole
   domain initialised at $U$, equal viscosities, 3000 steps) stayed bounded only
@@ -1846,8 +1851,8 @@ lattice's `c_s²`. D2Q9 has `e_x³ = e_x`, so the diagonal third moment of any s
 of populations is the momentum itself, `ρ u_x`, where the Navier–Stokes
 equations need `3 p u_x`. The difference, `3Ψ` with `Ψ = (p − ρ c_s²) u`, is
 nearly the whole of `ρ u` for the heavy fluid, and it lands in the **normal**
-viscous stress. `S_Sp` exists to cancel it, and does, with the nine-point
-isotropic derivative of `Ψ`.
+viscous stress. `S_Sp` exists to cancel it, and as published does so with the
+nine-point isotropic derivative of `Ψ`.
 
 A Taylor–Green vortex in a uniform component 1 measures how well. Its strain
 `d_x u_x = −d_y u_y` has no shear, so its decay rate is set by the normal stress
@@ -1855,48 +1860,142 @@ alone; a shear wave in the same fluid is the control. Decay rate over the
 Navier–Stokes value, 32², τ = 0.8
 (`programs/unit_testing/lbm/solver`, which pins these):
 
-| ρ₁/ρ₂ | `p/(ρ c_s²)` | Taylor–Green | shear wave |
+| ρ₁/ρ₂ | `p/(ρ c_s²)` | nine-point `S_Sp` | `--source-stencil=matched` | shear wave |
+|---|---|---|---|---|
+| 1 | 1 | 1.0004 | 1.0004 | |
+| 10 | 0.1 | 1.212 (1.053 on 64²) | 0.997 | |
+| 1000 | 10⁻³ | **24.8** | 0.998 | 1.0006 |
+| 10⁴ | 10⁻⁴ | **239** (61 on 64²) | 1.010 (0.9994 on 64²) | |
+| 10⁵ | 10⁻⁵ | | 1.129 (1.001 on 64²) | |
+
+With the nine-point derivative the heavy fluid resists extension 25 times
+more than it should at a wavelength of 32 nodes and a density ratio of 1000,
+and the error is of order `k² ρ₁/ρ₂`: `S_Sp` differentiates a quantity
+`ρ₁/ρ₂` times larger than the stress it leaves behind, and the streaming that
+made the error is not the nine-point stencil.
+
+**The stencil that cancels it.** For this equilibrium the odd part of an axis
+population carries a cold excess `±M u_x / 2`, `M = ρ − p/c_s²`, and each
+diagonal carries only the lattice-temperature part, so the defect is made by
+the axis populations alone, axis by axis. `S_Sp` enters as Guo's forcing does,
+half before the collision and half after, and the two halves reach the next
+node differently: the half added after streams with its population, the half
+added before is relaxed first. An exact linear analysis of the scheme — the
+amplification matrix of a uniform component 1, reduced to the two moments a
+diagonal shear wave excites — shows that the decay rate is the lattice
+fluid's for every τ exactly when the source's Fourier symbol along each axis
+is
+
+    d(k) = 2 (1 − e^{−ik}) / (1 + e^{−ik}) = 2i tan(k/2),
+
+the Cayley (bilinear) transform of the one-node shift the streaming applies.
+The nine-point derivative has `i sin k` along an axis instead. The two agree to
+first order and differ at `k³`, and that difference times `ρ₁/ρ₂` is the whole
+of the table's third column.
+
+`2 tan(k/2)` is singular at `k = π` — the checkerboard, which a half-and-half
+source cannot reach at all, since its two halves cancel there — so no explicit
+stencil has it. `kMatchedDerivative` (`src/lbm/isotropic_gradient.h`) is the
+axis stencil of reach three that matches its Taylor series through `k⁵`,
+
+    (29/16) sin k − (1/2) sin 2k + (1/16) sin 3k = 2 tan(k/2) − k⁷/64 + ...,
+
+i.e. `Σ_m c_m (Ψ(x + m) − Ψ(x − m))` with `c = (29/32, −1/4, 1/32)`. What it
+leaves is of order `k⁶/64` of the defect, times `ρ₁/ρ₂`: 0.9 % at 10⁴ on 32²,
+where 1.010 is measured, and 9 % at 10⁵, where 1.129 is. Each doubling of the
+resolution divides it by 64, and it does not depend on τ: 0.998 at 1000 for
+τ = 0.72, 0.8 and 3. `--source-stencil=matched`
+(`SourceStencil::StreamingMatched`) takes
+the deviatoric part of `S_Sp` on it; the default, `isotropic`, is bit-identical
+to the published operator. Within three nodes of a wall the y derivative falls
+back to the nine-point one.
+
+**Only the deviatoric part.** `S_Sp` has a trace part, through `H_b`, and a
+deviatoric one, through `H_ν`; the stress a Taylor–Green vortex or a shear
+feels is the deviatoric one. The trace sets the acoustic stability of the
+heavy fluid, so it stays on the nine-point derivative. Smallest linearly
+stable τ, from the amplification matrix over a 24² sample of the Brillouin
+zone:
+
+| ρ₁/ρ₂ | nine-point | matched deviatoric (shipped) | matched trace too |
 |---|---|---|---|
-| 1 | 1 | 1.0004 | |
-| 10 | 0.1 | 1.212 (1.053 on 64²) | |
-| 1000 | 10⁻³ | **24.8** | 1.0006 |
-| 10⁴ | 10⁻⁴ | **239** | |
+| 2 | 0.522 | 0.522 | |
+| 10 | 0.608 | 0.608 | |
+| 20 | 0.636 | 0.636 | 0.663 |
+| 1000 | 0.694 | 0.694 | 0.746 |
+| 10⁴ | 0.702 | 0.702 | 0.758 |
 
-The heavy fluid resists extension 25 times more than it should at a wavelength
-of 32 nodes and a density ratio of 1000, and the error is of order
-`k² ρ₁/ρ₂`: `S_Sp` differentiates a quantity `ρ₁/ρ₂` times larger than the
-stress it leaves behind, and the streaming that made the error is not the
-nine-point stencil. The two agree to second order and no further.
+The limit itself is the scheme's, not the stencil's: it is the heavy fluid's
+diagonal acoustic mode, and runs of a noisy vortex bear it out with either
+stencil: at 10³ and 10⁴ it grows a thousandfold within 2 × 10⁴ steps at
+τ = 0.65 and not visibly at 0.70. Matching the
+trace as well would put the heavy fluid's sound attenuation right along the
+axes but not the diagonals (1.008 and 10.5 times the continuum at 10⁴ on 32²),
+for 0.05 in τ. As shipped, sound in the heavy fluid is damped 25 times too
+fast along the axes and 30 along the diagonals at 10⁴ on 32² — against 97 and
+30 with the nine-point derivative — which a fluid that nearly never carries
+sound does not notice.
 
-Where it comes from was worked out, and two fixes tried; neither is shipped.
+**The two-population solver** has the same defect through Ba et al.'s source
+term and takes the same option, with the same result: 17.5 → 0.998 at 1000
+and 167 → 1.006 at 10⁴ on the Taylor–Green vortex (see
+[above](#mrt-and-the-third-moment-source-in-the-two-population-solver)).
 
-- **The streaming's own stencil.** For this equilibrium the odd part of an
-  axis population is `(ρ − p) u_x / 2` and each diagonal carries
-  `p (u_x ± u_y) / 4`, so the whole defect is carried by the axis pairs and the
-  streaming generates it with the axis-only centred difference,
-  `(3/2)(Ψ_x(x+1) − Ψ_x(x−1))`. Differentiating `Ψ` that way in `S_Sp` matches
-  the first-order part: 24.8 becomes 15.3. What is left comes from the
-  streaming's second-order term, which carries the same defect as a stride-one
-  second difference, while the half of `S_Sp` added after the collision streams
-  as a centred difference of stride two — and at τ = 0.55 the modified scheme
-  diverges.
-- **Rebuilding the stress from the velocity gradient** (hybrid regularisation,
-  Jacob, Malaspinas & Sagaut 2018): replace the deviatoric non-equilibrium of
-  the populations by its Chapman–Enskog value `−τ p (∇u + ∇uᵀ)`. It makes the
-  error worse, 40.7 at 1000: 1.64 times the original, close to the
-  `(1/2) / (τ − 1/2) = 1.67` expected if the rebuilt stress removes the part of
-  the error the collision accumulates and leaves the streaming's own.
+**Where there is an interface.** A static droplet does not move, so the option
+leaves it where it was. `laplace` with the high-ratio options, 3 × 10⁴ steps,
+Δp/(σ/R_ρ) and the largest spurious velocity:
 
-The defect is not specific to this model: the two-population solver has it
-through the same D2Q9 moment, and Ba et al.'s source term there leaves 17.7 at
-1000 on the same lattice (see
-[above](#mrt-and-the-third-moment-source-in-the-two-population-solver)). Ba et
-al. said as much of the first such term, Huang et al.'s (2013): "the evaluation
-of the source term may lead to considerable numerical errors at higher density
-ratios". Their own term is simpler and, measured here, still has it. The way
-out is a model whose populations do not carry a cold heavy fluid
-— the velocity-based solver's carry `u` at the lattice temperature whatever
-the density — and [`literature.md`](literature.md) is the case for it.
+| ρ₁/ρ₂ | nine-point | matched |
+|---|---|---|
+| 20 (shipped case) | 1.0212, 1.7 × 10⁻⁵ | 1.0215, 1.9 × 10⁻⁵ |
+| 1000 | 1.0269, 2.0 × 10⁻⁵ | 1.0272, 2.5 × 10⁻⁵ |
+| 10⁴ | 1.0185, 6.5 × 10⁻⁴ | 1.0222, 2.4 × 10⁻⁴ |
+
+A moving interface is another matter, and two linear oscillations with exact
+solutions say how. The references are the normal modes of two viscous fluids
+separated by a sharp interface of tension σ — for the capillary wave between
+two half-spaces, and for the mode-2 oscillation of a two-dimensional drop —
+solved numerically from the full linearised Navier–Stokes equations in both
+fluids; the familiar weak-damping formulas miss the boundary layer the
+tangential slip of the potential flows leaves at the interface, by up to 15 %
+here. Dynamic viscosities mixed as ρν, capillary-stress tension, μ₂ = 0.05,
+and the damping rate over the exact one (measured with research programs that
+are not in the repository, the velocity-based solver of the next section
+alongside):
+
+| case | ρ₁/ρ₂ | μ₁ | nine-point | matched | velocity-based |
+|---|---|---|---|---|---|
+| capillary wave, λ = 64, amplitude 0.5 | 100 | 0.5 | 1.50 | 1.16 | 1.04 |
+| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.72 | 2.63 | 1.08 |
+| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.9 | −0.2 | 1.13 |
+
+At 100 the interior of the heavy fluid is what was wrong, and the option
+removes most of it. At 1000 the interface is, and the option cannot help: the
+capillary wave's frequency is 10–12 % low with either stencil, and in the
+droplet the velocity on the light side of the interface reaches 10 to 20 times
+the physical one (1.4 to 5 × 10⁻³, where the velocity-based solver has 2 ×
+10⁻⁴) — the moving-interface limit listed above, reached at a fraction of the
+speed there. A mode-2 droplet's interior is a pure linear
+strain, which neither stencil gets wrong, so its whole error is at the
+interface: the nine-point derivative's excess normal stress damps the
+spurious motion there, and the oscillation with it, eight times too fast; the
+matched one leaves the oscillation slightly undamped. With ε = 0.1 and the
+light fluid at τ = 0.65 the matched run diverges after 4800 steps, and the
+nine-point one does not. Hence the default. The option is for flows whose
+heavy phase deforms in its interior — at a density ratio up to a few hundred,
+or at any ratio where the interfaces do not move — and moving interfaces at
+10³ and above belong to the velocity-based solver.
+
+Two earlier attempts at this, before the symbol was known, are worth keeping
+for what they show. The axis-only centred difference, which matches the
+streaming's first-order operator, cut 24.8 to 15.3: the right axes, the wrong
+symbol, `i sin k` rather than `2i tan(k/2)`. It was also reported to diverge
+at τ = 0.55, which the table above puts below the published operator's own
+limit at that ratio. Rebuilding the deviatoric non-equilibrium from the
+finite-difference velocity gradient (hybrid regularisation, Jacob, Malaspinas
+& Sagaut 2018) made the error worse, 40.7 at 1000: the rebuilt stress removes
+the part of the error the collision accumulates and leaves the streaming's
+own.
 
 ## The velocity-based droplet solver
 

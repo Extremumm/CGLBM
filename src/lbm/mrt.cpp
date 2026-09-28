@@ -40,9 +40,9 @@ void mrt_collide(const double* f,
 }
 
 void add_third_moment_source(
-    double dqx_dx, double dqy_dy, double s_e, double s_nu, double dt, double* out) {
-    const double trace = 3.0 * (1.0 - 0.5 * s_e) * (dqx_dx + dqy_dy) * dt;
-    const double normal = (1.0 - 0.5 * s_nu) * (dqx_dx - dqy_dy) * dt;
+    double divergence, double normal_difference, double s_e, double s_nu, double dt, double* out) {
+    const double trace = 3.0 * (1.0 - 0.5 * s_e) * divergence * dt;
+    const double normal = (1.0 - 0.5 * s_nu) * normal_difference * dt;
     for (int i = 0; i < kQ; i++) {
         out[i] += kMoment[kMomentEnergy][i] * trace / kMomentNorm[kMomentEnergy] +
                   kMoment[kMomentPxx][i] * normal / kMomentNorm[kMomentPxx];

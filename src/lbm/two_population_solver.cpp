@@ -287,7 +287,27 @@ void TwoPopulationSolver::collide_node(int i, int j, double* out1, double* out2)
             gradient_periodic(q_x_.data(), nx_, ny_, i, j, GradientStencil::E4, &dqx_dx, &dqx_dy);
             gradient_periodic(q_y_.data(), nx_, ny_, i, j, GradientStencil::E4, &dqy_dx, &dqy_dy);
         }
-        add_third_moment_source(dqx_dx, dqy_dy, s_e, omega, dt_, correction);
+        double normal_difference = dqx_dx - dqy_dy;
+        if (config_.source_stencil == SourceStencil::StreamingMatched) {
+            // The normal-stress part on the stencil the streaming made the
+            // error with; the trace keeps the nine-point derivative, and so
+            // does y within kMatchedReach nodes of a wall. See SourceStencil.
+            double normal_x = 0.0;
+            for (int m = 1; m <= kMatchedReach; m++) {
+                normal_x += kMatchedDerivative[m - 1] *
+                            (q_x_((i + m) % nx_, j) - q_x_((i - m + nx_) % nx_, j));
+            }
+            double normal_y = dqy_dy;
+            if (!wall_y_ || (j >= kMatchedReach && j < ny_ - kMatchedReach)) {
+                normal_y = 0.0;
+                for (int m = 1; m <= kMatchedReach; m++) {
+                    normal_y += kMatchedDerivative[m - 1] *
+                                (q_y_(i, (j + m) % ny_) - q_y_(i, (j - m + ny_) % ny_));
+                }
+            }
+            normal_difference = normal_x - normal_y;
+        }
+        add_third_moment_source(dqx_dx + dqy_dy, normal_difference, s_e, omega, dt_, correction);
     }
 
     if (!mrt_) {

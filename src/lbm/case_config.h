@@ -266,6 +266,45 @@ enum class Recolouring {
     LatvaKokko       ///< beta rho (1 - phi^2) / 2, Latva-Kokko & Rothman
 };
 
+/// The finite difference the third-moment source term takes.
+///
+/// For a fluid whose pressure is far below `rho c_s^2` -- the heavy fluid at a
+/// large density ratio -- D2Q9's diagonal third moment is out by nearly the
+/// whole of `rho u`, and a source term cancels it: `S_Sp` in `Solver`, Ba et
+/// al.'s `C` in `TwoPopulationSolver`. The cancellation is between two
+/// quantities `rho_1 / rho_2` times larger than the stress that is left, so it
+/// has to be made with the operator the streaming made the error with.
+///
+/// `Isotropic` takes the nine-point isotropic derivative, as Lafarge et al. and
+/// Ba et al. do. It agrees with the streaming only to leading order, and the
+/// difference, amplified by the density ratio, lands in the normal viscous
+/// stress: a Taylor-Green vortex in the heavy fluid, whose strain is purely
+/// normal, decays 24.8 times too fast at a density ratio of 1000 on a 32^2
+/// lattice, and 239 times at 10^4.
+///
+/// `StreamingMatched` takes the deviatoric part -- the one that reaches the
+/// shear and extensional stress -- on `kMatchedDerivative`, which reproduces
+/// the streaming's own symbol to fifth order, and leaves the trace on the
+/// nine-point derivative. The same vortex decays at 0.998 and 1.010 of the
+/// Navier-Stokes rate at those two ratios, for any tau. The trace is left
+/// alone because it sets the acoustic stability of the heavy fluid, and
+/// matching it too raises the smallest stable tau at 10^4 from 0.70 to 0.76.
+/// Measured by an exact linear analysis of the scheme, and by the unit tests;
+/// see docs/numerics.md.
+///
+/// It corrects the heavy fluid's interior, not a moving interface, and that is
+/// why it is not the default. Against the exact normal modes of two viscous
+/// fluids, a capillary wave at a density ratio of 100 is damped 1.50 times too
+/// fast with `Isotropic` and 1.16 with `StreamingMatched`; at 1000 the moving
+/// interface is wrong with either (3.7 and 2.6), and a mode-2 droplet, whose
+/// interior strain neither stencil gets wrong, is damped eight times too fast
+/// with `Isotropic` and not at all with `StreamingMatched` -- whose run
+/// diverges where the other does not once the light fluid's tau is 0.65.
+enum class SourceStencil {
+    Isotropic,        ///< the nine-point isotropic derivative, as published
+    StreamingMatched  ///< the deviatoric part on the stencil the streaming uses
+};
+
 /// The collision operator of `TwoPopulationSolver`.
 ///
 /// `BGK` relaxes every moment at the one rate the viscosity sets,
@@ -539,6 +578,12 @@ struct CaseConfig {
     ///  - H. Huang, J.-J. Huang, X.-Y. Lu, M. C. Sukop, Int. J. Mod. Phys. C
     ///    24, 1350021 (2013): the error term, found on layered channel flow.
     bool third_moment_correction = false;
+
+    /// The finite difference of the third-moment source term, in `Solver`
+    /// (`S_Sp`) and in `TwoPopulationSolver` (with `third_moment_correction`).
+    /// See `SourceStencil`. Near a wall, within `kMatchedReach` nodes of it,
+    /// `StreamingMatched` falls back to the isotropic derivative along y.
+    SourceStencil source_stencil = SourceStencil::Isotropic;
 
     /// Keep `physics.p1_inf` at the value `matched_p1_inf` gives.
     ///
