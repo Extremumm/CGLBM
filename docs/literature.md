@@ -185,7 +185,10 @@ has gone. In this code it is the velocity-based
   brings a capillary wave at a ratio of 100 from 1.50 to 1.16 times its
   damping, but at 10³ the moving interface is wrong with either stencil —
   3.7 and 2.6 times for the wave, and a mode-2 droplet damped eight times too
-  fast or not at all — where the velocity-based solver is within 13 %.
+  fast or not at all — where the velocity-based solver is within 13 %. That is
+  resolution rather than a wall, below the positivity bound: at twice the
+  resolution the wave is at 2.9 with the nine-point source and 1.6 with the
+  matched one.
 - Flows with moving interfaces at 10³ and above belong to the velocity-based
   solver, which is the colour-gradient segregation on a family-3
   hydrodynamics — the model Subhedar (2022) describes.
