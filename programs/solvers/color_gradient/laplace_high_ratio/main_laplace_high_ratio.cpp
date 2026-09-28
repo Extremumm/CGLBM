@@ -23,6 +23,14 @@
 /// case -- a viscosity ratio of 1000 rather than 1 -- and it is stated here
 /// rather than buried, because it is the reason the numbers below are good.
 ///
+/// Their case as they ran it is one command line away, now that the MRT
+/// collision and their third-moment source term are options:
+///
+///     laplace_high_ratio --nu=0.1667 --nu-b=0.1667 --nu2=0.1667 --nu-b2=0.1667
+///                        --collision=mrt --third-moment-correction
+///
+/// tests/test_laplace_high_ratio_mrt.py runs it.
+///
 /// See docs/numerics.md for the measurements and programs/.../tests/.
 
 #include <iostream>

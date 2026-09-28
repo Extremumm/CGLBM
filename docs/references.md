@@ -59,13 +59,13 @@
    | Their equation | Here |
    |---|---|
    | (14) enhanced equilibrium | already present as the third-order Hermite term of `Solver::equilibrium()`; the two agree to 10⁻¹⁴ |
-   | (17)–(18) source correction | already present as `S_Sp` in `Solver::force()`, same two moments, same isotropic derivative |
+   | (17)–(18) source correction | already present as `S_Sp` in `Solver::force()`, same two moments, same isotropic derivative; in `TwoPopulationSolver`, `--third-moment-correction` (`add_third_moment_source`, `src/lbm/mrt.h`) |
    | (20) nine-point derivative | `S_Sp` uses it |
    | (21) normalised phase field | `normalised_phase()`, `InterfaceField::BulkNormalised`, and `CaseConfig::initial_profile_field` |
    | (23)–(26) CSF perturbation | `Solver::surface_force()`, `SurfaceTension::ContinuumSurfaceForce` |
    | (29) velocity redefinition | `Solver::macroscopic()` already forms ρu = Σξf + F dt/2 |
    | (30) Latva-Kokko recolouring | `Recolouring::LatvaKokko`, off by default — measured better below a density ratio of 2 and unusable above 10 |
-   | (11)–(13) MRT collision | not implemented; the collision here is regularised |
+   | (11)–(13) MRT collision | `--collision=mrt` in `TwoPopulationSolver` (`src/lbm/mrt.h`); `Solver`'s collision is regularised |
    | (22) relaxation interpolation | `Physics::nu2` / `nu_b2`, interpolated on the volume fraction |
 
    See [`numerics.md`](numerics.md#reading-ba-et-al-2016-and-leclaire-et-al-2013).
@@ -266,6 +266,105 @@
 
     The same Jacobian, used to write integrals over a curve as integrals over a
     band around it.
+
+## High density ratios: the wider literature
+
+These are the sources of [`literature.md`](literature.md). Except where an
+entry above says otherwise, each is cited for what its abstract or Ba et al.
+(2016) say of it; Ba et al. were read in full.
+
+27. **P. Lallemand, L.-S. Luo.** *Theory of the lattice Boltzmann method:
+    Dispersion, dissipation, isotropy, Galilean invariance, and stability.*
+    Physical Review E **61**, 6546–6562, 2000.
+    DOI: [10.1103/PhysRevE.61.6546](https://doi.org/10.1103/PhysRevE.61.6546)
+
+    The moment basis of `src/lbm/mrt.h`, `--collision=mrt`.
+
+28. **H. Huang, J.-J. Huang, X.-Y. Lu, M. C. Sukop.** *On simulations of
+    high-density ratio flows using color-gradient multiphase lattice Boltzmann
+    models.* International Journal of Modern Physics C **24**, 1350021, 2013.
+    DOI: [10.1142/S0129183113500216](https://doi.org/10.1142/S0129183113500216)
+
+    The unwanted term in the momentum equation of the rest-weight model, found
+    on layered channel flow, and a source term cancelling it, validated to a
+    density ratio of 8. Its evaluation "may lead to considerable numerical
+    errors at higher density ratios" (Ba et al.'s summary), which the
+    Taylor–Green measurements in `numerics.md` quantify.
+
+29. **S. Leclaire, M. Reggio, J.-Y. Trépanier.** *Numerical evaluation of two
+    recoloring operators for an immiscible two-phase flow lattice Boltzmann
+    model.* Applied Mathematical Modelling **36**, 2237–2252, 2012.
+    DOI: [10.1016/j.apm.2011.08.027](https://doi.org/10.1016/j.apm.2011.08.027)
+
+    Latva-Kokko's recolouring adapted to variable density ratios.
+
+30. **S. V. Lishchuk, I. Halliday, C. M. Care.** *Multicomponent lattice
+    Boltzmann method for fluids with a density contrast.* Physical Review E
+    **77**, 036702, 2008.
+    DOI: [10.1103/PhysRevE.77.036702](https://doi.org/10.1103/PhysRevE.77.036702)
+
+31. **K. Burgin, J. Spendlove, X. Xu, I. Halliday.** *Kinematics of
+    chromodynamic multicomponent lattice Boltzmann simulation with a large
+    density contrast.* Physical Review E **100**, 043310, 2019.
+    DOI: [10.1103/PhysRevE.100.043310](https://doi.org/10.1103/PhysRevE.100.043310)
+
+    That the restrictions on density contrast in rapid flow come from the terms
+    correcting the dynamics for large density differences.
+
+32. **J. Spendlove, X. Xu, O. J. Halliday, T. Schenkel, I. Halliday.**
+    *Chromodynamic multirelaxation-time lattice Boltzmann scheme for fluids with
+    density difference.* Physical Review E **102**, 013309, 2020.
+    DOI: [10.1103/PhysRevE.102.013309](https://doi.org/10.1103/PhysRevE.102.013309)
+
+33. **Z. X. Wen, Q. Li, Y. Yu, K. H. Luo.** *Improved three-dimensional
+    color-gradient lattice Boltzmann model for immiscible two-phase flows.*
+    Physical Review E **100**, 023301, 2019.
+    DOI: [10.1103/PhysRevE.100.023301](https://doi.org/10.1103/PhysRevE.100.023301)
+
+34. **R. Haghani, H. Erfani, J. E. McClure, E. G. Flekkøy, C. F. Berg.**
+    *Color-gradient-based phase-field equation for multiphase flow.* Physical
+    Review E **109**, 035301, 2024.
+    DOI: [10.1103/PhysRevE.109.035301](https://doi.org/10.1103/PhysRevE.109.035301)
+
+35. **T. Gregorczyk, S. Zhao, P. Boivin.** *Hybrid lattice Boltzmann method for
+    multiphase flows.* Physical Review E **112**, 025311, 2025.
+    DOI: [10.1103/gzwh-g7hz](https://doi.org/10.1103/gzwh-g7hz)
+
+    Lafarge et al.'s group, moving to a pressure-based lattice Boltzmann scheme
+    for the mixture and a finite-volume order parameter.
+
+36. **T. Reis.** *A lattice Boltzmann formulation of the one-fluid model for
+    multiphase flow.* Journal of Computational Physics **453**, 110962, 2022.
+    DOI: [10.1016/j.jcp.2022.110962](https://doi.org/10.1016/j.jcp.2022.110962)
+
+37. **J. Shao, C. Shu.** *A hybrid phase field multiple relaxation time lattice
+    Boltzmann method for the incompressible multiphase flow with large density
+    contrast.* International Journal for Numerical Methods in Fluids **77**,
+    526–543, 2015. DOI: [10.1002/fld.3995](https://doi.org/10.1002/fld.3995)
+
+38. **F. Hajabdollahi, K. N. Premnath, S. Welch.** *Central moment lattice
+    Boltzmann method using a pressure-based formulation for multiphase flows at
+    high density ratios and including effects of surface tension and Marangoni
+    stresses.* Journal of Computational Physics **425**, 109893, 2021.
+    DOI: [10.1016/j.jcp.2020.109893](https://doi.org/10.1016/j.jcp.2020.109893)
+
+39. **T. Inamuro, T. Ogata, S. Tajima, N. Konishi.** *A lattice Boltzmann method
+    for incompressible two-phase flows with large density differences.* Journal
+    of Computational Physics **198**, 628–644, 2004.
+    DOI: [10.1016/j.jcp.2004.01.019](https://doi.org/10.1016/j.jcp.2004.01.019)
+
+40. **T. Lee, C.-L. Lin.** *A stable discretization of the lattice Boltzmann
+    equation for simulation of incompressible two-phase flows at high density
+    ratio.* Journal of Computational Physics **206**, 16–47, 2005.
+    DOI: [10.1016/j.jcp.2004.12.001](https://doi.org/10.1016/j.jcp.2004.12.001)
+
+41. **H. Liang, J. Xu, J. Chen, H. Wang, Z. Chai, B. Shi.** *Phase-field-based
+    lattice Boltzmann modeling of large-density-ratio two-phase flows.* Physical
+    Review E **97**, 033309, 2018.
+    DOI: [10.1103/PhysRevE.97.033309](https://doi.org/10.1103/PhysRevE.97.033309)
+
+    Droplet splashing at a density ratio of 1000, Re 20–500: the test Ba et
+    al. run with a colour-gradient model at 100.
 
 ## Lattice Boltzmann background
 

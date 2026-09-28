@@ -392,6 +392,86 @@ void report_density_ratios(int steps) {
 
 }  // namespace
 
+/// Decay rate of an axis-aligned Taylor-Green vortex in a uniform component 1,
+/// over the rate `2 nu k^2` the Navier-Stokes equations give.
+///
+/// Its strain is purely normal, so it measures the one stress the source term
+/// `S_Sp` has to repair: at a pressure far below `rho c_s^2` -- the heavy fluid
+/// at a large density ratio -- D2Q9's diagonal third moment is out by almost
+/// the whole of `rho u`, and `S_Sp` cancels that with a nine-point finite
+/// difference. What is left is the difference between that stencil and the
+/// streaming's own, a truncation error of order `k^2` that the density ratio
+/// multiplies. `shear` runs a shear wave instead, which the equilibrium gets
+/// right unaided.
+double taylor_green_rate(double ratio, bool shear, bool matched = false) {
+    constexpr double pi = 3.14159265358979323846;
+    CaseConfig config;
+    config.name = "taylor_green";
+    config.nx = 32;
+    config.ny = 32;
+    config.physics.rho1 = ratio;
+    config.physics.rho2 = 1.0;
+    config.physics.c1 = config.physics.c2 = 1.0 / std::sqrt(3.0);
+    config.physics.radius = 10.0;
+    config.physics.p1_inf = cglbm::lbm::matched_p1_inf(config.physics);
+    config.stencil = GradientStencil::E4;
+    if (matched) {
+        config.source_stencil = cglbm::lbm::SourceStencil::StreamingMatched;
+    }
+    config.initial_phase = [](const CaseConfig&, int, int) { return 1.0; };
+    const double amplitude = 1.0e-4 / std::sqrt(ratio);
+    config.initial_velocity = [amplitude,
+                               shear](const CaseConfig& c, int i, int j, double* u_x, double* u_y) {
+        const double k = 2.0 * pi / c.nx;
+        const double x = i + 0.5, y = j + 0.5;
+        *u_x = shear ? amplitude * std::sin(k * y) : amplitude * std::sin(k * x) * std::cos(k * y);
+        *u_y = shear ? 0.0 : -amplitude * std::cos(k * x) * std::sin(k * y);
+    };
+    // tau = 0.8 in component 1: rho nu = (tau - 1/2) p.
+    const double p = ratio / 3.0 - config.physics.p1_inf;
+    const double mu = 0.3 * p;
+    config.physics.nu = config.physics.nu_b = mu / ratio;
+
+    Solver solver(config);
+    solver.initialize();
+    auto kinetic = [&solver]() {
+        double energy = 0.0;
+        const auto& u = solver.velocity();
+        for (int i = 0; i < u.nx(); ++i) {
+            for (int j = 0; j < u.ny(); ++j) {
+                energy += u(i, j, 0) * u(i, j, 0) + u(i, j, 1) * u(i, j, 1);
+            }
+        }
+        return energy;
+    };
+    // Let the acoustic start-up pass: the equilibrium laid down at t = 0 has
+    // no viscous stress in it yet.
+    for (int step = 0; step < 50; ++step) {
+        solver.step();
+    }
+    const double start = kinetic();
+    const int steps = 2000;
+    for (int step = 0; step < steps; ++step) {
+        solver.step();
+    }
+    const double k = 2.0 * pi / config.nx;
+    const double rate = -std::log(kinetic() / start) / (2.0 * steps);
+    return rate / ((shear ? 1.0 : 2.0) * (mu / ratio) * k * k);
+}
+
+void report_taylor_green() {
+    std::cout.precision(17);
+    std::cout << "tg_r1 = " << taylor_green_rate(1.0, false) << "\n"
+              << "tg_r10 = " << taylor_green_rate(10.0, false) << "\n"
+              << "tg_r1000 = " << taylor_green_rate(1000.0, false) << "\n"
+              << "tg_r1000_shear = " << taylor_green_rate(1000.0, true) << "\n"
+              << "tg_matched_r1 = " << taylor_green_rate(1.0, false, true) << "\n"
+              << "tg_matched_r10 = " << taylor_green_rate(10.0, false, true) << "\n"
+              << "tg_matched_r1000 = " << taylor_green_rate(1000.0, false, true) << "\n"
+              << "tg_matched_r10000 = " << taylor_green_rate(10000.0, false, true) << "\n"
+              << "tg_matched_r1000_shear = " << taylor_green_rate(1000.0, true, true) << std::endl;
+}
+
 int main(int argc, char** argv) {
     GradientStencil stencil = GradientStencil::E8;
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &stencil)) {
@@ -422,6 +502,11 @@ int main(int argc, char** argv) {
         report_normalised_phase();
         report_enhanced_equilibrium();
         report_density_ratios(300);
+        // Independent of the stencil argument -- the vortex has no interface
+        // -- and the slowest item here, so it runs once, with E8.
+        if (stencil == GradientStencil::E8) {
+            report_taylor_green();
+        }
     } catch (const std::exception& error) {
         std::cerr << "lbm_solver: " << error.what() << std::endl;
         return 1;

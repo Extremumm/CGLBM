@@ -39,6 +39,12 @@ using PhaseFieldInit = std::function<double(const CaseConfig&, int i, int j)>;
 /// The same, for a three-dimensional case.
 using PhaseFieldInit3D = std::function<double(const CaseConfig&, int i, int j, int k)>;
 
+/// Initial velocity at node (i, j), written into `u_x` and `u_y`.
+///
+/// Unset, every case starts at rest.
+using VelocityFieldInit =
+    std::function<void(const CaseConfig&, int i, int j, double* u_x, double* u_y)>;
+
 /// Which field the colour gradient is taken of.
 ///
 /// The surface-tension and recolouring operators both act along the gradient
@@ -260,6 +266,73 @@ enum class Recolouring {
     LatvaKokko       ///< beta rho (1 - phi^2) / 2, Latva-Kokko & Rothman
 };
 
+/// The finite difference the third-moment source term takes.
+///
+/// For a fluid whose pressure is far below `rho c_s^2` -- the heavy fluid at a
+/// large density ratio -- D2Q9's diagonal third moment is out by nearly the
+/// whole of `rho u`, and a source term cancels it: `S_Sp` in `Solver`, Ba et
+/// al.'s `C` in `TwoPopulationSolver`. The cancellation is between two
+/// quantities `rho_1 / rho_2` times larger than the stress that is left, so it
+/// has to be made with the operator the streaming made the error with.
+///
+/// `Isotropic` takes the nine-point isotropic derivative, as Lafarge et al. and
+/// Ba et al. do. It agrees with the streaming only to leading order, and the
+/// difference, amplified by the density ratio, lands in the normal viscous
+/// stress: a Taylor-Green vortex in the heavy fluid, whose strain is purely
+/// normal, decays 24.8 times too fast at a density ratio of 1000 on a 32^2
+/// lattice, and 239 times at 10^4.
+///
+/// `StreamingMatched` takes the deviatoric part -- the one that reaches the
+/// shear and extensional stress -- on `kMatchedDerivative`, which reproduces
+/// the streaming's own symbol to fifth order, and leaves the trace on the
+/// nine-point derivative. The same vortex decays at 0.998 and 1.010 of the
+/// Navier-Stokes rate at those two ratios, for any tau. The trace is left
+/// alone because it sets the acoustic stability of the heavy fluid, and
+/// matching it too raises the smallest stable tau at 10^4 from 0.70 to 0.76.
+/// Measured by an exact linear analysis of the scheme, and by the unit tests;
+/// see docs/numerics.md.
+///
+/// It corrects the heavy fluid's interior, not a moving interface, and that is
+/// why it is not the default. Against the exact normal modes of two viscous
+/// fluids, a capillary wave at a density ratio of 100 is damped 1.50 times too
+/// fast with `Isotropic` and 1.16 with `StreamingMatched`; at 1000 the moving
+/// interface is wrong with either (3.7 and 2.6), and a mode-2 droplet, whose
+/// interior strain neither stencil gets wrong, is damped eight times too fast
+/// with `Isotropic` and not at all with `StreamingMatched` -- whose run
+/// diverges where the other does not once the light fluid's tau is 0.65.
+enum class SourceStencil {
+    Isotropic,        ///< the nine-point isotropic derivative, as published
+    StreamingMatched  ///< the deviatoric part on the stencil the streaming uses
+};
+
+/// The collision operator of `TwoPopulationSolver`.
+///
+/// `BGK` relaxes every moment at the one rate the viscosity sets,
+/// `1 / tau = p dt / (mu + p dt / 2)`. That rate is small wherever the fluid is
+/// viscous at a low pressure, and in this model every fluid is at the same low
+/// pressure: with Ba et al.'s equal kinematic viscosities at a density ratio of
+/// 1000, tau is 348 in the heavy fluid, and BGK relaxes the energy, its square
+/// and the energy flux -- none of which the Navier-Stokes equations contain --
+/// that slowly too. Measured on Ba et al.'s own benchmark, the pressure jump
+/// comes out at 54 % of sigma / R after 5e3 steps and falls to 38 % by 4e4.
+///
+/// `MRT` transforms to the moment basis of Lallemand & Luo and relaxes each
+/// moment at its own rate: the shear stress at `1 / tau`, the energy `e` at
+/// `physics.s_e` (which sets the bulk viscosity), `epsilon` and the energy flux
+/// `q` at `physics.s_eps` and `physics.s_q`. Ba et al. use 1.25, 1.14 and 1.6.
+/// With every rate equal to `1 / tau` it is BGK again, exactly.
+///
+/// References
+///  - P. Lallemand, L.-S. Luo, "Theory of the lattice Boltzmann method:
+///    Dispersion, dissipation, isotropy, Galilean invariance, and stability",
+///    Phys. Rev. E 61, 6546 (2000). The moment basis and the rates.
+///  - Y. Ba, H. Liu, Q. Li, Q. Kang, J. Sun, Phys. Rev. E 94, 023310 (2016),
+///    Eqs. (11)-(13) and (16): the same basis with the alpha_k equilibrium.
+enum class Collision {
+    BGK,  ///< one relaxation time for every moment
+    MRT   ///< each moment at its own rate, Lallemand & Luo
+};
+
 // Boundary, how the domain is closed along y, is declared with the gradient
 // stencils in lbm/isotropic_gradient.h.
 
@@ -356,6 +429,14 @@ struct Physics {
     /// et al. use, `1 - alpha_1 = 0.8 rho2/rho1`, which stays positive at any
     /// ratio. `Solver` ignores this field.
     double alpha2 = 0.2;
+
+    /// Relaxation rates of the three non-hydrodynamic moments under
+    /// `Collision::MRT`: the energy `e`, which sets the bulk viscosity, its
+    /// square `epsilon`, and the energy flux `q`. Ba et al.'s values, after
+    /// Lallemand & Luo. Each must lie in (0, 2). `TwoPopulationSolver` only.
+    double s_e = 1.25;
+    double s_eps = 1.14;
+    double s_q = 1.6;
 };
 
 /// Density at which the equation of state gives `target_pressure` for `phi`.
@@ -422,6 +503,8 @@ struct CaseConfig {
 
     Boundary boundary = Boundary::PeriodicY;
     PhaseFieldInit initial_phase;
+    /// Initial velocity; unset means at rest. Read by `Solver` and `TwoPopulationSolver`.
+    VelocityFieldInit initial_velocity;
     /// The same for a three-dimensional case; the solver uses whichever of the
     /// two its dimensionality calls for.
     PhaseFieldInit3D initial_phase_3d;
@@ -470,6 +553,37 @@ struct CaseConfig {
 
     /// How the two components are segregated after collision. See `Recolouring`.
     Recolouring recolouring = Recolouring::InterfaceWidth;
+
+    /// The collision operator of `TwoPopulationSolver`. See `Collision`.
+    Collision collision = Collision::BGK;
+
+    /// Add Ba et al.'s source term for the diagonal third moment.
+    ///
+    /// D2Q9 cannot carry the diagonal third moment a fluid with its own sound
+    /// speed needs: `sum_i f_i^eq e_x^3` is `rho_k u_x` on the lattice, where
+    /// the Navier-Stokes equations want `3 p_k u_x`. The enhanced equilibrium
+    /// repairs the off-diagonal part only. What is left is an error in the
+    /// normal viscous stress, `Q = (1 - 3 (c_s^k)^2) rho_k u` summed over the
+    /// fluids -- zero for a fluid at the lattice sound speed, and the whole of
+    /// `rho_k u` for the heavy fluid at a large density ratio. This adds its
+    /// divergence back into the energy and normal-stress moments.
+    ///
+    /// It is the two-population counterpart of `S_Sp` in `Solver`, which does
+    /// the same for the departure of the equation of state from the ideal gas.
+    /// `TwoPopulationSolver` only.
+    ///
+    /// Reference
+    ///  - Y. Ba, H. Liu, Q. Li, Q. Kang, J. Sun, Phys. Rev. E 94, 023310
+    ///    (2016), Eqs. (17), (18) and (20).
+    ///  - H. Huang, J.-J. Huang, X.-Y. Lu, M. C. Sukop, Int. J. Mod. Phys. C
+    ///    24, 1350021 (2013): the error term, found on layered channel flow.
+    bool third_moment_correction = false;
+
+    /// The finite difference of the third-moment source term, in `Solver`
+    /// (`S_Sp`) and in `TwoPopulationSolver` (with `third_moment_correction`).
+    /// See `SourceStencil`. Near a wall, within `kMatchedReach` nodes of it,
+    /// `StreamingMatched` falls back to the isotropic derivative along y.
+    SourceStencil source_stencil = SourceStencil::Isotropic;
 
     /// Keep `physics.p1_inf` at the value `matched_p1_inf` gives.
     ///

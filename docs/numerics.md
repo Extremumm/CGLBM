@@ -559,7 +559,10 @@ kept, defaulting off, because it is the better operator below a ratio of about
     laplace_opt --recolouring=latva-kokko --beta=0.7
 
 That leaves MRT as the only untried ingredient of Ba et al., and it is the one
-aimed at stability — which is what the CSF configuration lacks above 10³.
+aimed at stability — which is what the CSF configuration lacks above 10³. It has
+since been tried in the two-population solver, where it is what carries Ba et
+al.'s own benchmark; see
+[MRT and the third-moment source](#mrt-and-the-third-moment-source-in-the-two-population-solver).
 
 ### Two viscosities: Ba et al. Eq. (22)
 
@@ -608,9 +611,10 @@ thickness of about 5-6 lattice units". Their ingredients are the isotropic
 colour gradient — which is already here, `src/lbm/isotropic_gradient.h` cites
 that paper — and a recolouring operator in the Latva-Kokko family, which
 [does not transfer](#the-recolouring-why-p-and-not-rho). Everything else in the
-recent literature stops at 10³: Ba et al. (2016), Leclaire et al. (2013), Saito
-et al. (2023), and Subhedar (2022), whose survey puts colour-gradient accuracy
-as "still limited to a density ratio of 1000".
+recent literature stops at 10³: Ba et al. (2016), Leclaire et al. (2013), and
+Saito et al. (2023), who find dynamic problems accurate at a density ratio of
+10 and "still limited" at 1000. [`literature.md`](literature.md) reviews the
+field in full.
 
 Before any of that could be tested here, a plainer problem had to be dealt with:
 none of the runs behind the earlier claims were long enough to mean anything.
@@ -685,8 +689,8 @@ than in an equation of state. That is a different model, not a missing term.
 | Leclaire et al. 2013 | 10³, dynamic | enhanced equilibrium distributions |
 | Ba et al. 2016 | 10³, dynamic, high Re; 0.74 % on σ, u_max 1.3 × 10⁻⁴ | MRT collision, CSF perturbation, normalised phase field |
 | Saito et al. 2023 | 10 accurately, 10³ marginally | sixth-order Hermite equilibria, central moments |
-| **this code, `TwoPopulationSolver`** | **10³ at 0.3 %, converged; 10⁴–10⁵ stable but not steady** | alpha_k equilibrium, isotropic gradient, CSF tension, recolouring adapted to the density ratio |
-| **this code, `Solver`** | **500, converged; with dynamic viscosity mixing, 10³ converged and 10⁴ stable to 1.2 × 10⁵ steps** | two-component equation of state, phi_N interface, CSF or capillary-stress tension |
+| **this code, `TwoPopulationSolver`** | **10³ at 0.3 %, converged; 10⁴–10⁵ stable but not steady; with MRT and the third-moment source, Ba et al.'s equal-viscosity case at 10³** | alpha_k equilibrium, isotropic gradient, CSF tension, recolouring adapted to the density ratio, MRT |
+| **this code, `Solver`** | **500, converged; with dynamic viscosity mixing, 10³ converged, and 10⁴, 10⁵ and 10⁶ stable to 1.2 × 10⁵ steps, within 2.5 % of Laplace's law** | two-component equation of state, phi_N interface, CSF or capillary-stress tension |
 
 Ratios of 10⁵ and beyond are reported by other families — chemical-potential
 pseudopotential models (> 6.5 × 10⁴), phase-field Allen–Cahn models, entropic
@@ -700,7 +704,13 @@ run does not survive a long one, so there is no comparable figure to give.
 
 The gap is not in the ingredients: all four are implemented, one of them was
 already here, and the fourth — the recolouring — turned out to be the one that
-must *not* be carried over. What remains untried is MRT.
+must *not* be carried over. MRT, the last, is now in the two-population solver.
+What the literature does *not* offer is a way past the two limits every
+colour-gradient model with density-carrying populations shares once the
+interface moves; [`literature.md`](literature.md#what-limits-the-density-ratio)
+sets them out, and
+[The heavy fluid's extensional viscosity](#the-heavy-fluids-extensional-viscosity)
+measures the second of them here.
 
 ## A second model, for density ratios past 10³
 
@@ -826,9 +836,103 @@ at 1.5 × 10⁵ steps and +7.9 % at 3 × 10⁵. **So 10⁴ and 10⁵ are reporte
 qualitative, not measured.** Raising the viscosity does not help: at μ = 0.5 the
 10⁴ case degrades steadily instead, from −1.9 % to −7.4 %.
 
-What is left to try there is the MRT collision — the one ingredient of Ba et al.
-still not implemented in either solver, and the one aimed at exactly this: the
-spurious currents that a single relaxation time leaves in the ghost moments.
+What was left to try there was the MRT collision — the one ingredient of Ba et
+al. not implemented in either solver. It is now, with the source term that goes
+with it, and the next section says what it does and does not change.
+
+### MRT and the third-moment source in the two-population solver
+
+Ba et al. carry their benchmark with two things this solver lacked: an MRT
+collision in the moment basis of Lallemand & Luo (their Eqs. 11–13), and a
+source term for the diagonal third moment D2Q9 cannot carry (their Eqs. 17–18).
+Both are options now, `--collision=mrt` and `--third-moment-correction`, and
+both are off by default: `laplace_high_ratio` as shipped is unchanged to the
+last bit, which is checked against `main` at 17 digits.
+
+Two facts made the implementation simple. The recolouring splits the *total*
+post-collision population by mass share straight after the collision, so only
+the total matters and the MRT acts on it — per-fluid rates would be
+meaningless. And with every rate set to the viscous one the MRT is BGK exactly;
+`src/lbm/mrt.h` is the kernel, and
+`programs/unit_testing/lbm/two_population` checks it moment by moment, against
+BGK, and for mass and momentum node by node on a droplet at 1000.
+
+**Ba et al.'s own case.** Their static droplet has the same *kinematic*
+viscosity in both fluids, ν = 0.1667, which this solver could not run: with
+`τ = μ / (p dt) + ½` and the two bulk pressures equal, τ is 348 in the heavy
+fluid. `laplace_high_ratio` sidestepped that by matching the dynamic
+viscosities instead. Run as they ran it, R = 25 in 100², σ = 0.1, α₂ = 0.2,
+β = 0.7, density ratio 1000:
+
+| steps | BGK | MRT | MRT + source | max &#124;u&#124;: BGK, MRT, MRT + source |
+|---|---|---|---|---|
+| 5 × 10³ | 0.542 | 0.733 | 0.863 | 9.1 × 10⁻⁴, 1.0 × 10⁻², 1.0 × 10⁻³ |
+| 10⁴ | 0.498 | 0.912 | 0.954 | 5.3 × 10⁻⁴, 5.5 × 10⁻³, 6.7 × 10⁻⁴ |
+| 2 × 10⁴ | 0.438 | 0.969 | 0.981 | 3.8 × 10⁻⁴, 2.7 × 10⁻³, 1.4 × 10⁻⁴ |
+| 4 × 10⁴ | 0.384 | 1.014 | 0.991 | 2.4 × 10⁻⁴, 1.4 × 10⁻³, 5.0 × 10⁻⁵ |
+| 6 × 10⁴ | | | 0.995 | 2.1 × 10⁻⁵ |
+| 1.2 × 10⁵ | | | **0.999** | 7.9 × 10⁻⁶ |
+
+(σ_cal / σ from the jump between r < R/2 and r > 3R/2, against the φ_N = 0
+radius, as `laplace_high_ratio`'s tests score it.) BGK is not converging to the
+wrong answer, it is leaving the right one: the jump falls the whole run, and
+the pressure dips to 0.436 on the interface at 5 × 10³ steps, 0.042 below the
+fluid around it — a hole ten times σ/R deep. MRT alone recovers the tension but
+not the currents, which stay at 10⁻³ while the jump overshoots. With the source
+term both come right, 0.11 % from Laplace's law and still creeping up by
+5 × 10⁻⁴ per 10⁴ steps, with currents sixteen times below Ba et al.'s: they
+report 1.0074 and 1.25 × 10⁻⁴ for this case. `tests/test_laplace_high_ratio_mrt.py`
+runs it.
+
+Which of BGK's slow moments is to blame could not be isolated: relaxing only
+the energy, or only ε and q, at the viscous rate with the others at Ba et al.'s
+diverges within 5000 steps. What is certain is that at τ = 348 BGK relaxes the
+moments the Navier–Stokes equations do not contain some 400 times more slowly
+than MRT does (1/348 against 1.14 to 1.6), and that relaxing them fast is what
+restores the jump.
+
+**What the source term corrects, measured directly.** D2Q9 has `e_x³ = e_x`, so
+`sum f e_x³` is the momentum itself, `rho_k u_x`, where a fluid of sound speed
+`c_k` needs `3 rho_k c_k² u_x`. The enhanced equilibrium fixes the off-diagonal
+third moment; this diagonal one reaches only the **normal** viscous stress, and
+a Taylor–Green vortex in one fluid isolates it, since its strain `d_x u_x =
+−d_y u_y` has no shear at all. Its decay rate over the Navier–Stokes `2νk²`, on
+32², τ = 0.8, after 50 steps of acoustic start-up:
+
+| fluid | `c_k²` | without source | predicted, `(1 − c_k²)/(2c_k²)` | with source | with source, `--source-stencil=matched` |
+|---|---|---|---|---|---|
+| density ratio 1 (α = 0.2) | 0.48 | 0.5425 | 0.5417 | 0.9950 | 1.002 |
+| density ratio 10 | 0.048 | 9.919 | 9.917 | 1.139 | 0.997 |
+| density ratio 1000 | 4.8 × 10⁻⁴ | 760 | 1041 | 17.5 | 0.998 |
+| density ratio 10⁴ | 4.8 × 10⁻⁵ | | | 167 | 1.006 |
+
+A shear wave in the same fluid decays at `νk²` to 0.5 % with or without the
+term. So the source is right, and it is the whole of the defect at a moderate
+contrast. Taken with the nine-point derivative Ba et al. use, at a large one it
+is not enough, and the residual is of order `k² / c_k²`: at a ratio of 10 it
+falls from 0.542 to 0.139 to 0.035 as the lattice goes from 16² to 32² to 64²,
+and it does not depend on τ (0.142 at τ = 1.5). The derivative that matches the
+streaming removes it; that is the subject of
+[The heavy fluid's extensional viscosity](#the-heavy-fluids-extensional-viscosity),
+because `Solver` has the same defect through `S_Sp`.
+
+**Beyond 10³.** With Ba et al.'s equal kinematic viscosities, τ in the droplet
+grows with the density ratio: 3.5 × 10³ at 10⁴, 3.5 × 10⁴ at 10⁵. That is the
+droplet's stress relaxation time in steps, and over a run of 10⁵ steps it
+behaves as an elastic solid as much as a fluid. At 10⁴ with MRT and the source
+the jump climbs through 0.23, 0.41, 0.78 and 0.99 at 5 × 10³, 2 × 10⁴,
+5 × 10⁴ and 8 × 10⁴ steps and then drifts back to 0.977 at 10⁵, with currents of
+2 × 10⁻³ — slower, smaller, and no more settled than the matched-viscosity BGK
+run above. A viscosity ratio of 10⁴ is not a physical case, and nothing here
+suggests pursuing it.
+
+The two options are for what the two-population solver could not do before:
+run with the heavy fluid's *dynamic* viscosity well above the light fluid's —
+the physical case for a liquid in a gas, 55 for water and air — without the
+relaxation time in the heavy fluid wrecking the pressure. Ba et al.'s case is
+the extreme of it, a dynamic viscosity ratio of 1000. They do not lift the
+density ratio at which the solver runs; `literature.md` explains why no
+ingredient of this family can.
 
 ## Three dimensions
 
@@ -1665,8 +1769,45 @@ $\tfrac{W}{2}\ln(\rho_1/\rho_2)$ (5.53 at 10³, 7.37 at 10⁴) but falls
 increasingly short of it as the ratio grows, as the φ = 0 contour moves into the
 far tail of the profile.
 
+### Static droplets up to a density ratio of a million
+
+Nothing in the two options is specific to 10⁴, and nothing had been run past
+it. The same case at 10⁵ and 10⁶ — the heavy fluid's kinematic viscosity
+divided accordingly, everything else unchanged — scored as
+`tests/test_laplace_high_density_ratio.py` scores it:
+
+| ρ₁/ρ₂ | Δp / (σ/R(ρ)) at 3, 6, 12 × 10⁴ steps | max &#124;u&#124; at 3, 6, 12 × 10⁴ steps | R(ρ) at 0 and 1.2 × 10⁵ | min p over the run |
+|---|---|---|---|---|
+| 10⁴ | 1.018, 1.022, 1.025 | 6.5 × 10⁻⁴, —, 4.5 × 10⁻⁵ | 9.98 → 10.01 | 0.330 |
+| 10⁵ | 1.021, 1.021, 1.019 | 1.2, 1.7, 1.2 × 10⁻³ | 10.05 → 10.00 | 0.305 |
+| 10⁶ | 1.021, 1.022, 1.023 | 3.5, 3.0, 2.1 × 10⁻³ | 10.05 → 10.05 | 0.279 |
+
+All three run the 1.2 × 10⁵ steps without diverging and hold Laplace's law to
+2.5 %. The jump at 3 × 10⁴ steps is the same to three digits across two decades
+of density ratio, which says again that the 2 % is the interface width at
+R = 10 and not the contrast. What grows with the ratio is the spurious
+currents, roughly doubling per decade at 3 × 10⁴ steps, and they settle more
+slowly than at 10⁴: at 10⁶ they fall steadily to 2.1 × 10⁻³, and at 10⁵ they
+rise to 1.7 × 10⁻³ at 6 × 10⁴ steps before falling back, while the density
+radius drifts inward by 0.004 per 10⁴ steps and the jump eases from 1.021 to
+1.019 with it. Neither is a converged state the way 10³ is; both are bounded
+and holding. The phase field stays in [−1, 1], the minimum pressure stays
+positive, and the φ = 0 contour starts where `(W/2) ln(ρ₁/ρ₂)` puts it, 6.33
+and 7.60 nodes out at 10⁵ and 10⁶ against 6.30 and 7.53 measured. The long test
+runs all three ratios for 3 × 10⁴ steps.
+
+The φ = 0 contour sits in the far tail of the profile at these ratios — at 10⁶
+the half-volume point is `φ = 1 − 2 × 10⁻⁶` — so the scheme is resolving a
+volume fraction through `1 − φ`, six digits below one. Double precision leaves
+ten more, which is why nothing breaks; at 10¹⁰ it would.
+
 ### What is not solved
 
+- **The heavy fluid's extensional viscosity**, below: wrong by a factor that
+  grows with the density ratio, for any flow that stretches the heavy fluid.
+  `--source-stencil=matched` corrects it inside the heavy fluid (24.8 → 0.998
+  on a Taylor–Green vortex at 1000); at a moving interface at 10³ and above it
+  does not, and it is not the default.
 - **Moving interfaces at high density ratio.** In the earlier program, a
   droplet translating through a periodic box with velocity $U$ (the whole
   domain initialised at $U$, equal viscosities, 3000 steps) stayed bounded only
@@ -1700,6 +1841,161 @@ far tail of the profile.
 - **Only the Laplace case is validated with the two options.** `capillary`,
   `gravity_capillary` and the `rayleigh_taylor` programs run on the same
   `Solver` and accept the same flags, but none of them has been run with them.
+
+### The heavy fluid's extensional viscosity
+
+A static droplet cannot see this, which is how it went unnoticed. The heavy
+fluid in `Solver` is held at the light fluid's pressure, so its `p / ρ` — the
+kinetic temperature of its populations — is the density ratio times below the
+lattice's `c_s²`. D2Q9 has `e_x³ = e_x`, so the diagonal third moment of any set
+of populations is the momentum itself, `ρ u_x`, where the Navier–Stokes
+equations need `3 p u_x`. The difference, `3Ψ` with `Ψ = (p − ρ c_s²) u`, is
+nearly the whole of `ρ u` for the heavy fluid, and it lands in the **normal**
+viscous stress. `S_Sp` exists to cancel it, and as published does so with the
+nine-point isotropic derivative of `Ψ`.
+
+A Taylor–Green vortex in a uniform component 1 measures how well. Its strain
+`d_x u_x = −d_y u_y` has no shear, so its decay rate is set by the normal stress
+alone; a shear wave in the same fluid is the control. Decay rate over the
+Navier–Stokes value, 32², τ = 0.8
+(`programs/unit_testing/lbm/solver`, which pins these):
+
+| ρ₁/ρ₂ | `p/(ρ c_s²)` | nine-point `S_Sp` | `--source-stencil=matched` | shear wave |
+|---|---|---|---|---|
+| 1 | 1 | 1.0004 | 1.0004 | |
+| 10 | 0.1 | 1.212 (1.053 on 64²) | 0.997 | |
+| 1000 | 10⁻³ | **24.8** | 0.998 | 1.0006 |
+| 10⁴ | 10⁻⁴ | **239** (61 on 64²) | 1.010 (0.9994 on 64²) | |
+| 10⁵ | 10⁻⁵ | | 1.129 (1.001 on 64²) | |
+
+With the nine-point derivative the heavy fluid resists extension 25 times
+more than it should at a wavelength of 32 nodes and a density ratio of 1000,
+and the error is of order `k² ρ₁/ρ₂`: `S_Sp` differentiates a quantity
+`ρ₁/ρ₂` times larger than the stress it leaves behind, and the streaming that
+made the error is not the nine-point stencil.
+
+**The stencil that cancels it.** For this equilibrium the odd part of an axis
+population carries a cold excess `±M u_x / 2`, `M = ρ − p/c_s²`, and each
+diagonal carries only the lattice-temperature part, so the defect is made by
+the axis populations alone, axis by axis. `S_Sp` enters as Guo's forcing does,
+half before the collision and half after, and the two halves reach the next
+node differently: the half added after streams with its population, the half
+added before is relaxed first. An exact linear analysis of the scheme — the
+amplification matrix of a uniform component 1, reduced to the two moments a
+diagonal shear wave excites — shows that the decay rate is the lattice
+fluid's for every τ exactly when the source's Fourier symbol along each axis
+is
+
+    d(k) = 2 (1 − e^{−ik}) / (1 + e^{−ik}) = 2i tan(k/2),
+
+the Cayley (bilinear) transform of the one-node shift the streaming applies.
+The nine-point derivative has `i sin k` along an axis instead. The two agree to
+first order and differ at `k³`, and that difference times `ρ₁/ρ₂` is the whole
+of the table's third column.
+
+`2 tan(k/2)` is singular at `k = π` — the checkerboard, which a half-and-half
+source cannot reach at all, since its two halves cancel there — so no explicit
+stencil has it. `kMatchedDerivative` (`src/lbm/isotropic_gradient.h`) is the
+axis stencil of reach three that matches its Taylor series through `k⁵`,
+
+    (29/16) sin k − (1/2) sin 2k + (1/16) sin 3k = 2 tan(k/2) − k⁷/64 + ...,
+
+i.e. `Σ_m c_m (Ψ(x + m) − Ψ(x − m))` with `c = (29/32, −1/4, 1/32)`. What it
+leaves is of order `k⁶/64` of the defect, times `ρ₁/ρ₂`: 0.9 % at 10⁴ on 32²,
+where 1.010 is measured, and 9 % at 10⁵, where 1.129 is. Each doubling of the
+resolution divides it by 64, and it does not depend on τ: 0.998 at 1000 for
+τ = 0.72, 0.8 and 3. `--source-stencil=matched`
+(`SourceStencil::StreamingMatched`) takes
+the deviatoric part of `S_Sp` on it; the default, `isotropic`, is bit-identical
+to the published operator. Within three nodes of a wall the y derivative falls
+back to the nine-point one.
+
+**Only the deviatoric part.** `S_Sp` has a trace part, through `H_b`, and a
+deviatoric one, through `H_ν`; the stress a Taylor–Green vortex or a shear
+feels is the deviatoric one. The trace sets the acoustic stability of the
+heavy fluid, so it stays on the nine-point derivative. Smallest linearly
+stable τ, from the amplification matrix over a 24² sample of the Brillouin
+zone:
+
+| ρ₁/ρ₂ | nine-point | matched deviatoric (shipped) | matched trace too |
+|---|---|---|---|
+| 2 | 0.522 | 0.522 | |
+| 10 | 0.608 | 0.608 | |
+| 20 | 0.636 | 0.636 | 0.663 |
+| 1000 | 0.694 | 0.694 | 0.746 |
+| 10⁴ | 0.702 | 0.702 | 0.758 |
+
+The limit itself is the scheme's, not the stencil's: it is the heavy fluid's
+diagonal acoustic mode, and runs of a noisy vortex bear it out with either
+stencil: at 10³ and 10⁴ it grows a thousandfold within 2 × 10⁴ steps at
+τ = 0.65 and not visibly at 0.70. Matching the
+trace as well would put the heavy fluid's sound attenuation right along the
+axes but not the diagonals (1.008 and 10.5 times the continuum at 10⁴ on 32²),
+for 0.05 in τ. As shipped, sound in the heavy fluid is damped 25 times too
+fast along the axes and 30 along the diagonals at 10⁴ on 32² — against 97 and
+30 with the nine-point derivative — which a fluid that nearly never carries
+sound does not notice.
+
+**The two-population solver** has the same defect through Ba et al.'s source
+term and takes the same option, with the same result: 17.5 → 0.998 at 1000
+and 167 → 1.006 at 10⁴ on the Taylor–Green vortex (see
+[above](#mrt-and-the-third-moment-source-in-the-two-population-solver)).
+
+**Where there is an interface.** A static droplet does not move, so the option
+leaves it where it was. `laplace` with the high-ratio options, 3 × 10⁴ steps,
+Δp/(σ/R_ρ) and the largest spurious velocity:
+
+| ρ₁/ρ₂ | nine-point | matched |
+|---|---|---|
+| 20 (shipped case) | 1.0212, 1.7 × 10⁻⁵ | 1.0215, 1.9 × 10⁻⁵ |
+| 1000 | 1.0269, 2.0 × 10⁻⁵ | 1.0272, 2.5 × 10⁻⁵ |
+| 10⁴ | 1.0185, 6.5 × 10⁻⁴ | 1.0222, 2.4 × 10⁻⁴ |
+
+A moving interface is another matter, and two linear oscillations with exact
+solutions say how. The references are the normal modes of two viscous fluids
+separated by a sharp interface of tension σ — for the capillary wave between
+two half-spaces, and for the mode-2 oscillation of a two-dimensional drop —
+solved numerically from the full linearised Navier–Stokes equations in both
+fluids; the familiar weak-damping formulas miss the boundary layer the
+tangential slip of the potential flows leaves at the interface, by up to 15 %
+here. Dynamic viscosities mixed as ρν, capillary-stress tension, μ₂ = 0.05,
+and the damping rate over the exact one (measured with research programs that
+are not in the repository, the velocity-based solver of the next section
+alongside):
+
+| case | ρ₁/ρ₂ | μ₁ | nine-point | matched | velocity-based |
+|---|---|---|---|---|---|
+| capillary wave, λ = 64, amplitude 0.5 | 100 | 0.5 | 1.50 | 1.16 | 1.04 |
+| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.72 | 2.63 | 1.08 |
+| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.9 | −0.2 | 1.13 |
+
+At 100 the interior of the heavy fluid is what was wrong, and the option
+removes most of it. At 1000 the interface is, and the option cannot help: the
+capillary wave's frequency is 10–12 % low with either stencil, and in the
+droplet the velocity on the light side of the interface reaches 10 to 20 times
+the physical one (1.4 to 5 × 10⁻³, where the velocity-based solver has 2 ×
+10⁻⁴) — the moving-interface limit listed above, reached at a fraction of the
+speed there. A mode-2 droplet's interior is a pure linear
+strain, which neither stencil gets wrong, so its whole error is at the
+interface: the nine-point derivative's excess normal stress damps the
+spurious motion there, and the oscillation with it, eight times too fast; the
+matched one leaves the oscillation slightly undamped. With ε = 0.1 and the
+light fluid at τ = 0.65 the matched run diverges after 4800 steps, and the
+nine-point one does not. Hence the default. The option is for flows whose
+heavy phase deforms in its interior — at a density ratio up to a few hundred,
+or at any ratio where the interfaces do not move — and moving interfaces at
+10³ and above belong to the velocity-based solver.
+
+Two earlier attempts at this, before the symbol was known, are worth keeping
+for what they show. The axis-only centred difference, which matches the
+streaming's first-order operator, cut 24.8 to 15.3: the right axes, the wrong
+symbol, `i sin k` rather than `2i tan(k/2)`. It was also reported to diverge
+at τ = 0.55, which the table above puts below the published operator's own
+limit at that ratio. Rebuilding the deviatoric non-equilibrium from the
+finite-difference velocity gradient (hybrid regularisation, Jacob, Malaspinas
+& Sagaut 2018) made the error worse, 40.7 at 1000: the rebuilt stress removes
+the part of the error the collision accumulates and leaves the streaming's
+own.
 
 ## The velocity-based droplet solver
 

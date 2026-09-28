@@ -122,6 +122,31 @@ void gradient(const double* field,
               double* grad_x,
               double* grad_y);
 
+/// Weights of the axis derivative that matches D2Q9's streaming.
+///
+///     d psi / dx ~ sum_m kMatchedDerivative[m - 1] (psi(x + m) - psi(x - m)),  m = 1, 2, 3
+///
+/// What it matches is not the derivative. A source term split half before
+/// and half after the collision, as Guo's forcing splits it, cancels an error
+/// the streaming made only if it is evaluated with the Fourier symbol
+/// `2 i tan(k / 2)`, not `i k` -- the Cayley transform of the half-and-half
+/// split. The error in question is the diagonal third moment D2Q9 cannot
+/// carry, which the axis populations alone stream, so the symbol applies axis
+/// by axis. `2 tan(k / 2) = k + k^3 / 12 + k^5 / 120 + ...`, and these three
+/// weights reproduce the first three terms:
+///
+///     (29/16) sin k - (1/2) sin 2k + (1/16) sin 3k = 2 tan(k/2) + O(k^7).
+///
+/// The nine-point isotropic derivative agrees with `2 tan(k / 2)` only to
+/// order `k`, and the difference multiplies a correction that is the density
+/// ratio times larger than the stress it leaves behind; see `SourceStencil`.
+/// The exact symbol is singular at the Nyquist wavenumber, and this stencil
+/// is not: it goes to zero there, as the nine-point one does.
+inline constexpr double kMatchedDerivative[3] = {29. / 32., -1. / 4., 1. / 32.};
+
+/// How far `kMatchedDerivative` reaches along its axis.
+inline constexpr int kMatchedReach = 3;
+
 }  // namespace lbm
 }  // namespace cglbm
 
