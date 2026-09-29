@@ -14,10 +14,13 @@ light side of the interface moves ten to twenty times faster than the flow
 around it should, and what becomes of the oscillation depends on how that
 motion is damped. With the published nine-point source derivative, whose
 excess normal stress damps it, the droplet rings down about eight times too
-fast. With `--source-stencil=matched`, which does not, it does not ring down at
-all: its rate is slightly negative. That is why the option is not the default
-(docs/numerics.md, "The heavy fluid's extensional viscosity"). The
-velocity-based solver runs the same case in `oscillation_vb`.
+fast. With `--source-stencil=matched` it rings down at 0.62 of the exact rate.
+That stencil's six-point face values used to overshoot the jump of the
+corrected quantity at the interface, which cancelled the heavy fluid's
+viscous normal stress there, and the droplet did not ring down at all (-0.23);
+they are now limited where the density changes (docs/numerics.md, "The heavy
+fluid's extensional viscosity"). The velocity-based solver runs the same case
+in `oscillation_vb`.
 
 Both are known gaps, pinned as measured with a tolerance that catches a change
 in the scheme. The frequency, which the interface disturbs much less, is
@@ -36,7 +39,7 @@ SETTLING_STEPS = 500
 #: Measured decay rate and angular frequency, over the exact mode's.
 MEASURED = {
     "isotropic": {"damping": 7.90, "frequency": 0.963},
-    "matched": {"damping": -0.23, "frequency": 0.998},
+    "matched": {"damping": 0.62, "frequency": 1.007},
 }
 DAMPING_TOLERANCE = 0.3
 FREQUENCY_TOLERANCE = 0.01

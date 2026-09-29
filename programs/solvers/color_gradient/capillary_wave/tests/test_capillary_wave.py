@@ -13,14 +13,17 @@ nine-point source derivative and with `--source-stencil=matched`. What it
 measured, as decay rate and frequency over the exact mode's:
 
                   isotropic            matched
-    ratio 100:    1.50 and 0.989       1.16 and 0.980
-    ratio 1000:   3.73 and 0.903       2.65 and 0.882
+    ratio 100:    1.50 and 0.989       1.19 and 0.983
+    ratio 1000:   3.73 and 0.903       2.81 and 0.890
 
 At 100 the error is the heavy fluid's extensional viscosity, which the
 potential flow `exp(k y)` inside the layer feels and the matched stencil
 corrects. At 1000 it is the interface itself: the light side of a moving
 interface is the colour-gradient model's structural limit (docs/numerics.md,
 "The heavy fluid's extensional viscosity"), and the frequency is off as well.
+Before the matched stencil's face values were limited at interfaces it gave
+1.16 and 2.65; the limit is for the droplet in `oscillation`, and costs the
+wave little.
 The velocity-based solver runs the same case in `capillary_wave_vb`.
 
 These are known gaps, so the values are pinned as measured, with a tolerance
@@ -49,9 +52,9 @@ STEPS = {"100": 16000, "1000": 25000}
 #: Measured decay rate and angular frequency, over the exact mode's.
 MEASURED = {
     ("100", "isotropic"): {"damping": 1.497, "frequency": 0.989},
-    ("100", "matched"): {"damping": 1.160, "frequency": 0.980},
+    ("100", "matched"): {"damping": 1.187, "frequency": 0.983},
     ("1000", "isotropic"): {"damping": 3.727, "frequency": 0.903},
-    ("1000", "matched"): {"damping": 2.645, "frequency": 0.882},
+    ("1000", "matched"): {"damping": 2.809, "frequency": 0.890},
 }
 DAMPING_TOLERANCE = 0.05
 FREQUENCY_TOLERANCE = 0.01

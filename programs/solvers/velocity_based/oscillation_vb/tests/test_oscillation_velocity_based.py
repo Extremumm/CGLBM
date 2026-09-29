@@ -4,9 +4,9 @@ velocity-based solver, against the exact viscous normal mode.
 The same case as the colour-gradient `oscillation` (see its tests): a droplet
 of radius 20 deformed by 3 % into `cos 2 theta`, released and ringing down,
 scored against `pycglbm.normal_modes.droplet_mode`. The colour-gradient solver
-damps it eight times too fast with its published source term and not at all
-with the matched one, because its interface moves wrongly at this density
-ratio; this is the solver whose interface is meant to be right.
+damps it eight times too fast with its published source term and at 0.62 of
+the exact rate with the matched one, because its interface moves wrongly at
+this density ratio; this is the solver whose interface is meant to be right.
 
 The measured values are pinned, so a change in the scheme shows up; the
 closeness to the exact mode is asserted separately.

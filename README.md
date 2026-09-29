@@ -458,8 +458,11 @@ the error with, whose Fourier symbol is `2i tan(k/2)` rather than `ik`;
 `--source-stencil=matched` does that, in both colour-gradient solvers, and the
 same vortex decays at 0.998 of its Navier–Stokes rate at 1000 and 1.010 at
 10⁴. It fixes the heavy fluid's interior, not a moving interface: a capillary
-wave at a ratio of 100 goes from 1.50 to 1.16 times its exact damping, but at
-1000 the interface itself dominates, and the option is off by default. The
+wave at a ratio of 100 goes from 1.50 to 1.19 times its exact damping, but at
+1000 the interface itself dominates (2.8 times), a mode-2 droplet there rings
+down at 0.62 of its exact rate, and the option is off by default. In `Solver`
+the stencil's face values are limited where the density jumps; without that
+the droplet was not damped at all. The
 velocity-based `droplet` solver is free of both limits by construction: its
 populations carry the velocity at the lattice temperature, not the density.
 See [`docs/literature.md`](docs/literature.md) and

@@ -9,10 +9,14 @@
 //     which is what separates E4, E6 and E8;
 //  3. the angular error of the gradient of a radial interface profile -- the
 //     quantity that actually matters, since the surface-tension operator
-//     divides the colour gradient by its own norm.
+//     divides the colour gradient by its own norm;
+//  4. that matched_face_value differences to kMatchedDerivative where the
+//     density is uniform, and keeps each face within its two nodes where it
+//     is not.
 //
 //   main_lbm_gradient [stencil]
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 #include <iostream>
@@ -132,6 +136,106 @@ double linear_field_error(GradientStencil stencil, int n, double a, double b) {
     return worst;
 }
 
+/// matched_face_value on a periodic line of n nodes, at the face between
+/// `a` and `a + 1`.
+double face_on_line(const std::vector<double>& psi, const std::vector<double>& rho, int a) {
+    const int n = static_cast<int>(psi.size());
+    double line_psi[6];
+    double line_rho[6];
+    for (int m = 0; m < 6; ++m) {
+        const int node = ((a - 2 + m) % n + n) % n;
+        line_psi[m] = psi[node];
+        line_rho[m] = rho[node];
+    }
+    return cglbm::lbm::matched_face_value(line_psi, line_rho);
+}
+
+/// The face form of the matched derivative, on three lines of 64 nodes
+/// carrying psi = (p - rho c_s^2) u for a smooth u:
+///
+///  - one density throughout: the face difference is kMatchedDerivative;
+///  - the density varying by half a per cent: still the plain interpolation;
+///  - an interface of width 1.6 between densities 1000 and 1: each face whose
+///    six nodes span more than a per cent in density lies between its two
+///    nodes, where the plain interpolation overshoots, and the face
+///    differences still sum to zero over the line.
+void report_matched_face() {
+    const int n = 64;
+    const double two_pi = 2.0 * std::acos(-1.0);
+    std::vector<double> u(n), psi(n), rho(n);
+    for (int x = 0; x < n; ++x) {
+        u[x] = 1e-3 * (std::sin(two_pi * x / n) + 0.3 * std::cos(3.0 * two_pi * x / n));
+    }
+    auto fill = [&](auto&& density) {
+        for (int x = 0; x < n; ++x) {
+            rho[x] = density(x);
+            psi[x] = (1.0 / 3.0 - rho[x] / 3.0) * u[x];
+        }
+    };
+
+    fill([](int) { return 1000.0; });
+    double uniform_error = 0.0;
+    for (int x = 0; x < n; ++x) {
+        double derivative = 0.0;
+        for (int m = 1; m <= cglbm::lbm::kMatchedReach; ++m) {
+            derivative +=
+                cglbm::lbm::kMatchedDerivative[m - 1] * (psi[(x + m) % n] - psi[(x - m + n) % n]);
+        }
+        const double faces = face_on_line(psi, rho, x) - face_on_line(psi, rho, x - 1);
+        uniform_error = std::max(uniform_error, std::fabs(faces - derivative));
+    }
+
+    fill([&](int x) { return 1000.0 * (1.0 + 0.0025 * std::sin(two_pi * x / n)); });
+    double gentle_error = 0.0;
+    for (int x = 0; x < n; ++x) {
+        const double face =
+            cglbm::lbm::kMatchedFace[0] * (psi[x] + psi[(x + 1) % n]) +
+            cglbm::lbm::kMatchedFace[1] * (psi[(x - 1 + n) % n] + psi[(x + 2) % n]) +
+            cglbm::lbm::kMatchedFace[2] * (psi[(x - 2 + n) % n] + psi[(x + 3) % n]);
+        gentle_error = std::max(gentle_error, std::fabs(face_on_line(psi, rho, x) - face));
+    }
+
+    // a heavy band between x = 16 and x = 48
+    fill([](int x) {
+        const double alpha = 0.5 * (std::tanh((x - 16.0) / 1.6) - std::tanh((x - 48.0) / 1.6));
+        return 1.0 + 999.0 * alpha;
+    });
+    double scale = 0.0;
+    for (int x = 0; x < n; ++x) {
+        scale = std::max(scale, std::fabs(psi[x]));
+    }
+    double overshoot = 0.0;
+    double outside = 0.0;
+    double sum = 0.0;
+    for (int x = 0; x < n; ++x) {
+        const double lo = std::min(psi[x], psi[(x + 1) % n]);
+        const double hi = std::max(psi[x], psi[(x + 1) % n]);
+        const double plain =
+            cglbm::lbm::kMatchedFace[0] * (psi[x] + psi[(x + 1) % n]) +
+            cglbm::lbm::kMatchedFace[1] * (psi[(x - 1 + n) % n] + psi[(x + 2) % n]) +
+            cglbm::lbm::kMatchedFace[2] * (psi[(x - 2 + n) % n] + psi[(x + 3) % n]);
+        const double face = face_on_line(psi, rho, x);
+        sum += face - face_on_line(psi, rho, x - 1);
+        double lightest = rho[x];
+        double heaviest = rho[x];
+        for (int m = -2; m <= 3; ++m) {
+            lightest = std::min(lightest, rho[(x + m + n) % n]);
+            heaviest = std::max(heaviest, rho[(x + m + n) % n]);
+        }
+        if (heaviest <= cglbm::lbm::kMatchedFaceDensityVariation * lightest) {
+            continue;  // the heavy band's interior, which keeps the plain value
+        }
+        overshoot = std::max(overshoot, std::max(lo - plain, plain - hi) / scale);
+        outside = std::max(outside, std::max(lo - face, face - hi) / scale);
+    }
+
+    std::cout << "matched_face_uniform_error = " << uniform_error / scale << "\n";
+    std::cout << "matched_face_gentle_error = " << gentle_error << "\n";
+    std::cout << "matched_face_plain_overshoot = " << overshoot << "\n";
+    std::cout << "matched_face_outside = " << outside << "\n";
+    std::cout << "matched_face_sum = " << sum / scale << "\n";
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -164,6 +268,7 @@ int main(int argc, char** argv) {
     std::cout << "linear_error = " << linear_field_error(stencil, 32, 0.37, -0.11) << "\n";
     std::cout << "radial_angle_error_deg = " << radial_angle_error(stencil, 128, 20.0, 1.6)
               << std::endl;
+    report_matched_face();
 
     return 0;
 }

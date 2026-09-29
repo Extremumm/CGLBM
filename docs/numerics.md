@@ -1885,7 +1885,9 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
   What does help is resolution. The same wave at λ = 128 (`capillary_wave
   --nx=128 --ny=256`, 4 × 10⁴ steps) is damped 2.94 times the exact rate with
   the nine-point source and 1.57 with the matched one, at 0.979 and 0.958 of
-  the frequency, against 3.73 and 2.65, 0.903 and 0.882 at λ = 64. With the
+  the frequency, against 3.73 and 2.65, 0.903 and 0.882 at λ = 64 (the
+  matched figures here are from before its face values were limited at the
+  interface, which at λ = 64 moves the wave from 2.65 to 2.81). With the
   matched stencil the excess falls by a factor of three per doubling; with the
   nine-point one by 1.4, because what it adds is the heavy fluid's extensional
   error, `k² ρ₁/ρ₂`, which a wave of this length still sees. So below the
@@ -1896,28 +1898,33 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
   Three more measurements bound that. A wider interface stops helping at
   λ = 128: with `--width=3.2 --width-init=2.2` the matched wave is damped
   1.60 times the exact rate (over 3.8 × 10⁴ steps), against 1.57 at the
-  default width. The droplet does not converge at all. The mode-2 droplet at
-  1000, not damped with the matched stencil at R = 20 (−0.23 times the exact
-  rate), is still not damped at R = 40 (`oscillation --nx=256 --ny=256
-  --radius=40 --source-stencil=matched`, 5.5 × 10⁴ steps): −0.11 times the
-  exact rate, its deformation 0.0609 after one period where the exact mode's
-  has decayed from 0.060 to 0.049, with the frequency within 0.4 %. The
-  velocity-based solver goes from 1.132 at R = 20 to 1.026 at R = 40 (research
-  copy, carrier at `c_s²`), with the frequency at 0.997, as the heavy
-  fluid's boundary layer `(2ν₁/ω)^½` goes from 3.0 to 5.0 nodes. Nor does
-  changing the stencil where it straddles the interface help. Taking the
-  nine-point derivative instead wherever the density changes by more than
-  half within the matched stencil's reach makes the wave grow (−2.0 times
-  the exact rate) and damps the droplet 1.9 times too fast, 9 % off in
-  frequency: where the two derivatives meet, their difference is a source of
-  its own.
-- **A viscous heavy fluid at high density ratio.** Keep τ in the droplet of
-  order 1–10. At $10^4$ with $\mu_1/\mu_2 = 20$ (τ ≈ 100 in the droplet), the
-  jump wandered between 0.90 and 1.01 σ/R over 30 000 steps and the currents
-  reached 2×10⁻² in the earlier program.
-- **Only the Laplace case is validated with the two options.** `capillary`,
-  `gravity_capillary` and the `rayleigh_taylor` programs run on the same
-  `Solver` and accept the same flags, but none of them has been run with them.
+  default width. With the plain matched stencil the droplet did not converge
+  at all. The mode-2 droplet at 1000, not damped at R = 20 (−0.23 times the
+  exact rate), was still not damped at R = 40 (`oscillation --nx=256
+  --ny=256 --radius=40 --source-stencil=matched`, 5.5 × 10⁴ steps): −0.11
+  times the exact rate, its deformation 0.0609 after one period where the
+  exact mode's has decayed from 0.060 to 0.049, with the frequency within
+  0.4 %. The velocity-based solver goes from 1.132 at R = 20 to
+  1.026 at R = 40 (research copy, carrier at `c_s²`), with the frequency at
+  0.997, as the heavy fluid's boundary layer `(2ν₁/ω)^½` goes from 3.0 to 5.0
+  nodes. Switching stencils node by node where the matched one straddles the
+  interface did not help: taking the nine-point derivative instead wherever
+  the density changes by more than half within its reach makes the wave grow
+  (−2.0 times the exact rate) and damps the droplet 1.9 times too fast, 9 %
+  off in frequency, since where the two derivatives meet their difference is
+  a source of its own. Limiting the matched stencil's face values there does
+  help, and is what `Solver` now does:
+  [The matched stencil at an interface](#the-matched-stencil-at-an-interface).
+- **The wall-bounded cases have nothing to be scored against.** `capillary`,
+  `gravity_capillary` and `rayleigh_taylor` run with `--surface-tension=stress
+  --viscosity-mixing=dynamic` and stay finite with φ in [−1, 1]: `capillary`
+  and `gravity_capillary` for their 10⁴ steps at their ratio of 4 and
+  `capillary` at 100, `rayleigh_taylor` for 2 × 10⁴ steps. At 4 the
+  interface follows the default run's to 0.07 node. But the layers start at
+  an amplitude of 0.2 λ, where no linear mode applies, and
+  `rayleigh_taylor`'s gravity is 2.7 × 10⁻⁸ in lattice units, so nothing
+  grows in the steps any test could afford. `capillary_wave` and
+  `oscillation` are the moving-interface cases that are scored.
 
 ### The heavy fluid's extensional viscosity
 
@@ -2044,12 +2051,14 @@ tension, μ₂ = 0.05, and the damping rate over the exact one:
 
 | case | ρ₁/ρ₂ | μ₁ | nine-point | matched | velocity-based |
 |---|---|---|---|---|---|
-| capillary wave, λ = 64, amplitude 0.3 | 100 | 0.5 | 1.50 | 1.16 | 1.03 |
-| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.73 | 2.65 | 1.05 |
-| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.90 | −0.23 | 1.08 |
+| capillary wave, λ = 64, amplitude 0.3 | 100 | 0.5 | 1.50 | 1.19 | 1.03 |
+| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.73 | 2.81 | 1.05 |
+| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.90 | 0.62 | 1.08 |
 
-and the frequency over the exact one, in the same order: 0.989, 0.980, 0.988;
-0.903, 0.882, 0.982; 0.963, 0.998, 0.987.
+and the frequency over the exact one, in the same order: 0.989, 0.983, 0.988;
+0.903, 0.890, 0.982; 0.963, 1.007, 0.987. The matched column is with its face
+values limited at the interface, [below](#the-matched-stencil-at-an-interface);
+without that it read 1.16, 2.65 and −0.23.
 
 At 100 the interior of the heavy fluid is what was wrong, and the option
 removes most of it. At 1000, at this resolution, the interface is: the
@@ -2063,15 +2072,12 @@ speed there. A mode-2 droplet's interior is a pure linear
 strain, which neither stencil gets wrong, so its whole error is at the
 interface: the nine-point derivative's excess normal stress damps the
 spurious motion there, and the oscillation with it, eight times too fast; the
-matched one leaves the oscillation slightly undamped. With ε = 0.1 and the
-light fluid at τ = 0.65 the matched run diverges after 4800 steps, and the
-nine-point one does not. Hence the default. The option is for flows whose
-heavy phase deforms in its interior — at a density ratio up to a few hundred,
-or at any ratio where the interfaces do not move — and for slowly moving
-interfaces at 10³ resolved twice as finely as here, where it converges and the
-nine-point derivative does not; whether the droplet's missing damping also
-goes with resolution has not been checked. Moving interfaces at 10³ and above
-are otherwise the velocity-based solver's.
+matched one damps it at 0.62 of the exact rate. Hence the default. The option
+is for flows whose heavy phase deforms in its interior — at a density ratio up
+to a few hundred, or at any ratio where the interfaces do not move — and for
+slowly moving interfaces at 10³ resolved twice as finely as here, where it
+converges and the nine-point derivative does not. Moving interfaces at 10³ and
+above are otherwise the velocity-based solver's.
 
 Two earlier attempts at this, before the symbol was known, are worth keeping
 for what they show. The axis-only centred difference, which matches the
@@ -2083,6 +2089,93 @@ finite-difference velocity gradient (hybrid regularisation, Jacob, Malaspinas
 & Sagaut 2018) made the error worse, 40.7 at 1000: the rebuilt stress removes
 the part of the error the collision accumulates and leaves the streaming's
 own.
+
+### The matched stencil at an interface
+
+As first written, the matched stencil left the mode-2 droplet at 1000 without
+damping: −0.23 times the exact rate over the long test's 2.4 × 10⁴ steps, and
+−0.11 at R = 40. Measured over 1.2 × 10⁴ steps in research copies (−0.107 for
+the shipped case over that window), the missing damping was
+
+- *linear*: at ε = 0.005, 0.01 and 0.02 the rate was −0.088, −0.091 and
+  −0.097 times the exact one;
+- *a matter of the density ratio*: at 100 the matched droplet is damped 0.86
+  times the exact rate, the nine-point one 1.82;
+- *not the jump in τ across the interface*: with μ₂ = μ₁ = 2, so that τ = 6.5
+  on both sides, the rate still fell 2.6 × 10⁻⁵ per step short of the exact
+  3.5 × 10⁻⁵, against 2.1 × 10⁻⁵ short of 1.9 × 10⁻⁵ in the shipped case;
+- *indifferent to the heavy fluid's viscosity*, which is the clue: with
+  μ₁ = 0.05, 2 and 4 the droplet was damped at 3.9 × 10⁻⁶, −2.0 × 10⁻⁶ and
+  4.9 × 10⁻⁶ per step, while the exact rate goes from 1.4 × 10⁻⁶ to
+  1.9 × 10⁻⁵ and 3.6 × 10⁻⁵. The droplet did not feel the heavy fluid's
+  viscosity at all.
+
+The earlier diagnostics fit the same picture: halving `S_Sp` stops the
+oscillation altogether (the droplet creeps back without ringing), dropping
+`S_t` diverges after 7550 steps, taking the trace on the matched stencil too
+makes it worse (−0.63), and a wider interface (`--width=3.2 --width-init=2.2`)
+better (0.30). The correction that cancels the heavy fluid's normal stress
+error was, it seemed, cancelling part of its physical normal stress as well,
+and only where the interface is.
+
+The symbol says why. `2 tan(k/2) = sin k / ((1 + cos k)/2)` is the centred
+difference divided by the symbol of the average `(E + 2 + E⁻¹)/4`, so the
+exact correction `S` solves a tridiagonal system along each line,
+`(S(x−1) + 2S(x) + S(x+1))/4 = (ψ(x+1) − ψ(x−1))/2`. Its matrix is singular
+at the checkerboard, and for a unit step in ψ its symmetric solution is 1 on
+the two nodes either side of the step and ±1, alternating, all the way out:
+the exact correction for a jump never dies away. `kMatchedDerivative` truncates
+it at three nodes. It puts 11/16 on the two nodes beside the step and −7/32
+on the two beyond them, a correction of the heavy fluid's order, of the
+opposite sign, laid on nodes of the light fluid. Written as the difference of
+two face values, `F(x + ½) − F(x − ½)` with `F` the six-point interpolation
+of ψ whose weights are `kMatchedFace` (11/16, −7/32, 1/32), that is an
+interpolation overshooting a jump: by 3/16 of a sharp step, and across a tanh
+interface at 1000, in the unit test, by 1 % of the largest ψ on the line.
+
+`Solver` therefore limits each face value to the range of the two nodes it
+separates, on faces whose six nodes span more than 1 % in density
+(`matched_face_value`). A single fluid never gets there -- its density
+changes by 3 × 10⁻⁶ in the Taylor–Green vortex at 10⁴ -- so the interior keeps
+the exact symbol, and the derivative, still a difference of face values, still
+sums to zero over a periodic line. Against the plain stencil:
+
+| case | plain | limited |
+|---|---|---|
+| droplet at 1000, long test (damping, frequency) | −0.23, 0.998 | 0.62, 1.007 |
+| droplet at 1000, ε = 0.1, 1.2 × 10⁴ steps | diverges after 4800 steps | 0.92, 0.999 |
+| droplet at 100, μ₁ = 2, 1.2 × 10⁴ steps | 0.86, 1.007 | 0.98, 1.003 |
+| capillary wave at 100 | 1.16, 0.980 | 1.19, 0.983 |
+| capillary wave at 1000 | 2.65, 0.882 | 2.81, 0.890 |
+| Taylor–Green vortex at 1000 and 10⁴ | 0.998, 1.010 | 0.998, 1.010 |
+| static droplet at 10⁴, τ ≈ 100 in it (Δp over σ/R) | 0.63 to 1.09, then −1.5 | 0.973 to 1.019 |
+
+The last row is `laplace --rho1=1e4 --nu=3.33e-3 --nu-b=3.33e-3 --nu2=1.66
+--nu-b2=1.66 --viscosity-mixing=dynamic --surface-tension=stress`, a dynamic
+viscosity ratio of 20, over 3 × 10⁴ steps. With the plain stencil the droplet
+breathed: its density radius swung between 9.67 and 10.27, the currents
+reached 2.5 × 10⁻², and from 1.5 × 10⁴ steps on φ left [−1, 1] by up to
+8 × 10⁻⁵. Limited, it runs like the nine-point source: the radius eases from
+10.05 to 9.90 (to 9.92 with the nine-point source), the jump stays between
+0.973 and 1.019 σ/R (0.983 and 1.019), and the currents below 3.4 × 10⁻³
+(2.7 × 10⁻³). The 0.90 to 1.01 and 2 × 10⁻² once recorded for this case with
+the nine-point source were the earlier program's.
+
+The droplet is damped, not yet at the right rate: its later half-periods decay
+at 0.44 to 0.6 of the exact rate, the first faster. Three variants, the
+droplet measured over 1.2 × 10⁴ steps (0.795 with the 1 % gate) and the wave
+over 1.3 × 10⁴, show how narrow the choice is:
+
+- *Limiting every face*, with no gate: 0.815 for the droplet, but the clip
+  also trips at the smooth extrema of a single fluid's ψ, and the Taylor–Green
+  vortex goes from 0.998 to 1.72 at 1000 and from 1.010 to 7.65 at 10⁴.
+- *A looser gate*: 0.784 at 10 %, 0.198 at a factor of 2. Past a few per cent
+  the overshoot in the interface's tails is left alone, and the missing
+  damping comes back with it.
+- *The two-point mean* on those faces in place of the limited value: the
+  wave improves to 1.51 and 0.972, but the droplet is damped 2.95 times the
+  exact rate. The switch is conservative, unlike the node-by-node fallback of
+  [What is not solved](#what-is-not-solved), which made the wave grow.
 
 ## The velocity-based droplet solver
 

@@ -2,9 +2,10 @@
 
 Each stencil is checked against the property it is built to satisfy: exactness
 on a linear field, and isotropy of the lattice tensors up to its stated order.
-The last test is the one that matters physically -- the colour gradient enters
-the surface-tension operator divided by its own norm, so any angular error
-becomes an anisotropic surface tension.
+The anisotropy test is the one that matters physically -- the colour gradient
+enters the surface-tension operator divided by its own norm, so any angular
+error becomes an anisotropic surface tension. The last checks the face form of
+the matched source derivative, and its limit at an interface.
 """
 
 import pytest
@@ -86,3 +87,22 @@ def test_unit_test_lbm_gradient_anisotropy_falls_with_order():
     # E4 is already good to a fraction of a degree; E8 must be an order better
     assert errors["E4"] / errors["E8"] > 5.0
     assert errors["E8"] < 0.05
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_gradient_matched_face_value():
+    """The matched derivative as a difference of face values, limited at interfaces.
+
+    Where the density is uniform, or varies by less than a per cent, the face
+    value is the plain six-point interpolation, and two of them difference to
+    `kMatchedDerivative`. Across an interface between densities 1000 and 1 the
+    plain interpolation overshoots the two nodes a face separates, by a per cent
+    of the largest psi on the line; the limited one stays between them, and the
+    differences still sum to zero over a periodic line.
+    """
+    values = _run("E8")
+    assert float(values["matched_face_uniform_error"]) < 1e-14
+    assert float(values["matched_face_gentle_error"]) == 0.0
+    assert float(values["matched_face_plain_overshoot"]) > 1e-3
+    assert float(values["matched_face_outside"]) == 0.0
+    assert abs(float(values["matched_face_sum"])) < 1e-14

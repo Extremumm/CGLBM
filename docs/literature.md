@@ -212,15 +212,17 @@ has gone. In this code it is the velocity-based
   measurements say so. The heavy fluid's extensional viscosity is fixed in
   its interior by taking the source on the stencil the streaming uses
   (`--source-stencil=matched`, off by default); against exact normal modes it
-  brings a capillary wave at a ratio of 100 from 1.50 to 1.16 times its
+  brings a capillary wave at a ratio of 100 from 1.50 to 1.19 times its
   damping, but at 10³ the moving interface is wrong with either stencil —
-  3.7 and 2.6 times for the wave, and a mode-2 droplet damped eight times too
-  fast or not at all — where the velocity-based solver is within 8 %. For
-  the wave that is resolution rather than a wall, below the positivity bound:
-  at twice the resolution it is at 2.9 with the nine-point source and 1.6
-  with the matched one, and a wider interface no longer helps. The droplet
-  with the matched source is not damped at twice the radius either (−0.11
-  times the exact rate at R = 40), so for it resolution is no cure. Above the bound
+  3.7 and 2.8 times for the wave, and a mode-2 droplet damped eight times too
+  fast or at 0.62 of the rate — where the velocity-based solver is within 8 %.
+  For the wave that is resolution rather than a wall, below the positivity
+  bound: at twice the resolution it is at 2.9 with the nine-point source and
+  1.6 with the matched one, and a wider interface no longer helps. The
+  droplet was not damped at all with the matched source until its face values
+  were limited where the density jumps: the six-point stencil overshoots the
+  jump of the quantity it differentiates, and the overshoot cancelled the
+  heavy fluid's viscous normal stress at the interface. Above the bound
   the wave diverges: at 1000 from an amplitude of 4 nodes, where the
   velocity-based solver rings down an amplitude of 8 at 1.09 times the linear
   damping rate.

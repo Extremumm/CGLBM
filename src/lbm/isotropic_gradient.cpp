@@ -1,5 +1,6 @@
 #include "lbm/isotropic_gradient.h"
 
+#include <algorithm>
 #include <cstring>
 
 namespace cglbm {
@@ -212,6 +213,16 @@ void gradient(const double* field,
     } else {
         gradient_periodic(field, nx, ny, i, j, stencil, grad_x, grad_y);
     }
+}
+
+double matched_face_value(const double psi[6], const double rho[6]) {
+    const double face = kMatchedFace[0] * (psi[2] + psi[3]) + kMatchedFace[1] * (psi[1] + psi[4]) +
+                        kMatchedFace[2] * (psi[0] + psi[5]);
+    const auto [lightest, heaviest] = std::minmax_element(rho, rho + 6);
+    if (*heaviest <= kMatchedFaceDensityVariation * *lightest) {
+        return face;
+    }
+    return std::clamp(face, std::min(psi[2], psi[3]), std::max(psi[2], psi[3]));
 }
 
 }  // namespace lbm

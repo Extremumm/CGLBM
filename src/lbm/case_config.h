@@ -292,16 +292,26 @@ enum class Recolouring {
 /// Measured by an exact linear analysis of the scheme, and by the unit tests;
 /// see docs/numerics.md.
 ///
+/// In `Solver` the derivative is taken as the difference of two face values,
+/// and at an interface each face is kept between the two nodes it separates
+/// (`matched_face_value`). Without that the six-point interpolation overshoots
+/// the jump of `(p - rho c_s^2) u` there, and the overshoot cancelled the heavy
+/// fluid's viscous normal stress at the interface: a mode-2 droplet at 1000
+/// was not damped at all (-0.23 times the exact rate), one deformed by 10 %
+/// diverged after 4800 steps, and a static droplet at 10^4 with tau = 100 in
+/// the heavy fluid breathed until its Laplace jump turned negative.
+/// `TwoPopulationSolver` applies the stencil node by node, as it always has;
+/// its moving interfaces have not been measured.
+///
 /// It corrects the heavy fluid's interior, not a moving interface, and that is
 /// why it is not the default. Against the exact normal modes of two viscous
 /// fluids, a capillary wave at a density ratio of 100 is damped 1.50 times too
-/// fast with `Isotropic` and 1.16 with `StreamingMatched`; at 1000 the moving
-/// interface is wrong with either (3.7 and 2.6; resolved twice as finely,
-/// 2.9 and 1.6, so it converges, and faster with this one), and a mode-2
-/// droplet, whose interior strain neither stencil gets wrong, is damped eight
-/// times too fast with `Isotropic` and not at all with `StreamingMatched` --
-/// whose run diverges where the other does not once the light fluid's tau is
-/// 0.65.
+/// fast with `Isotropic` and 1.19 with `StreamingMatched`; at 1000 the moving
+/// interface is wrong with either (3.7 and 2.8; resolved twice as finely,
+/// 2.9 and 1.6 before the faces were limited, so it converges, and faster with
+/// this one), and a mode-2 droplet, whose interior strain neither stencil gets
+/// wrong, is damped eight times too fast with `Isotropic` and 0.62 of the
+/// exact rate with `StreamingMatched`.
 enum class SourceStencil {
     Isotropic,        ///< the nine-point isotropic derivative, as published
     StreamingMatched  ///< the deviatoric part on the stencil the streaming uses

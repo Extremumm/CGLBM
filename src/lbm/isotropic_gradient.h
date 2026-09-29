@@ -147,6 +147,37 @@ inline constexpr double kMatchedDerivative[3] = {29. / 32., -1. / 4., 1. / 32.};
 /// How far `kMatchedDerivative` reaches along its axis.
 inline constexpr int kMatchedReach = 3;
 
+/// `kMatchedDerivative` as the difference of two face values,
+///
+///     F(x + 1/2) = sum_m kMatchedFace[m - 1] (psi(x + 1 - m) + psi(x + m)),
+///     F(x + 1/2) - F(x - 1/2) = sum_m kMatchedDerivative[m - 1] (psi(x + m) - psi(x - m)),
+///
+/// a six-point interpolation of psi to the face between x and x + 1.
+inline constexpr double kMatchedFace[3] = {11. / 16., -7. / 32., 1. / 32.};
+
+/// How much the density may change across the six nodes of a face before
+/// `matched_face_value` limits it: one per cent. The density of one fluid
+/// changes by 3e-6 in a Taylor-Green vortex at a density ratio of 1e4.
+inline constexpr double kMatchedFaceDensityVariation = 1.01;
+
+/// The face value of `psi` between `psi[2]` and `psi[3]`, of six consecutive
+/// nodes along an axis, whose difference across a node is `kMatchedDerivative`.
+///
+/// Where the density changes across the six nodes by more than
+/// `kMatchedFaceDensityVariation` -- at an interface -- the value is clipped to
+/// the range of the two nodes the face separates. psi = (p - rho c_s^2) u jumps
+/// there with the density, and the six-point interpolation overshoots the jump:
+/// its outer weights, -7/32 and 1/32, reach heavy nodes from light ones. The
+/// overshoot is a correction of the heavy fluid's order laid on the light
+/// fluid's nodes, and it cancels the heavy fluid's viscous normal stress at the
+/// interface: a mode-2 droplet at a density ratio of 1000 then rings down at
+/// nearly the same rate whatever the heavy fluid's viscosity. Where the
+/// density is uniform the value is the interpolation itself, so the heavy
+/// fluid's interior keeps the stencil's exact symbol. The clip acts face by
+/// face, so the derivative stays a difference of face values and still sums to
+/// zero over a periodic line.
+double matched_face_value(const double psi[6], const double rho[6]);
+
 }  // namespace lbm
 }  // namespace cglbm
 

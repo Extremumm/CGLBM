@@ -366,27 +366,35 @@ void Solver::force() {
             } else {
                 // The deviatoric part -- the one that reaches the shear and
                 // extensional stress -- on the stencil the streaming made the
-                // error with, axis by axis; see SourceStencil. The trace keeps
-                // the nine-point derivative, and so does the y derivative
-                // within kMatchedReach nodes of a wall, where the stencil does
-                // not fit.
-                auto psi = [this](int a, int b, int component) {
-                    return (p_(a, b) - rho_(a, b) * cs2_) * u_(a, b, component);
-                };
-                double normal_x = 0.0;
-                for (int m = 1; m <= kMatchedReach; m++) {
-                    normal_x += kMatchedDerivative[m - 1] *
-                                (psi((i + m) % nx_, j, 0) - psi((i - m + nx_) % nx_, j, 0));
+                // error with, axis by axis; see SourceStencil. It is taken as
+                // the difference of two face values, which matched_face_value
+                // limits at an interface. The trace keeps the nine-point
+                // derivative, and so does the y derivative within
+                // kMatchedReach nodes of a wall, where the stencil does not
+                // fit.
+                //
+                // psi and rho at offsets -3 .. 3 along the axis; the faces
+                // either side of the node read offsets -3 .. 2 and -2 .. 3.
+                double line_psi[2 * kMatchedReach + 1];
+                double line_rho[2 * kMatchedReach + 1];
+                for (int m = -kMatchedReach; m <= kMatchedReach; m++) {
+                    const int a = (i + m + nx_) % nx_;
+                    line_psi[m + kMatchedReach] = (p_(a, j) - rho_(a, j) * cs2_) * u_(a, j, 0);
+                    line_rho[m + kMatchedReach] = rho_(a, j);
                 }
-                normal_x /= dt_;
+                const double normal_x = (matched_face_value(line_psi + 1, line_rho + 1) -
+                                         matched_face_value(line_psi, line_rho)) /
+                                        dt_;
                 double normal_y = derive_y;
                 if (!wall || (j >= kMatchedReach && j < ny_ - kMatchedReach)) {
-                    normal_y = 0.0;
-                    for (int m = 1; m <= kMatchedReach; m++) {
-                        normal_y += kMatchedDerivative[m - 1] *
-                                    (psi(i, (j + m) % ny_, 1) - psi(i, (j - m + ny_) % ny_, 1));
+                    for (int m = -kMatchedReach; m <= kMatchedReach; m++) {
+                        const int b = (j + m + ny_) % ny_;
+                        line_psi[m + kMatchedReach] = (p_(i, b) - rho_(i, b) * cs2_) * u_(i, b, 1);
+                        line_rho[m + kMatchedReach] = rho_(i, b);
                     }
-                    normal_y /= dt_;
+                    normal_y = (matched_face_value(line_psi + 1, line_rho + 1) -
+                                matched_face_value(line_psi, line_rho)) /
+                               dt_;
                 }
                 for (int k = 0; k < kQ; k++) {
                     const double H_nu = (kXi[k][0] * kXi[k][0] - kXi[k][1] * kXi[k][1]) / 2.;
