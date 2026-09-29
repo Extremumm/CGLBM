@@ -170,8 +170,8 @@ pressure transient ever needs damping.
 | Case | Analytic reference |
 |---|---|
 | `laplace` | $\Delta p = \sigma / R$ across the droplet interface, at density ratios 20 and $10^4$ |
-| `capillary` | $T_{theo} = 2\pi\sqrt{(\rho_1+\rho_2)\,r^3/(6\sigma)}$, printed at startup and compared against `interface.csv` |
-| `gravity_capillary` | Balance of the Laplace jump against the hydrostatic head |
+| `capillary` | None run. A flat interface displaced by `0.2 λ cos kx` between walls `λ/2` above and below; for small amplitudes its frequency would be $\omega^2 = \sigma k^3/(\rho_1 \coth kh_1 + \rho_2 \coth kh_2)$, a period of 1.7 × 10⁴ steps against the case's 10⁴, but `k a = 1.26` is far from small. The droplet period $2\pi\sqrt{(\rho_1+\rho_2)r^3/(6\sigma)}$ once listed here is a two-dimensional droplet's, from before the case was a layer. `capillary_wave` is the flat-interface case scored against an exact mode. |
+| `gravity_capillary` | None run. The same layer with the dense fluid below and gravity along −y; $(\rho_1 - \rho_2) g k$ joins $\sigma k^3$ in the dispersion relation, at a Bond number of 6 × 10⁻⁵ |
 | `rayleigh_taylor` | Linear growth rate of the instability, $\sigma = 0$ |
 
 ## The equation of state and the density ratio
@@ -2441,9 +2441,9 @@ cases.
 
 ## Known defects
 
-Two defects in the wall-bounded cases (`capillary`, `gravity_capillary`,
-`rayleigh_taylor`, `rayleigh_taylor_omp`). `laplace` is periodic and is affected
-by neither.
+Defects found in the shipped cases, and fixed. Four were confined to the
+wall-bounded cases (`capillary`, `gravity_capillary`, `rayleigh_taylor`,
+`rayleigh_taylor_omp`), which `laplace`, being periodic, never exercised.
 
 ### Fixed: the normalised phase field was never refreshed after t = 0
 
@@ -2516,6 +2516,28 @@ than a measurement of the change. `laplace` is periodic and unchanged.
 Both were preserved through the extraction of the shared kernel, so that it
 could be verified bit for bit against the previous code, and fixed afterwards
 one commit at a time. Any measurement taken before those commits carries them.
+
+### Fixed: the flat layers carried a droplet's Laplace pressure
+
+`capillary` and `gravity_capillary` began as copies of `laplace` and kept its
+`radius = 10`. Nothing in a flat layer uses it except `matched_p1_inf`, and
+`p1_inf = ρ₁c₁² − ρ₂c₂² − σ/R` put the dense layer's pressure σ/10 below the
+light one's: the Laplace jump of a droplet that is not there. A flat interface
+carries none, and between two walls nothing relieves it. After 5000 steps of
+`capillary` the two bulks still sat 5.7 × 10⁻⁴ apart (σ/10 = 5.5 × 10⁻⁴),
+against 1.4 × 10⁻⁴ once the radius is infinite, which leaves `p1_inf` matching
+the two bulk pressures and nothing more. The interface hardly noticed: its
+profile moves by at most 0.05 nodes over the case's 10⁴ steps.
+
+### Fixed: `gravity_capillary` laid the dense fluid on top
+
+Its header put the dense component below; `cosine_layer(0.2,
+/*inverted=*/false)` put φ = +1, component 1, above the interface. That is
+the Rayleigh–Taylor arrangement, which surface tension held down only because
+gravity is weak at this lattice spacing: at the 1.28 mm wavelength the Bond
+number `(ρ₁ − ρ₂) g / (σ k²)` is 6 × 10⁻⁵. It is now inverted as `capillary`'s
+is, and the two cases differ by gravity alone: over 10⁴ steps their interfaces
+agree to 0.002 node.
 
 ### Fixed: the enhanced equilibrium kept its two-dimensional amplitude on D3Q19
 

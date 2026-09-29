@@ -241,8 +241,8 @@ Pass `--precision=17` for output that round-trips.
 | Program | Lattice | Steps | ρ₁/ρ₂ | Gravity | Purpose |
 |---|---|---|---|---|---|
 | `laplace` | 128×128 | 3×10⁴ | 20/1, up to 10⁶/1 | no | Laplace law Δp = σ/R across a static droplet |
-| `capillary` | 128×128 | 10⁴ | 4/1 | no | oscillation period of a perturbed droplet |
-| `gravity_capillary` | 128×128 | 5×10⁴ | 4/1 | yes | droplet under gravity and surface tension |
+| `capillary` | 128×128 | 10⁴ | 4/1 | no | perturbed layer between walls under surface tension, dense fluid below |
+| `gravity_capillary` | 128×128 | 5×10⁴ | 4/1 | yes | perturbed layer under gravity and surface tension, dense fluid below |
 | `rayleigh_taylor` | 128×1028 | 5×10⁶ | 4/1 | yes | Rayleigh–Taylor instability, σ = 0, serial |
 | `rayleigh_taylor_omp` | 1024×4096 | 2×10⁶ | 4/1 | yes | same case, OpenMP, production resolution |
 | `laplace_high_ratio` | 100×100 | 4×10⁴ | 1000/1 | no | Laplace law at a density ratio of 1000, two-population solver |

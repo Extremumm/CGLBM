@@ -11,6 +11,7 @@
 
 #include <cmath>
 #include <iostream>
+#include <limits>
 
 #include "lbm/case_config.h"
 #include "lbm/solver.h"
@@ -36,7 +37,9 @@ CaseConfig capillary_case() {
     config.physics.rho2 = 1.;
     config.physics.c1 = 347. / (c_dx / c_dt);
     config.physics.c2 = 347. / (c_dx / c_dt);
-    config.physics.radius = 10.;
+    // A flat interface carries no Laplace jump: an infinite radius keeps
+    // matched_p1_inf from giving the dense layer a droplet's.
+    config.physics.radius = std::numeric_limits<double>::infinity();
     config.physics.sigma = 0.02 / (c_dx * c_dx * c_dx / c_dt / c_dt);
     config.physics.nu = 1.e-4 / (c_dx * c_dx / c_dt);
     config.physics.nu_b = 1.e-4 / (c_dx * c_dx / c_dt);
@@ -44,7 +47,7 @@ CaseConfig capillary_case() {
     config.physics.ch_width_ope = 1.6 * config.units.dx;
     config.physics.p2_inf = 0.;
     config.physics.p1_inf = cglbm::lbm::matched_p1_inf(config.physics);
-    // Keep it matched if --rho1, --sigma or --radius move on the command line.
+    // Keep it matched if --rho1 or --sigma move on the command line.
     config.matched_pressure_offset = true;
 
     config.boundary = cglbm::lbm::Boundary::WallY;
