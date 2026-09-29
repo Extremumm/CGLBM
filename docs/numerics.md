@@ -2417,6 +2417,8 @@ Static droplet, 10 000 steps, equal dynamic viscosities, R = 10:
 | `droplet E8 1e4 0`, first version | 1.017 | 5.4 × 10⁻⁶ |
 | `droplet E8 1e4 0`, conserving momentum, unweighted stress | 1.030 | 1.7 × 10⁻⁶ |
 | `droplet E8 1e4 0` | 0.998 | 2.3 × 10⁻⁶ |
+| `droplet E8 1e5 0` | 0.998 | 1.7 × 10⁻⁶ |
+| `droplet E8 1e6 0` | 0.998 | 7.7 × 10⁻⁷ |
 
 Droplet launched along x into a fluid at rest (`droplet E8 <ratio> <U>
 [viscosity_ratio]`, 10 000 steps). On the same test the colour-gradient solver
@@ -2430,9 +2432,17 @@ these are long tests (`tests/test_droplet_velocity_based.py`):
 | $10^4$ | 0.1 | 1 | diverges in 500 steps | < 10⁻¹⁰ | 0.850 U |
 | $10^4$ | 0.1 | 10 | diverges in 560 steps | < 10⁻¹⁰ | 0.850 U |
 | $10^4$ | 0.1 | 100 | diverges in 1400 steps | < 10⁻¹⁰ | 0.851 U |
+| $10^5$ | 0.01 | 1 | — | < 10⁻¹⁰ | 0.848 U, steady to ±0.1 % |
+| $10^6$ | 0.01 | 1 | — | < 10⁻¹⁰ | 0.849 U, steady to ±0.3 % |
 
 The drift left is the ten significant digits of the output; in double
-precision, without the output, it is $10^{-13}$. At 0.01 the droplet slows
+precision, without the output, it is $10^{-13}$. The speeds are those of the
+droplet's periodic centroid. The droplet is launched with `u = U c`, so its
+interface nodes start slower than its core and its momentum over its mass is
+0.843 U from the first step; the centroid, which weights the core above the
+edge, reads 0.6 % more. At $10^5$ and $10^6$ the lighter fluid can take no
+measurable share of the momentum, and the droplet keeps its speed. The
+static and moving droplets at $10^6$ are long tests too. At 0.01 the droplet slows
 down steadily as it sets the surrounding fluid in motion; the first version
 sped it up from 0.85 U to 0.88 U. At 100 the lighter fluid, which could take a
 third of the momentum once everything moves together, has taken a fifth of it
@@ -2530,14 +2540,20 @@ buy a little more, but it would give up the margin over the fastest runs.
 wave with an amplitude of 8 nodes instead of 0.3, `k a = 0.79`. Its
 interface moves at about 4 × 10⁻³ and the largest velocity is 3.9 × 10⁻³. The
 colour-gradient solver's heavy populations go negative from about 3 × 10⁻⁴
-(see [What is not solved](#what-is-not-solved)), and its wave, with the
-matched stencil, diverges at amplitudes of 4, 6 and 8, at steps 4000, 3800
-and 3550: the light nodes next to the interface speed up first, to
-3.7 × 10⁻² at an amplitude of 8, and then the run produces NaN. At 1 and 2 it
-stays bounded for 1.2 × 10⁴ steps, damped 2.36 and 1.86 times the linear
+(see [What is not solved](#what-is-not-solved)). With the matched stencil as
+first written its wave diverged at amplitudes of 4, 6 and 8, at steps 4000,
+3800 and 3550: the light nodes next to the interface sped up first, to
+3.7 × 10⁻² at an amplitude of 8, and then the run produced NaN. At 1 and 2 it
+stayed bounded for 1.2 × 10⁴ steps, damped 2.36 and 1.86 times the linear
 rate against 2.52 at 0.3 over the same steps, and 8 % and 5 % low in
-frequency. Past an amplitude of about 1 its error changes with the
-amplitude, on the way to diverging at 4. The velocity-based wave stays
+frequency. With its face values limited at the interface
+([The matched stencil at an interface](#the-matched-stencil-at-an-interface))
+the waves at 4 and 6 run the 1.25 × 10⁴ steps, damped 1.66 and 1.86 times the
+linear rate and 2 % and 6 % low in frequency, and the one at 8 still diverges,
+later, at step 4950: its largest velocity triples in the last 150 steps
+before it. The nine-point source runs the wave at 8, damped 3.89 times the
+linear rate and 14 % low in frequency, its excess normal stress holding the
+light side down where the matched one does not. The velocity-based wave stays
 bounded, its phase field within [−1, 1], and rings down at 1.090 times the
 linear mode's damping rate. Its
 frequency is 0.907 of the linear one; at an amplitude of 4 the two are 1.062

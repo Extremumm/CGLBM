@@ -225,10 +225,10 @@ has gone. In this code it is the velocity-based
   were limited where the density jumps: the six-point stencil overshoots the
   jump of the quantity it differentiates, and the overshoot, by every
   measurement, cancelled the heavy fluid's viscous normal stress at the
-  interface. Above the bound
-  the wave diverges: at 1000 from an amplitude of 4 nodes, where the
-  velocity-based solver rings down an amplitude of 8 at 1.09 times the linear
-  damping rate.
+  interface. The limit also carries the wave further past the bound: at 1000
+  it now diverges only from an amplitude of 8 nodes (from 4 before), where
+  the velocity-based solver rings it down at 1.09 times the linear damping
+  rate.
 - Flows with moving interfaces at 10³ and above belong to the velocity-based
   solver, which is the colour-gradient segregation on a family-3
   hydrodynamics — the model Subhedar (2022) describes. As Subhedar also

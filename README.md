@@ -254,7 +254,7 @@ Pass `--precision=17` for output that round-trips.
 | `rayleigh_taylor_3d` | 32×128×32 | 3×10³ | 3/1 | yes | Rayleigh–Taylor in 3D, single square-cell mode, σ = 0 |
 | `hartmann` | 8×64×8 | 2×10⁴ | 1/1 | no | Hartmann flow at Ha = 10, against its closed form |
 | `magnetic_rayleigh_taylor` | 128×128×4 | 8×10³ | 3.65/1 | yes | magnetic Rayleigh–Taylor, growth rate against the QS-MHD dispersion relation |
-| `droplet` | 128×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: static or moving droplet at large density ratio |
+| `droplet` | 128×128 | 10⁴ | 10⁴/1, up to 10⁶/1 | no | velocity-based solver: static or moving droplet at large density ratio |
 | `layers` | 8×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: two layers sheared across their interfaces |
 | `capillary_wave_vb` | 64×128 | 2.5×10⁴ | 1000/1 | no | velocity-based solver: the `capillary_wave` case, at any amplitude |
 | `oscillation_vb` | 128×128 | 2.4×10⁴ | 1000/1 | no | velocity-based solver: the `oscillation` case |

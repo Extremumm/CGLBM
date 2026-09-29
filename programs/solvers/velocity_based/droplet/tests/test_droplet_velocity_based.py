@@ -1,6 +1,6 @@
 """The velocity-based droplet solver at large density ratios.
 
-Six runs of programs/solvers/velocity_based/droplet:
+Eight runs of programs/solvers/velocity_based/droplet:
 
 - `droplet E8 1e4 0`: a static droplet, the Laplace benchmark, to compare with
   the colour-gradient `laplace` at a density ratio of 1e4
@@ -12,7 +12,11 @@ Six runs of programs/solvers/velocity_based/droplet:
   fluid carries a large share of the momentum;
 - `droplet E8 1e4 0.1 <1|10|100>`: launched ten times faster, at viscosity
   ratios of 1, 10 and 100. Before the dissipation went through the forcing
-  term these diverged within 1500 steps, and 0.05 after 7700.
+  term these diverged within 1500 steps, and 0.05 after 7700;
+- `droplet E8 1e6 0` and `droplet E8 1e6 0.01`: static and launched at a
+  density ratio of 1e6, the highest the colour-gradient `laplace` holds a
+  static droplet at. There the lighter fluid can take no measurable share of
+  the momentum, so the droplet keeps its speed instead of slowing down.
 
 The moving runs are checked for what the scheme promises: they stay bounded,
 total momentum is conserved to the precision of the output, and the droplet
@@ -48,6 +52,10 @@ MEASURED_MAX_VELOCITY = 2.3e-6
 MEASURED_DROPLET_SPEED = {"1e4": 0.844, "100": 0.714}
 #: The same at FAST_SPEED, by viscosity ratio.
 MEASURED_FAST_SPEED = {"1": 0.850, "10": 0.850, "100": 0.851}
+#: At a density ratio of 1e6: the static jump over sigma / R, and the moving
+#: droplet's mean speed over SPEED.
+MEASURED_HEAVIEST_JUMP_RATIO = 0.998
+MEASURED_HEAVIEST_SPEED = 0.849
 #: The output is written with ten significant digits; momentum is conserved
 #: to rounding, and its sum over the lattice to about that precision.
 MOMENTUM_TOLERANCE = 1.0e-9
@@ -66,6 +74,23 @@ def moving_run(request):
         "droplet",
         artifacts_dir() / f"droplet_moving_{request.param}",
         args=("E8", request.param, str(SPEED)),
+        timeout=2400,
+    )
+
+
+@pytest.fixture(scope="module")
+def heaviest_static_run():
+    return run_program(
+        "droplet", artifacts_dir() / "droplet_static_1e6", args=("E8", "1e6", "0"), timeout=2400
+    )
+
+
+@pytest.fixture(scope="module")
+def heaviest_moving_run():
+    return run_program(
+        "droplet",
+        artifacts_dir() / "droplet_moving_1e6",
+        args=("E8", "1e6", str(SPEED)),
         timeout=2400,
     )
 
@@ -239,3 +264,51 @@ def test_validation_droplet_velocity_based_fast_droplet_slows_down(fast_run):
     speeds = _speeds(case, FAST_SPEED)
     assert np.mean(speeds) == pytest.approx(MEASURED_FAST_SPEED[ratio], abs=0.01)
     assert speeds[-1] < speeds[0]
+
+
+@pytest.mark.long
+@pytest.mark.validation
+def test_validation_droplet_velocity_based_static_at_1e6(heaviest_static_run):
+    """Laplace's law and the spurious currents at a density ratio of 1e6, as at 1e4."""
+    case = heaviest_static_run
+    assert case.density(0).max() == pytest.approx(1.0e6, rel=1.0e-4)
+    for field in case.fields(NUM_STEPS).values():
+        assert np.isfinite(field).all()
+    radius = case.phase_interface_radius(NUM_STEPS)
+    jump = case.pressure_jump(NUM_STEPS, inner=INNER_RADIUS, outer=OUTER_RADIUS)
+    assert jump / (SIGMA / radius) == pytest.approx(MEASURED_HEAVIEST_JUMP_RATIO, abs=0.002)
+    velocity = case.velocity(NUM_STEPS)
+    assert np.hypot(velocity[..., 0], velocity[..., 1]).max() < 3.0 * MEASURED_MAX_VELOCITY
+
+
+@pytest.mark.long
+@pytest.mark.verification
+def test_verification_droplet_velocity_based_moving_at_1e6(heaviest_moving_run):
+    """At 1e6 the moving droplet stays bounded and conserves momentum."""
+    case = heaviest_moving_run
+    t = case.last_timestep
+    assert t == NUM_STEPS
+    for field in case.fields(t).values():
+        assert np.isfinite(field).all()
+    phase = case.phase(t)
+    assert phase.min() >= -1.0 - 1.0e-9
+    assert phase.max() <= 1.0 + 1.0e-9
+    start = _momentum(case, 0)
+    for step in case.timesteps[1:]:
+        assert _momentum(case, step) == pytest.approx(start, rel=MOMENTUM_TOLERANCE)
+
+
+@pytest.mark.long
+@pytest.mark.validation
+def test_validation_droplet_velocity_based_keeps_its_speed_at_1e6(heaviest_moving_run):
+    """At 1e6 the droplet keeps its speed.
+
+    The lighter fluid holds a mass 2e4 times smaller, so however much of it the
+    droplet drags along, its speed cannot change measurably. What the centre
+    does show is the droplet's shape: `_speeds` follows a periodic centroid,
+    which weights the core, where u = SPEED, above the edge, where it is
+    c * SPEED, and reads 0.6 % above the droplet's momentum over its mass.
+    """
+    speeds = _speeds(heaviest_moving_run)
+    assert np.mean(speeds) == pytest.approx(MEASURED_HEAVIEST_SPEED, abs=0.01)
+    assert max(speeds) - min(speeds) < 0.01

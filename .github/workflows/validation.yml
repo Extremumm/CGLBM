@@ -18,7 +18,7 @@ jobs:
     name: Laplace benchmark
     runs-on: ubuntu-latest
     # five full laplace runs of about ten minutes each (density ratio 20 with E8
-    # and E4, density ratios 1e4, 1e5 and 1e6), six droplet runs of about five
+    # and E4, density ratios 1e4, 1e5 and 1e6), eight droplet runs of about five
     # and a layers run of under one
     timeout-minutes: 120
 

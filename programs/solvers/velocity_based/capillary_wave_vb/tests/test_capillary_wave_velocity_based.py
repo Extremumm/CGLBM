@@ -16,8 +16,8 @@ resolution: the interface is four nodes wide on a wavelength of 64.
 A third run starts the same wave at 1000 with an amplitude of 8 nodes instead
 of 0.3, for one period. Its interface moves at about 4e-3, thirteen times the
 speed at which the colour-gradient solver's heavy populations go negative;
-that solver's wave diverges from an amplitude of 4 upwards. This one stays
-bounded. At `k a = 0.79` the wave is no longer linear, so its frequency is
+that solver's wave, with the matched stencil, diverges at this amplitude.
+This one stays bounded. At `k a = 0.79` the wave is no longer linear, so its frequency is
 held only to the value it measured, which is 9 % below the linear mode's.
 """
 
