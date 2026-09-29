@@ -170,10 +170,11 @@ jobs:
   oscillations:
     name: Oscillation benchmarks
     runs-on: ubuntu-latest
-    # ten runs of three to ten minutes each: the capillary wave at density
+    # twelve runs of three to ten minutes each: the capillary wave at density
     # ratios of 100 and 1000 and the droplet at 1000, in the colour-gradient
-    # solver with both source stencils and in the velocity-based solver, and
-    # a large-amplitude wave at 1000 in the velocity-based solver
+    # solver with both source stencils and in the velocity-based solver, the
+    # droplet in the two-population solver with both stencils, and a
+    # large-amplitude wave at 1000 in the velocity-based solver
     timeout-minutes: 120
 
     steps:
@@ -199,12 +200,13 @@ jobs:
         run: |
           cmake --preset gnu -DDEBUG=OFF -DPython3_EXECUTABLE="$(which python)"
           cmake --build --preset gnu --target capillary_wave_opt oscillation_opt \
-            capillary_wave_vb_opt oscillation_vb_opt
+            oscillation_high_ratio_opt capillary_wave_vb_opt oscillation_vb_opt
 
       - name: Run the long tests
         run: |
           python -m pytest programs/solvers/color_gradient/capillary_wave \
             programs/solvers/color_gradient/oscillation \
+            programs/solvers/color_gradient/oscillation_high_ratio \
             programs/solvers/velocity_based/capillary_wave_vb \
             programs/solvers/velocity_based/oscillation_vb --runlong -v
 

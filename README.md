@@ -226,8 +226,8 @@ CSV cannot carry at these sizes.
 `interface.csv`, one line per interface node; `oscillation_3d` writes a
 different track into the same file, one line per step holding the droplet's
 three semi-axes. The header says which, and `CaseOutput.droplet_axes` reads the
-second. The two-dimensional oscillation cases (`capillary_wave`, `oscillation`
-and their `_vb` counterparts) write `mode.csv` instead: one line every 50 steps
+second. The two-dimensional oscillation cases (`capillary_wave`, `oscillation`,
+`oscillation_high_ratio` and the `_vb` counterparts) write `mode.csv` instead: one line every 50 steps
 holding a wave's first Fourier coefficient or a droplet's mode-2 deformation,
 which `CaseOutput.mode_track` reads and `pycglbm.normal_modes` scores against
 the exact viscous normal mode. `cglbm::lbm::write_vtk` produces a ParaView/VisIt file from a
@@ -250,6 +250,7 @@ Pass `--precision=17` for output that round-trips.
 | `oscillation_3d` | 48×48×48 | 4×10³ | 10/1 | no | Lamb's mode-2 frequency of a ringing droplet, in 3D |
 | `capillary_wave` | 64×128 | 2.5×10⁴ | 1000/1 | no | capillary wave on a heavy layer, against the exact viscous normal mode |
 | `oscillation` | 128×128 | 2.4×10⁴ | 1000/1 | no | mode-2 oscillation of a 2D droplet, against the exact viscous normal mode |
+| `oscillation_high_ratio` | 128×128 | 2.4×10⁴ | 1000/1 | no | the `oscillation` case in the two-population solver, MRT and third-moment source |
 | `rayleigh_taylor_3d` | 32×128×32 | 3×10³ | 3/1 | yes | Rayleigh–Taylor in 3D, single square-cell mode, σ = 0 |
 | `hartmann` | 8×64×8 | 2×10⁴ | 1/1 | no | Hartmann flow at Ha = 10, against its closed form |
 | `magnetic_rayleigh_taylor` | 128×128×4 | 8×10³ | 3.65/1 | yes | magnetic Rayleigh–Taylor, growth rate against the QS-MHD dispersion relation |
@@ -441,6 +442,9 @@ ones, which puts τ at 348 in the heavy fluid, and with BGK that case reads
 MRT collision and their source term for the third moment D2Q9 cannot carry,
 and runs it as they did: 0.999 σ/R at 1.2 × 10⁵ steps, still creeping up, with
 spurious currents of 7.9 × 10⁻⁶ against their 1.0074 and 1.25 × 10⁻⁴.
+`oscillation_high_ratio` moves the interface: a mode-2 droplet at 1000, with
+MRT and their source, rings down 6.6 times faster than the exact viscous mode
+with their nine-point derivative and 1.45 times with `--source-stencil=matched`.
 
 **Moving interfaces at a large density ratio are a different matter**, and the
 literature agrees: the colour-gradient results with a moving interface stop at
@@ -460,9 +464,9 @@ same vortex decays at 0.998 of its Navier–Stokes rate at 1000 and 1.010 at
 10⁴. It fixes the heavy fluid's interior, not a moving interface: a capillary
 wave at a ratio of 100 goes from 1.50 to 1.19 times its exact damping, but at
 1000 the interface itself dominates (2.8 times), a mode-2 droplet there rings
-down at 0.62 of its exact rate, and the option is off by default. In `Solver`
-the stencil's face values are limited where the density jumps; without that
-the droplet was not damped at all. The
+down at 0.62 of its exact rate, and the option is off by default. The
+stencil's face values are limited where the density jumps; without that the
+droplet was not damped at all. The
 velocity-based `droplet` solver is free of both limits by construction: its
 populations carry the velocity at the lattice temperature, not the density.
 See [`docs/literature.md`](docs/literature.md) and

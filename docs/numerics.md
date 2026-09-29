@@ -1904,8 +1904,12 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
   --ny=256 --radius=40 --source-stencil=matched`, 5.5 × 10⁴ steps): −0.11
   times the exact rate, its deformation 0.0609 after one period where the
   exact mode's has decayed from 0.060 to 0.049, with the frequency within
-  0.4 %. The velocity-based solver goes from 1.132 at R = 20 to
-  1.026 at R = 40 (research copy, carrier at `c_s²`), with the frequency at
+  0.4 %. With its face values limited at the interface (below) the droplet is
+  damped, but no better at the larger radius: 0.62 of the exact rate at
+  R = 20 and 0.46 at R = 40, with the frequency at 1.007 and 1.009. What is
+  missing, 7.3 × 10⁻⁶ and 2.6 × 10⁻⁶ per step, falls as the frequency does,
+  `R^(−3/2)`, not as the exact rate, `R⁻²`. The velocity-based solver goes
+  from 1.132 at R = 20 to 1.026 at R = 40 (research copy, carrier at `c_s²`), with the frequency at
   0.997, as the heavy fluid's boundary layer `(2ν₁/ω)^½` goes from 3.0 to 5.0
   nodes. Switching stencils node by node where the matched one straddles the
   interface did not help: taking the nine-point derivative instead wherever
@@ -2023,7 +2027,9 @@ sound does not notice.
 **The two-population solver** has the same defect through Ba et al.'s source
 term and takes the same option, with the same result: 17.5 → 0.998 at 1000
 and 167 → 1.006 at 10⁴ on the Taylor–Green vortex (see
-[above](#mrt-and-the-third-moment-source-in-the-two-population-solver)).
+[above](#mrt-and-the-third-moment-source-in-the-two-population-solver)), and
+the same limit at an interface
+([below](#the-matched-stencil-at-an-interface)).
 
 **Where there is an interface.** A static droplet does not move, so the option
 leaves it where it was. `laplace` with the high-ratio options, 3 × 10⁴ steps,
@@ -2032,8 +2038,14 @@ leaves it where it was. `laplace` with the high-ratio options, 3 × 10⁴ steps,
 | ρ₁/ρ₂ | nine-point | matched |
 |---|---|---|
 | 20 (shipped case) | 1.0212, 1.7 × 10⁻⁵ | 1.0215, 1.9 × 10⁻⁵ |
-| 1000 | 1.0269, 2.0 × 10⁻⁵ | 1.0272, 2.5 × 10⁻⁵ |
-| 10⁴ | 1.0185, 6.5 × 10⁻⁴ | 1.0222, 2.4 × 10⁻⁴ |
+| 1000 | 1.0269, 2.0 × 10⁻⁵ | 1.0271, 2.2 × 10⁻⁵ |
+| 10⁴ | 1.0185, 6.5 × 10⁻⁴ | 1.0205, 3.7 × 10⁻⁴ |
+
+At 1000 and 10⁴ the matched column is with the limit at the interface
+described [below](#the-matched-stencil-at-an-interface); without it, 1.0272
+and 2.5 × 10⁻⁵ at 1000 and 1.0222 and 2.4 × 10⁻⁴ at 10⁴. At 20 the limit
+moves the jump by 1 × 10⁻⁴ (1.0243 against 1.0244, in a run with both
+fluids' kinematic viscosity at 1.66).
 
 A moving interface is another matter, and two linear oscillations with exact
 solutions say how. The references are the normal modes of two viscous fluids
@@ -2133,8 +2145,8 @@ of ψ whose weights are `kMatchedFace` (11/16, −7/32, 1/32), that is an
 interpolation overshooting a jump: by 3/16 of a sharp step, and across a tanh
 interface at 1000, in the unit test, by 1 % of the largest ψ on the line.
 
-`Solver` therefore limits each face value to the range of the two nodes it
-separates, on faces whose six nodes span more than 1 % in density
+Both solvers therefore limit each face value to the range of the two nodes
+it separates, on faces whose six nodes span more than 1 % in density
 (`matched_face_value`). A single fluid never gets there -- its density
 changes by 3 × 10⁻⁶ in the Taylor–Green vortex at 10⁴ -- so the interior keeps
 the exact symbol, and the derivative, still a difference of face values, still
@@ -2161,8 +2173,30 @@ reached 2.5 × 10⁻², and from 1.5 × 10⁴ steps on φ left [−1, 1] by up t
 (2.7 × 10⁻³). The 0.90 to 1.01 and 2 × 10⁻² once recorded for this case with
 the nine-point source were the earlier program's.
 
-The droplet is damped, not yet at the right rate: its later half-periods decay
-at 0.44 to 0.6 of the exact rate, the first faster. Three variants, the
+`TwoPopulationSolver` had the same fault, if milder, and takes the same
+limit. Its correction differentiates Ba et al.'s `Q = Σ_k (1 − 3(c_s^k)²) ρ_k u`, which
+jumps with the densities as ψ does. `oscillation_high_ratio` runs the droplet
+in it, with Ba et al.'s α₂ = 0.2, β = 0.7 and σ = 0.1 and `oscillation`'s
+viscosities. There a BGK collision (τ = 4.7 and 0.60) diverges within 700
+steps with any of the stencils, and their MRT runs. Over 2.4 × 10⁴ steps, a
+period of the exact mode (damping and frequency over the exact ones):
+
+| two-population solver | damping | frequency |
+|---|---|---|
+| nine-point | 6.64 | 0.900 |
+| matched, plain | 0.23 | 1.015 |
+| matched, limited | 1.45 | 1.023 |
+
+Limited, this droplet is damped a little too fast rather than too slowly: its
+first half-period decays at 1.6 times the exact rate, its second at 1.3.
+
+The `Solver` droplet is damped, not yet at the right rate: its later
+half-periods decay at 0.44 to 0.6 of the exact rate, the first faster, and at R = 40 it is 0.46.
+It does now feel the heavy fluid's viscosity. Over 1.2 × 10⁴ steps, at
+μ₁ = 1, 2 and 4, it is damped at 1.26, 1.52 and 3.23 × 10⁻⁵ per step against
+the exact 1.02, 1.91 and 3.58 × 10⁻⁵: what is left is a few × 10⁻⁶ either
+way, not a missing viscosity, and large only beside a droplet this nearly
+inviscid (ν₁ = 0.002). Three variants, the
 droplet measured over 1.2 × 10⁴ steps (0.795 with the 1 % gate) and the wave
 over 1.3 × 10⁴, show how narrow the choice is:
 
@@ -2176,6 +2210,16 @@ over 1.3 × 10⁴, show how narrow the choice is:
   wave improves to 1.51 and 0.972, but the droplet is damped 2.95 times the
   exact rate. The switch is conservative, unlike the node-by-node fallback of
   [What is not solved](#what-is-not-solved), which made the wave grow.
+
+Two more ideas did not help. ψ is a sharp factor, `p − ρc_s²`, times a smooth
+one, `u`, and the product rule `(p − ρc_s²) D u + u D(p − ρc_s²)` would keep
+the stencil's symbol on the smooth factor alone; it is exact on the
+Taylor–Green vortex and diverges at the droplet's interface within 100 steps,
+whatever `D` is for the sharp factor. The correction has to stay a difference
+of face values. And the gap is not a lag in `S_t`, the temporal correction
+taken as a backward difference half a step behind: centring it on the step
+(second-order backward) or half a step ahead of it gives 0.621 and 0.622 over
+the long test, and lagging it a further half step 0.620, against 0.621.
 
 ## The velocity-based droplet solver
 

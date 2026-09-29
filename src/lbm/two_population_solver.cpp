@@ -290,20 +290,31 @@ void TwoPopulationSolver::collide_node(int i, int j, double* out1, double* out2)
         double normal_difference = dqx_dx - dqy_dy;
         if (config_.source_stencil == SourceStencil::StreamingMatched) {
             // The normal-stress part on the stencil the streaming made the
-            // error with; the trace keeps the nine-point derivative, and so
-            // does y within kMatchedReach nodes of a wall. See SourceStencil.
-            double normal_x = 0.0;
-            for (int m = 1; m <= kMatchedReach; m++) {
-                normal_x += kMatchedDerivative[m - 1] *
-                            (q_x_((i + m) % nx_, j) - q_x_((i - m + nx_) % nx_, j));
+            // error with, as the difference of two face values, limited at an
+            // interface as in Solver; the trace keeps the nine-point
+            // derivative, and so does y within kMatchedReach nodes of a wall.
+            // See SourceStencil.
+            //
+            // Q and rho at offsets -3 .. 3 along the axis; the faces either
+            // side of the node read offsets -3 .. 2 and -2 .. 3.
+            double line_q[2 * kMatchedReach + 1];
+            double line_rho[2 * kMatchedReach + 1];
+            for (int m = -kMatchedReach; m <= kMatchedReach; m++) {
+                const int a = (i + m + nx_) % nx_;
+                line_q[m + kMatchedReach] = q_x_(a, j);
+                line_rho[m + kMatchedReach] = rho_(a, j);
             }
+            const double normal_x =
+                matched_face_value(line_q + 1, line_rho + 1) - matched_face_value(line_q, line_rho);
             double normal_y = dqy_dy;
             if (!wall_y_ || (j >= kMatchedReach && j < ny_ - kMatchedReach)) {
-                normal_y = 0.0;
-                for (int m = 1; m <= kMatchedReach; m++) {
-                    normal_y += kMatchedDerivative[m - 1] *
-                                (q_y_(i, (j + m) % ny_) - q_y_(i, (j - m + ny_) % ny_));
+                for (int m = -kMatchedReach; m <= kMatchedReach; m++) {
+                    const int b = (j + m + ny_) % ny_;
+                    line_q[m + kMatchedReach] = q_y_(i, b);
+                    line_rho[m + kMatchedReach] = rho_(i, b);
                 }
+                normal_y = matched_face_value(line_q + 1, line_rho + 1) -
+                           matched_face_value(line_q, line_rho);
             }
             normal_difference = normal_x - normal_y;
         }

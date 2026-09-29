@@ -209,7 +209,9 @@ has gone. In this code it is the velocity-based
   the two structural effects above, not by any ingredient the literature
   offers. The two-population solver's MRT and source term make it run Ba et
   al.'s benchmark correctly; they do not lift either limit, and the
-  measurements say so. The heavy fluid's extensional viscosity is fixed in
+  measurements say so: its mode-2 droplet at 1000 (`oscillation_high_ratio`)
+  rings down 6.6 times too fast with their source as published, and 1.45 times
+  with the matched stencil below. The heavy fluid's extensional viscosity is fixed in
   its interior by taking the source on the stencil the streaming uses
   (`--source-stencil=matched`, off by default); against exact normal modes it
   brings a capillary wave at a ratio of 100 from 1.50 to 1.19 times its

@@ -292,16 +292,17 @@ enum class Recolouring {
 /// Measured by an exact linear analysis of the scheme, and by the unit tests;
 /// see docs/numerics.md.
 ///
-/// In `Solver` the derivative is taken as the difference of two face values,
-/// and at an interface each face is kept between the two nodes it separates
-/// (`matched_face_value`). Without that the six-point interpolation overshoots
-/// the jump of `(p - rho c_s^2) u` there, and the overshoot cancelled the heavy
-/// fluid's viscous normal stress at the interface: a mode-2 droplet at 1000
-/// was not damped at all (-0.23 times the exact rate), one deformed by 10 %
-/// diverged after 4800 steps, and a static droplet at 10^4 with tau = 100 in
-/// the heavy fluid breathed until its Laplace jump turned negative.
-/// `TwoPopulationSolver` applies the stencil node by node, as it always has;
-/// its moving interfaces have not been measured.
+/// In both solvers the derivative is taken as the difference of two face
+/// values, and at an interface each face is kept between the two nodes it
+/// separates (`matched_face_value`). Without that the six-point interpolation
+/// overshoots the jump of the corrected quantity there, and the overshoot
+/// cancelled the heavy fluid's viscous normal stress at the interface. In
+/// `Solver` a mode-2 droplet at 1000 was not damped at all (-0.23 times the
+/// exact rate), one deformed by 10 % diverged after 4800 steps, and a static
+/// droplet at 10^4 with tau = 100 in the heavy fluid breathed until its
+/// Laplace jump turned negative. In `TwoPopulationSolver`
+/// (`oscillation_high_ratio`, MRT) the droplet rang down at 0.23 of the exact
+/// rate, and now does at 1.45, against 6.6 with `Isotropic`.
 ///
 /// It corrects the heavy fluid's interior, not a moving interface, and that is
 /// why it is not the default. Against the exact normal modes of two viscous
