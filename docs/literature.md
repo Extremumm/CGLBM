@@ -221,8 +221,9 @@ has gone. In this code it is the velocity-based
   1.6 with the matched one, and a wider interface no longer helps. The
   droplet was not damped at all with the matched source until its face values
   were limited where the density jumps: the six-point stencil overshoots the
-  jump of the quantity it differentiates, and the overshoot cancelled the
-  heavy fluid's viscous normal stress at the interface. Above the bound
+  jump of the quantity it differentiates, and the overshoot, by every
+  measurement, cancelled the heavy fluid's viscous normal stress at the
+  interface. Above the bound
   the wave diverges: at 1000 from an amplitude of 4 nodes, where the
   velocity-based solver rings down an amplitude of 8 at 1.09 times the linear
   damping rate.

@@ -1915,16 +1915,16 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
   a source of its own. Limiting the matched stencil's face values there does
   help, and is what `Solver` now does:
   [The matched stencil at an interface](#the-matched-stencil-at-an-interface).
-- **The wall-bounded cases have nothing to be scored against.** `capillary`,
-  `gravity_capillary` and `rayleigh_taylor` run with `--surface-tension=stress
-  --viscosity-mixing=dynamic` and stay finite with φ in [−1, 1]: `capillary`
-  and `gravity_capillary` for their 10⁴ steps at their ratio of 4 and
-  `capillary` at 100, `rayleigh_taylor` for 2 × 10⁴ steps. At 4 the
+- **The wall-bounded cases have nothing to be scored against.** With
+  `--surface-tension=stress --viscosity-mixing=dynamic`, `capillary` runs
+  10⁴ steps at its ratio of 4 and at 100, `gravity_capillary` 10⁴ at 4 and
+  `rayleigh_taylor` 2 × 10⁴, all finite with φ in [−1, 1]; at 4 the
   interface follows the default run's to 0.07 node. But the layers start at
-  an amplitude of 0.2 λ, where no linear mode applies, and
-  `rayleigh_taylor`'s gravity is 2.7 × 10⁻⁸ in lattice units, so nothing
-  grows in the steps any test could afford. `capillary_wave` and
-  `oscillation` are the moving-interface cases that are scored.
+  an amplitude of 0.2 λ, where no
+  linear mode applies, and `rayleigh_taylor`'s gravity is 2.7 × 10⁻⁸ in
+  lattice units, so nothing grows in the steps any test could afford.
+  `capillary_wave` and `oscillation` are the moving-interface cases that are
+  scored.
 
 ### The heavy fluid's extensional viscosity
 

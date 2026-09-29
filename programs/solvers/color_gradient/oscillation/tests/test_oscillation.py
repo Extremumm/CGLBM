@@ -18,9 +18,9 @@ fast. With `--source-stencil=matched` it rings down at 0.62 of the exact rate.
 That stencil's six-point face values used to overshoot the jump of the
 corrected quantity at the interface, which cancelled the heavy fluid's
 viscous normal stress there, and the droplet did not ring down at all (-0.23);
-they are now limited where the density changes (docs/numerics.md, "The heavy
-fluid's extensional viscosity"). The velocity-based solver runs the same case
-in `oscillation_vb`.
+they are now limited where the density changes (docs/numerics.md, "The
+matched stencil at an interface"). The velocity-based solver runs the same
+case in `oscillation_vb`.
 
 Both are known gaps, pinned as measured with a tolerance that catches a change
 in the scheme. The frequency, which the interface disturbs much less, is
