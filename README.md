@@ -198,7 +198,7 @@ droplet carries 0.998 σ/R. `layers` shears two layers 10⁴ apart across their
 interfaces, with the same scheme and the same arguments (the third is the peak
 velocity). `capillary_wave_vb` and `oscillation_vb` ring down a capillary
 wave and a droplet at a density ratio of 1000 against the exact viscous normal
-modes, within 8 % in damping and 2 % in frequency; a fifth argument sets the
+modes, within 5 % in damping and 1 % in frequency; a fifth argument sets the
 wave's amplitude, and at 8 nodes (`capillary_wave_vb E8 1000 2 12500 8`) the
 wave still rings down, where the colour-gradient `capillary_wave` diverges from
 4. See

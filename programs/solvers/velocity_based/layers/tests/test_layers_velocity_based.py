@@ -22,8 +22,8 @@ AMPLITUDE = 0.01
 
 # Measured on this run, pinned to catch regressions: largest error of the
 # velocity in each layer, as a fraction of AMPLITUDE.
-MEASURED_LIGHT_ERROR = 0.0193
-MEASURED_HEAVY_ERROR = 0.0025
+MEASURED_LIGHT_ERROR = 0.0188
+MEASURED_HEAVY_ERROR = 0.0042
 #: The output is written with ten significant digits.
 MOMENTUM_TOLERANCE = 1.0e-9
 
@@ -90,7 +90,10 @@ def test_validation_layers_velocity_based_stress_crosses_the_interface(layers_ru
     The light layer drifts by a nearly uniform 1.9 % of U within the first few
     thousand steps and stays there: a slip across the diffuse interface. The
     link viscosity decides it: adding 5 % of the lattice's own viscosity to
-    every link turns it into 2.2 % the other way, adding 25 % into 16 %.
+    every link turns it into 2.2 % the other way, adding 25 % into 16 %. The
+    heavy layer's largest error, 0.4 %, is on the interface nodes that read as
+    heavy, between its own velocity and the light layer's slip; its bulk stays
+    within 0.02 %.
     """
     light, heavy = _errors(layers_run, NUM_STEPS)
     assert light == pytest.approx(MEASURED_LIGHT_ERROR, abs=0.002)

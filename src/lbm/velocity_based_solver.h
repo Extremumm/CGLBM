@@ -39,18 +39,26 @@ struct SolverParameters {
     double width = 1.6;
     /// Relaxation time of the trace of the non-equilibrium.
     double tau_bulk = 1.0;
-    /// Weight of the populations' own non-equilibrium in collide_hybrid. 0.98
-    /// lets a droplet launched at 0.05 lattice units per step diverge after
-    /// 7700 steps at a density ratio of 1e4; at 0.7 it holds up to 0.2.
-    double hybrid_weight = 0.7;
+    /// Weight of the populations' own non-equilibrium in collide_filtered; the
+    /// rest is its mean over this step and the previous one. At 1 a droplet
+    /// launched at 0.1 lattice units per step diverges within 1000 steps at a
+    /// density ratio of 1e4; at 0.7 it holds.
+    ///
+    /// The solver used to take the rest from the finite-difference velocity
+    /// gradient instead (collide_hybrid, at the same 0.7). That misread the
+    /// heavy fluid's oscillatory boundary layer wherever it is thinner than
+    /// the interface: a capillary wave at 1e4 was damped 2.10 times the exact
+    /// rate, and is 1.27 times with the mean in time.
+    double filter_weight = 0.7;
     /// Stencil of the gradients: colour field, normals and capillary stress.
     GradientStencil stencil = GradientStencil::E8;
     /// Lattice temperature of the phase populations' carrier, which sets the
     /// interface mobility M = phase_temperature / 2 (phase_carrier).
     ///
     /// 0.2 rather than the lattice's own cs^2 = 1/3. The slower interface
-    /// diffusion takes the capillary wave at a density ratio of 1000 from 1.084
-    /// to 1.049 times the exact damping rate and leaves the static, moving and
+    /// diffusion took the capillary wave at a density ratio of 1000 from 1.084
+    /// to 1.049 times the exact damping rate (with the hybrid collision then in
+    /// use; 0.991 now) and left the static, moving and
     /// fast droplets and the sheared layers where they were. 0.2 is the lowest
     /// round value at which the carrier stays non-negative up to |u| = 0.2,
     /// the fastest a droplet has been launched in a research copy (that needs
@@ -133,6 +141,8 @@ private:
     std::vector<double> h_new_;
     // link dissipation coefficients, kQ per node
     std::vector<double> dissipation_;
+    // the non-equilibrium of the previous collision, xx yy xy per node
+    std::vector<double> previous_non_equilibrium_;
 
     std::vector<double> c_;
     std::vector<double> rho_;

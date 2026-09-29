@@ -22,7 +22,7 @@ from pycglbm.testing import artifacts_dir, run_program
 SETTLING_STEPS = 500
 
 #: Measured decay rate and angular frequency, over the exact mode's.
-MEASURED = {"damping": 1.082, "frequency": 0.987}
+MEASURED = {"damping": 1.050, "frequency": 0.990}
 MEASURED_TOLERANCE = 0.02
 
 #: How close to the exact mode the solver has to be, whatever it measured.

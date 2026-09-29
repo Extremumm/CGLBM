@@ -255,7 +255,9 @@
     1051–1076, 2018.
 
     The regularised and hybrid regularised collisions of `collide` and
-    `collide_hybrid`.
+    `collide_hybrid`. The velocity-based solver now uses `collide_filtered`
+    instead, which blends the populations' non-equilibrium with its own mean
+    over two steps rather than with the finite-difference one.
 
 25. **C. Kublik, R. Tsai.** *Integration over curves and surfaces defined by
     the closest point mapping.* Research in the Mathematical Sciences **3**, 3,

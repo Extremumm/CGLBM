@@ -2063,12 +2063,12 @@ tension, μ₂ = 0.05, and the damping rate over the exact one:
 
 | case | ρ₁/ρ₂ | μ₁ | nine-point | matched | velocity-based |
 |---|---|---|---|---|---|
-| capillary wave, λ = 64, amplitude 0.3 | 100 | 0.5 | 1.50 | 1.19 | 1.03 |
-| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.73 | 2.81 | 1.05 |
-| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.90 | 0.62 | 1.08 |
+| capillary wave, λ = 64, amplitude 0.3 | 100 | 0.5 | 1.50 | 1.19 | 1.00 |
+| capillary wave, λ = 64, amplitude 0.3 | 1000 | 2 | 3.73 | 2.81 | 0.99 |
+| droplet, R = 20, ε = 0.03 | 1000 | 2 | 7.90 | 0.62 | 1.05 |
 
-and the frequency over the exact one, in the same order: 0.989, 0.983, 0.988;
-0.903, 0.890, 0.982; 0.963, 1.007, 0.987. The matched column is with its face
+and the frequency over the exact one, in the same order: 0.989, 0.983, 0.991;
+0.903, 0.890, 0.992; 0.963, 1.007, 0.990. The matched column is with its face
 values limited at the interface, [below](#the-matched-stencil-at-an-interface);
 without that it read 1.16, 2.65 and −0.23.
 
@@ -2260,11 +2260,14 @@ Six details decide whether it runs at $10^4$:
   fluid has $\tau - 1/2 \approx 10^{-4}$; relaxing the trace of the
   non-equilibrium at $\tau_b = 1$ damps its acoustic modes, which otherwise
   grow at the interface within 200 steps.
-- **A hybrid regularised collision** (Malaspinas 2015; Jacob, Malaspinas &
-  Sagaut 2018): the second-order non-equilibrium that relaxes is 0.7 times
-  that of the populations and 0.3 times its Chapman-Enskog value from the
-  finite-difference velocity gradient. The two agree on resolved flow; the
-  blend damps the grid-scale modes of the nearly inviscid heavy fluid.
+- **A collision filtered in time**: the second-order non-equilibrium that
+  relaxes is 0.7 times that of the populations and 0.3 times its mean over
+  this step and the previous one. The mean damps the period-2 mode of the
+  nearly inviscid heavy fluid and leaves slowly changing flow alone. It
+  replaced a hybrid regularised collision (Malaspinas 2015; Jacob,
+  Malaspinas & Sagaut 2018), which took the 0.3 from the finite-difference
+  velocity gradient and misread boundary layers thinner than the interface
+  ([below](#oscillations-against-exact-normal-modes)).
 - **A momentum exchange that conserves momentum**, below.
 - **Dissipation through the forcing term**, below.
 - **A bounded phase field.** $\theta \in [0, 1]$ is the largest weight that
@@ -2470,13 +2473,14 @@ adding 5 % of the lattice's own viscosity to every link turns the offset into
 `capillary_wave_vb` and `oscillation_vb` ring down a capillary wave and a
 mode-2 droplet, the cases the colour-gradient solver fails at a density ratio
 of 1000 (see [The heavy fluid's extensional viscosity](#the-heavy-fluids-extensional-viscosity)),
-against the exact normal mode of two viscous fluids: damping 1.030 and 1.049
-times the exact rate for the wave at 100 and 1000 (λ = 64), 1.082 for the
-droplet at 1000 (R = 20), with the frequency within 2 %. Their long tests pin
-that. Before the phase carrier's temperature was lowered (below) they were
-1.043, 1.084 and 1.132.
+against the exact normal mode of two viscous fluids: damping 1.001 and 0.991
+times the exact rate for the wave at 100 and 1000 (λ = 64), 1.050 for the
+droplet at 1000 (R = 20), with the frequency within 1 %. Their long tests pin
+that. Before the collision filtered its non-equilibrium in time (below) they
+were 1.030, 1.049 and 1.082, and before the phase carrier's temperature was
+lowered, 1.043, 1.084 and 1.132.
 
-The excess damping is resolution. The same wave at λ = 128 is damped 1.003
+The excess damping was resolution. The same wave at λ = 128 is damped 1.003
 times the exact rate, with the frequency at 0.996 (research copy, carrier at
 `c_s²`). At λ = 64 the heavy fluid's oscillatory boundary layer,
 `(2ν₁/ω)^½ = 2.8` nodes, is thinner than the interface, and two parts of the
@@ -2484,14 +2488,17 @@ scheme mis-read it; measured on the wave at 1000 over one period, 1.071 with
 the carrier at `c_s²`:
 
 - *The hybrid collision.* With the populations' own non-equilibrium only
-  (weight 1) the wave is damped 1.016 times the exact rate. But the blend is
-  not optional where τ is within 10⁻⁴ of 1/2: faded out below a speed of
-  0.01, it takes the wave to 1.027 at 1000 and leaves every moving droplet
-  case bounded, and it takes the light layer of `layers` from a 1.9 % slip to
-  74 %, because the stress there has to cross the interface exactly where the
-  velocity vanishes. Faded out by τ instead (kept where τ − 1/2 < 0.01) it
-  keeps `layers` at 2.5 % and does nothing for the wave, whose heavy fluid has
-  τ − 1/2 = 0.006. So the blend stays as it is.
+  (weight 1) the wave is damped 1.016 times the exact rate. But some damping
+  of the populations' non-equilibrium is not optional where τ is within 10⁻⁴
+  of 1/2: at weight 1 a droplet launched at 0.1 at $10^4$ diverges within
+  1000 steps. Faded out below a speed of 0.01, the blend takes the wave to
+  1.027 at 1000 and leaves every moving droplet case bounded, and it takes
+  the light layer of `layers` from a 1.9 % slip to 74 %, because the stress
+  there has to cross the interface exactly where the velocity vanishes.
+  Faded out by τ instead (kept where τ − 1/2 < 0.01) it keeps `layers` at
+  2.5 % and does nothing for the wave, whose heavy fluid has τ − 1/2 = 0.006.
+  What does work is to keep the weight and change what it blends with; see
+  *The collision, filtered in time* below.
 - *The phase mobility.* Memoryless phase populations diffuse c with half
   their carrier's lattice temperature: `c_s²/2` on the lattice's own
   carrier. Relaxing them with τ_h = 0.8 instead (mobility
@@ -2554,11 +2561,53 @@ later, at step 4950: its largest velocity triples in the last 150 steps
 before it. The nine-point source runs the wave at 8, damped 3.89 times the
 linear rate and 14 % low in frequency, its excess normal stress holding the
 light side down where the matched one does not. The velocity-based wave stays
-bounded, its phase field within [−1, 1], and rings down at 1.090 times the
-linear mode's damping rate. Its
-frequency is 0.907 of the linear one; at an amplitude of 4 the two are 1.062
-and 0.961. The frequency falls as the wave stops being linear, and the
-damping stays within 9 % of the linear rate. The long test pins the run at 8.
+bounded, its phase field within [−1, 1], and rings down at 1.024 times the
+linear mode's damping rate. Its frequency is 0.909 of the linear one; before
+the collision was filtered in time the two were 1.090 and 0.907, and at an
+amplitude of 4 1.062 and 0.961. The frequency falls as the wave stops being
+linear, and the damping stays close to the linear rate. The long test pins
+the run at 8.
+
+**The collision, filtered in time.** At a density ratio of $10^4$, with the
+same dynamic viscosities as at 1000 (so ν₁ = 2 × 10⁻⁴), the wave was damped
+2.10 times the exact rate and 5 % low in frequency, and the droplet 2.00
+times. The heavy fluid's oscillatory boundary layer is 1.6 nodes thick
+there. Lowering the phase temperature helped a little (1.86 at 0.1, 1.74 at
+0.05); ten times the heavy viscosity, a boundary layer of 5 nodes, gave 1.02.
+The rest was the hybrid collision: 0.3 of the stress it relaxed came from the
+finite-difference velocity gradient, which a layer that thin defeats. At
+weight 1 the wave was damped 1.27 times the exact rate, 0.8 % low in
+frequency, but the droplets launched at 0.1 diverged within 1000 and 2000
+steps.
+
+What the blend has to damp is the period-2 mode of a relaxation time within
+10⁻⁴ of 1/2, which alternates sign every step (see
+[Dissipation through the forcing term](#dissipation-through-the-forcing-term)).
+The mean of the populations' non-equilibrium over this step and the previous
+one removes exactly that, and leaves a non-equilibrium that changes slowly
+alone, however thin the layer it describes. `collide_filtered` relaxes 0.7 of
+the populations' own and 0.3 of that mean; the solver keeps the previous
+step's non-equilibrium, three numbers a node. Against the hybrid collision:
+
+| case | hybrid (0.3 finite difference) | filtered (0.3 two-step mean) |
+|---|---|---|
+| wave at 100 | 1.030, 0.988 | 1.001, 0.991 |
+| wave at 1000 | 1.049, 0.982 | 0.991, 0.992 |
+| wave at 1000, amplitude 8 | 1.090, 0.907 | 1.024, 0.909 |
+| droplet at 1000 | 1.082, 0.987 | 1.050, 0.990 |
+| wave at $10^4$, ν₁ = 2 × 10⁻⁴ | 2.10, 0.952 | 1.27, 0.992 |
+| droplet at $10^4$, ν₁ = 2 × 10⁻⁴ | 2.00, 0.981 | 1.76, 0.988 |
+
+(damping and frequency over the exact mode's). At $10^4$ what is left is the
+thin boundary layer itself, as at 1000 before λ = 128 resolved it; the droplet,
+whose layer is thinner still for its lower frequency, keeps more of the
+excess. Every other long test holds
+where it was: the static droplet at 0.998 σ/R, the droplets launched at 0.01
+and at 0.1 for viscosity ratios 1, 10 and 100 at their mean speeds, momentum
+conserved, and the droplets at $10^6$; a droplet launched at 0.2 at $10^4$
+runs its 10 000 steps too (research copy). In `layers` the light layer's slip
+is 1.88 % against 1.93 %; the heavy layer's largest error, on the interface
+nodes that read as heavy, is 0.42 % against 0.25 %, its bulk within 0.02 %.
 
 
 ## Structure of the solver

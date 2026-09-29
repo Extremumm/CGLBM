@@ -217,7 +217,7 @@ has gone. In this code it is the velocity-based
   brings a capillary wave at a ratio of 100 from 1.50 to 1.19 times its
   damping, but at 10³ the moving interface is wrong with either stencil —
   3.7 and 2.8 times for the wave, and a mode-2 droplet damped eight times too
-  fast or at 0.62 of the rate — where the velocity-based solver is within 8 %.
+  fast or at 0.62 of the rate — where the velocity-based solver is within 5 %.
   For the wave that is resolution rather than a wall, below the positivity
   bound: at twice the resolution it is at 2.9 with the nine-point source and
   1.6 with the matched one, and a wider interface no longer helps. The
@@ -227,13 +227,16 @@ has gone. In this code it is the velocity-based
   measurement, cancelled the heavy fluid's viscous normal stress at the
   interface. The limit also carries the wave further past the bound: at 1000
   it now diverges only from an amplitude of 8 nodes (from 4 before), where
-  the velocity-based solver rings it down at 1.09 times the linear damping
+  the velocity-based solver rings it down at 1.02 times the linear damping
   rate.
 - Flows with moving interfaces at 10³ and above belong to the velocity-based
   solver, which is the colour-gradient segregation on a family-3
   hydrodynamics — the model Subhedar (2022) describes. As Subhedar also
   argues, its interface mobility is set on its own rather than inherited from
   the lattice: the phase populations are built on a carrier at a lattice
-  temperature of 0.2 instead of `c_s²`, which takes the capillary wave at
-  1000 from 1.084 to 1.049 times the exact damping rate
+  temperature of 0.2 instead of `c_s²`, which took the capillary wave at
+  1000 from 1.084 to 1.049 times the exact damping rate. Filtering the
+  collision's non-equilibrium in time, rather than rebuilding part of it from
+  the finite-difference velocity gradient, took it to 0.991, and the same
+  wave at $10^4$ from 2.10 to 1.27
   ([`numerics.md`](numerics.md#oscillations-against-exact-normal-modes)).

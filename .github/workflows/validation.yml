@@ -170,11 +170,12 @@ jobs:
   oscillations:
     name: Oscillation benchmarks
     runs-on: ubuntu-latest
-    # twelve runs of three to ten minutes each: the capillary wave at density
+    # thirteen runs of three to ten minutes each: the capillary wave at density
     # ratios of 100 and 1000 and the droplet at 1000, in the colour-gradient
     # solver with both source stencils and in the velocity-based solver, the
     # droplet in the two-population solver with both stencils, and a
-    # large-amplitude wave at 1000 in the velocity-based solver
+    # large-amplitude wave at 1000 and the wave at 1e4 in the velocity-based
+    # solver
     timeout-minutes: 120
 
     steps:

@@ -226,6 +226,32 @@ void collide_hybrid(const double* populations,
           post_collision);
 }
 
+void collide_filtered(const double* populations,
+                      const double* equilibrium,
+                      const double* source,
+                      double tau_shear,
+                      double tau_bulk,
+                      double sigma,
+                      double* previous,
+                      double* post_collision) {
+    double pxx, pyy, pxy;
+    non_equilibrium(populations, equilibrium, source, &pxx, &pyy, &pxy);
+    const double mean_xx = 0.5 * (pxx + previous[0]);
+    const double mean_yy = 0.5 * (pyy + previous[1]);
+    const double mean_xy = 0.5 * (pxy + previous[2]);
+    previous[0] = pxx;
+    previous[1] = pyy;
+    previous[2] = pxy;
+    relax(sigma * pxx + (1.0 - sigma) * mean_xx,
+          sigma * pyy + (1.0 - sigma) * mean_yy,
+          sigma * pxy + (1.0 - sigma) * mean_xy,
+          equilibrium,
+          source,
+          tau_shear,
+          tau_bulk,
+          post_collision);
+}
+
 void pressure_force(const double* pressure_number,
                     const double* rho,
                     int nx,

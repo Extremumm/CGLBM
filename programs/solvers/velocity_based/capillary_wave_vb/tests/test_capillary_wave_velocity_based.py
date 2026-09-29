@@ -7,7 +7,7 @@ a heavy band, released and ringing down, scored against
 `pycglbm.normal_modes.capillary_wave`. The colour-gradient solver is off by
 1.5 times in damping at a density ratio of 100 and by 2.6 to 3.7 times at 1000,
 with the frequency 10 % low; this is the solver that should get it right, and
-does to within a few per cent.
+does to within 1 % at both.
 
 The measured values are pinned, so a change in the scheme shows up; the
 closeness to the exact mode is asserted separately, with room for the
@@ -17,8 +17,15 @@ A third run starts the same wave at 1000 with an amplitude of 8 nodes instead
 of 0.3, for one period. Its interface moves at about 4e-3, thirteen times the
 speed at which the colour-gradient solver's heavy populations go negative;
 that solver's wave, with the matched stencil, diverges at this amplitude.
-This one stays bounded. At `k a = 0.79` the wave is no longer linear, so its frequency is
-held only to the value it measured, which is 9 % below the linear mode's.
+This one stays bounded. At `k a = 0.79` the wave is no longer linear, so its
+frequency is held only to the value it measured, which is 9 % below the linear
+mode's.
+
+A fourth runs the wave at a density ratio of 1e4, with the same dynamic
+viscosities, for one period. The heavy fluid's oscillatory boundary layer is
+then 1.6 nodes thick, and the collision's non-equilibrium, filtered in time
+rather than rebuilt from the finite-difference velocity gradient, is what
+reads it: the gradient took the damping to 2.10 times the exact rate.
 """
 
 import numpy as np
@@ -36,19 +43,22 @@ CASES = {
     "100": {"ratio": "100", "mu1": 0.5, "steps": 16000, "amplitude": 0.3},
     "1000": {"ratio": "1000", "mu1": 2.0, "steps": 25000, "amplitude": 0.3},
     "1000_large": {"ratio": "1000", "mu1": 2.0, "steps": 12500, "amplitude": 8.0},
+    "1e4": {"ratio": "1e4", "mu1": 2.0, "steps": 40000, "amplitude": 0.3},
 }
 
 #: Measured decay rate and angular frequency, over the exact linear mode's.
 MEASURED = {
-    "100": {"damping": 1.030, "frequency": 0.988},
-    "1000": {"damping": 1.049, "frequency": 0.982},
-    "1000_large": {"damping": 1.090, "frequency": 0.907},
+    "100": {"damping": 1.001, "frequency": 0.991},
+    "1000": {"damping": 0.991, "frequency": 0.992},
+    "1000_large": {"damping": 1.024, "frequency": 0.909},
+    "1e4": {"damping": 1.268, "frequency": 0.992},
 }
 MEASURED_TOLERANCE = 0.02
 
-#: How close to the exact mode the solver has to be, whatever it measured.
-DAMPING_BOUND = 0.15
-FREQUENCY_BOUND = {"100": 0.03, "1000": 0.03, "1000_large": 0.12}
+#: How close to the exact mode the solver has to be, whatever it measured. At
+#: 1e4 the heavy fluid's oscillatory boundary layer is 1.6 nodes thick.
+DAMPING_BOUND = {"100": 0.15, "1000": 0.15, "1000_large": 0.15, "1e4": 0.35}
+FREQUENCY_BOUND = {"100": 0.03, "1000": 0.03, "1000_large": 0.12, "1e4": 0.03}
 
 
 @pytest.fixture(scope="module", params=sorted(CASES))
@@ -135,7 +145,7 @@ def test_verification_capillary_wave_vb_is_one_mode(result):
 @pytest.mark.validation
 def test_validation_capillary_wave_vb_against_the_normal_mode(result):
     """Decay rate and frequency close to the exact mode's, and at their measured values."""
-    assert result["damping"] == pytest.approx(1.0, abs=DAMPING_BOUND)
+    assert result["damping"] == pytest.approx(1.0, abs=DAMPING_BOUND[result["key"]])
     assert result["frequency"] == pytest.approx(1.0, abs=FREQUENCY_BOUND[result["key"]])
     assert result["damping"] == pytest.approx(result["measured"]["damping"], abs=MEASURED_TOLERANCE)
     assert result["frequency"] == pytest.approx(

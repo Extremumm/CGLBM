@@ -66,8 +66,11 @@
 /// The collision relaxes the trace of the non-equilibrium at its own rate: a
 /// heavy fluid with a modest dynamic viscosity has tau close to 1/2, and
 /// without a separate bulk relaxation its acoustic modes are undamped. Its
-/// shear modes, as nearly undamped, are held by the hybrid regularised
-/// collision (collide_hybrid).
+/// shear modes, as nearly undamped, flip sign every step; the solver damps
+/// that flip by relaxing part of the non-equilibrium's mean over two steps
+/// (collide_filtered). The hybrid regularised collision (collide_hybrid) did
+/// it with the finite-difference velocity gradient, which a boundary layer
+/// thinner than the interface defeats.
 ///
 /// References
 ///  - A. Fakhari, T. Mitchell, C. Leonardi, D. Bolster, "Improved locality of
@@ -213,6 +216,26 @@ void collide_hybrid(const double* populations,
                     double sigma,
                     const VelocityGradient& gradient,
                     double* post_collision);
+
+/// Collision with the period-2 mode filtered out in time.
+///
+/// As collide, but the second-order non-equilibrium that relaxes is `sigma`
+/// times that of the populations plus 1 - sigma times its mean over this step
+/// and the previous one, which `previous` holds (xx, yy, xy) and which this
+/// call replaces with this step's. With a shear relaxation time within 1e-4 of
+/// 1/2 the non-equilibrium flips sign every step; the mean removes that flip
+/// and leaves a non-equilibrium that changes slowly as it is, where
+/// collide_hybrid's finite-difference stress misreads a boundary layer thinner
+/// than the interface. sigma = 1 is collide; at sigma = 0 a pure flip does not
+/// survive the collision.
+void collide_filtered(const double* populations,
+                      const double* equilibrium,
+                      const double* source,
+                      double tau_shear,
+                      double tau_bulk,
+                      double sigma,
+                      double* previous,
+                      double* post_collision);
 
 /// Pressure force per unit mass, -grad_lat(p) / rho(x), with p = rho cs^2 P.
 ///

@@ -28,6 +28,8 @@ Solver::Solver(const SolverParameters& parameters) : parameters_(parameters) {
     for (std::vector<double>* populations : {&g_, &h_, &g_new_, &h_new_, &dissipation_}) {
         populations->assign(nodes * kQ, 0.0);
     }
+    // The populations start at equilibrium, and so does their non-equilibrium.
+    previous_non_equilibrium_.assign(nodes * 3, 0.0);
     for (std::vector<double>* field : {&c_,          &rho_,
                                        &psi_,        &pressure_number_,
                                        &ux_,         &uy_,
@@ -259,19 +261,14 @@ void Solver::collide_and_stream() {
             hydrodynamic_equilibrium(pressure_number_[m], ux_[m], uy_[m], eq);
             forcing(ux_[m], uy_[m], ax_[m], ay_[m], source);
             const double tau = dynamic_viscosity(c_[m]) / (rho_[m] * kCs2) + 0.5;
-            VelocityGradient gradient;
-            gradient_periodic(
-                ux_.data(), nx, ny, i, j, GradientStencil::E4, &gradient.dux_dx, &gradient.dux_dy);
-            gradient_periodic(
-                uy_.data(), nx, ny, i, j, GradientStencil::E4, &gradient.duy_dx, &gradient.duy_dy);
-            collide_hybrid(&g_[m * kQ],
-                           eq,
-                           source,
-                           tau,
-                           parameters_.tau_bulk,
-                           parameters_.hybrid_weight,
-                           gradient,
-                           post);
+            collide_filtered(&g_[m * kQ],
+                             eq,
+                             source,
+                             tau,
+                             parameters_.tau_bulk,
+                             parameters_.filter_weight,
+                             &previous_non_equilibrium_[m * 3],
+                             post);
             phase_populations(c_[m],
                               ux_[m],
                               uy_[m],

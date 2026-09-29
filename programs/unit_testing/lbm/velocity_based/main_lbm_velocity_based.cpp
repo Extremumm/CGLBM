@@ -13,9 +13,10 @@
 //     lattice, carries a uniform velocity with the mass alone, and is the
 //     lattice's own where there is a single component; the dissipation force
 //     sums to zero and leaves a uniform velocity alone;
-//  5. the hybrid collision reduces to the regularised one, conserves P and u,
-//     and leaves a resolved non-equilibrium alone; set_velocity changes the
-//     first moment only;
+//  5. the hybrid and the filtered collisions reduce to the regularised one,
+//     conserve P and u, and leave a resolved or steady non-equilibrium alone;
+//     the filtered one stops a flip in sign; set_velocity changes the first
+//     moment only;
 //  6. the memoryless phase transport keeps its tanh profile, conserves c and
 //     stays within [0, 1]; at |u| = 0.2 the limited sharpening keeps every
 //     phase population between 0 and its carrier.
@@ -538,6 +539,76 @@ void report_collide_hybrid() {
     std::cout << "hybrid_resolved_error = " << independent << "\n";
 }
 
+/// The filtered collision is collide at sigma = 1 and conserves P and u. It
+/// does not depend on sigma when the non-equilibrium is what it was the step
+/// before, and at sigma = 0 a non-equilibrium that has flipped sign since then
+/// does not survive it.
+void report_collide_filtered() {
+    const double P = 0.021;
+    const double ux = 0.011;
+    const double uy = -0.017;
+    const double tau = 0.5003;
+    const double tau_bulk = 1.0;
+    double eq[vb::kQ];
+    double source[vb::kQ];
+    vb::hydrodynamic_equilibrium(P, ux, uy, eq);
+    vb::forcing(ux, uy, 2.0e-5, -1.0e-5, source);
+
+    double state[vb::kQ];
+    for (int k = 0; k < vb::kQ; ++k) {
+        state[k] = eq[k] + 1.0e-4 * std::sin(2.1 * k + 0.7);
+    }
+    double plain[vb::kQ];
+    double filtered[vb::kQ];
+    vb::collide(state, eq, source, tau, tau_bulk, plain);
+    double previous[3] = {3.0e-5, -2.0e-5, 1.0e-5};
+    vb::collide_filtered(state, eq, source, tau, tau_bulk, 1.0, previous, filtered);
+    double same = 0.0;
+    for (int k = 0; k < vb::kQ; ++k) {
+        same = std::max(same, std::fabs(plain[k] - filtered[k]));
+    }
+    std::cout << "filtered_unit_weight_error = " << same << "\n";
+
+    // previous now holds this state's non-equilibrium: the mean is the state's
+    // own, whatever the weight
+    double steady[vb::kQ];
+    vb::collide_filtered(state, eq, source, tau, tau_bulk, 0.3, previous, steady);
+    double independent = 0.0;
+    for (int k = 0; k < vb::kQ; ++k) {
+        independent = std::max(independent, std::fabs(plain[k] - steady[k]));
+    }
+    std::cout << "filtered_steady_error = " << independent << "\n";
+
+    // a flip since the previous step: at sigma = 0 nothing of it relaxes, and
+    // the result is the collision of populations with no non-equilibrium
+    double flipped[3] = {-previous[0], -previous[1], -previous[2]};
+    double after_flip[vb::kQ];
+    vb::collide_filtered(state, eq, source, tau, tau_bulk, 0.0, flipped, after_flip);
+    double quiet[vb::kQ];
+    for (int k = 0; k < vb::kQ; ++k) {
+        quiet[k] = eq[k] - 0.5 * source[k];
+    }
+    double at_rest[vb::kQ];
+    vb::collide(quiet, eq, source, tau, tau_bulk, at_rest);
+    double flip = 0.0;
+    for (int k = 0; k < vb::kQ; ++k) {
+        flip = std::max(flip, std::fabs(after_flip[k] - at_rest[k]));
+    }
+    std::cout << "filtered_flip_error = " << flip << "\n";
+
+    // the equilibrium of the state's own moments, as in a collision
+    const Moments before = moments(state);
+    double own[vb::kQ];
+    vb::hydrodynamic_equilibrium(before.m0, before.mx, before.my, own);
+    double arbitrary[3] = {4.0e-5, 1.0e-5, -3.0e-5};
+    vb::collide_filtered(state, own, source, tau, tau_bulk, 0.7, arbitrary, filtered);
+    const Moments after = moments(filtered);
+    double cerr = std::fabs(after.m0 - before.m0);
+    cerr = std::max(cerr, std::fabs(after.mx - (before.mx + 0.5 * 2.0e-5)));
+    cerr = std::max(cerr, std::fabs(after.my - (before.my - 0.5 * 1.0e-5)));
+    std::cout << "filtered_conservation_error = " << cerr << "\n";
+}
+
 /// set_velocity replaces the first moment and nothing else.
 void report_set_velocity() {
     double pop[vb::kQ];
@@ -672,6 +743,7 @@ int main() {
     report_pressure_force();
     report_link_momentum();
     report_collide_hybrid();
+    report_collide_filtered();
     report_set_velocity();
     report_phase_limiter();
     report_phase_transport();

@@ -45,6 +45,18 @@ def test_unit_test_lbm_velocity_based_hybrid_collision(values):
 
 
 @pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_filtered_collision(values):
+    """The filtered collision is the regularised one at sigma = 1, conserves P
+    and u, leaves a non-equilibrium that has not changed since the step before
+    alone whatever sigma, and at sigma = 0 lets nothing of one that has flipped
+    sign through."""
+    assert float(values["filtered_unit_weight_error"]) == 0.0
+    assert float(values["filtered_steady_error"]) < 1e-18
+    assert float(values["filtered_flip_error"]) < 1e-18
+    assert float(values["filtered_conservation_error"]) < 1e-15
+
+
+@pytest.mark.unit_test
 def test_unit_test_lbm_velocity_based_carrier_is_positive(values):
     """Gamma_i(u) >= 0 up to |u| = 0.1, which is what bounds the phase field."""
     for speed in (1, 5, 10):
