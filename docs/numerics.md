@@ -2190,15 +2190,20 @@ period of the exact mode (damping and frequency over the exact ones):
 Limited, this droplet is damped a little too fast rather than too slowly: its
 first half-period decays at 1.6 times the exact rate, its second at 1.3.
 
-The `Solver` droplet is damped, not yet at the right rate: its later
-half-periods decay at 0.44 to 0.6 of the exact rate, the first faster, and at R = 40 it is 0.46.
-It does now feel the heavy fluid's viscosity. Over 1.2 × 10⁴ steps, at
-μ₁ = 1, 2 and 4, it is damped at 1.26, 1.52 and 3.23 × 10⁻⁵ per step against
-the exact 1.02, 1.91 and 3.58 × 10⁻⁵: what is left is a few × 10⁻⁶ either
-way, not a missing viscosity, and large only beside a droplet this nearly
-inviscid (ν₁ = 0.002). Three variants, the
-droplet measured over 1.2 × 10⁴ steps (0.795 with the 1 % gate) and the wave
-over 1.3 × 10⁴, show how narrow the choice is:
+The `Solver` droplet is damped, not yet at the right rate: about 0.6 of the
+exact rate once it has settled at R = 20, and less at R = 40 (0.46 fitted over
+the run, 0.34 over its second half-period). Its first
+half-period decays faster, mostly because the interface widens from the 1.1
+it is laid down at to the 1.6 the recolouring keeps; laid down at 1.6
+(`--width-init=1.6`), it decays at 0.94, 0.61 and 0.63 of the exact rate over
+its first three half-periods. It does now feel the heavy fluid's viscosity:
+over 1.2 × 10⁴ steps, at μ₁ = 1, 2 and 4, it is damped at 1.26, 1.52 and
+3.23 × 10⁻⁵ per step against the exact 1.02, 1.91 and 3.58 × 10⁻⁵, where the
+plain stencil gave 0.39, −0.20 and 0.49 × 10⁻⁵ at μ₁ = 0.05, 2 and 4. The gap
+is large only beside a droplet this nearly inviscid (ν₁ = 0.002).
+
+Three variants, the droplet measured over 1.2 × 10⁴ steps (0.795 with the 1 %
+gate) and the wave over 1.3 × 10⁴, show how narrow the choice is:
 
 - *Limiting every face*, with no gate: 0.815 for the droplet, but the clip
   also trips at the smooth extrema of a single fluid's ψ, and the Taylor–Green
