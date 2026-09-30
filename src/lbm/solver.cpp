@@ -4,6 +4,7 @@
 #include <iostream>
 #include <stdexcept>
 
+#include "lbm/central_moments.h"
 #include "lbm/isotropic_gradient.h"
 #include "lbm/mixture.h"
 #include "lbm/surface_force.h"
@@ -27,6 +28,10 @@ Solver::Solver(CaseConfig config) : config_(std::move(config)), nx_(config_.nx),
     dx_ = config_.units.dx;
     dt_ = config_.units.dt;
     cs2_ = config_.units.cs2();
+    if (config_.collision == Collision::CentralMoment &&
+        (config_.units.dx != 1.0 || config_.units.dt != 1.0)) {
+        throw std::invalid_argument("the central-moment collision is written for dx = dt = 1");
+    }
     cs4_ = config_.units.cs4();
     cs6_ = config_.units.cs6();
 
@@ -247,6 +252,10 @@ void Solver::phase_field() {
 
 void Solver::collide() {
     const bool parallel = parallel_;
+    if (config_.collision == Collision::CentralMoment) {
+        collide_central();
+        return;
+    }
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -285,6 +294,39 @@ void Solver::collide() {
                 const double f_xy_neq = H_xy / cs4_ * sum_xy_neq;
                 omega_1_(i, j, k) = kW[k] * (1.0 - 1.0 / tau_nu) * (f_nu_neq + f_xy_neq) +
                                     kW[k] * (1.0 - 1.0 / tau_b) * f_b_neq;
+            }
+        }
+    }
+}
+
+// Saito et al.'s collision in central moments (lbm/central_moments.h). It
+// relaxes what the regularised one relaxes, the populations with half the
+// source added, and stores the result as omega_1 = post - f_eq, so that
+// stream() adds f_eq back and the other half of the source.
+//
+// The shear relaxes at the rate the viscosity sets, and everything else at 1,
+// the trace included, as Saito et al. do: the bulk viscosity is then p / 2
+// whatever physics.nu_b says. With the trace at the rate nu_b sets and k_22 at
+// 1, a uniform fluid is linearly unstable once that rate is small (tau_b = 5
+// or 100, ideal gas or not; research copy), because k_22 then drops the part
+// of the trace's non-equilibrium the rest population needs.
+void Solver::collide_central() {
+    const bool parallel = parallel_;
+#pragma omp parallel for collapse(2) if (parallel)
+    for (int i = 0; i < nx_; i++) {
+        for (int j = 0; j < ny_; j++) {
+            const double rho_local = rho_(i, j);
+            const double p_local = p_(i, j);
+            double nu_local = 0.0, nu_b_local = 0.0;
+            viscosity_at(i, j, &nu_local, &nu_b_local);
+            const double tau_nu = rho_local * nu_local / (p_local * dt_) + 0.5;
+            double pre[kQ], post[kQ];
+            for (int k = 0; k < kQ; k++) {
+                pre[k] = f_(i, j, k) + 0.5 * source_(i, j, k);
+            }
+            collide_central_moment(pre, u_(i, j, 0), u_(i, j, 1), p_local, 1.0 / tau_nu, 1.0, post);
+            for (int k = 0; k < kQ; k++) {
+                omega_1_(i, j, k) = post[k] - f_eq_(i, j, k);
             }
         }
     }

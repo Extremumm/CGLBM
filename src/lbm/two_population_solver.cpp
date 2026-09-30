@@ -39,6 +39,9 @@ TwoPopulationSolver::TwoPopulationSolver(CaseConfig config)
     cs2_ = config_.units.cs2();
     wall_y_ = config_.boundary == Boundary::WallY;
     parallel_ = config_.parallel;
+    if (config_.collision == Collision::CentralMoment) {
+        throw std::invalid_argument("the central-moment collision is Solver's only");
+    }
     mrt_ = config_.collision == Collision::MRT;
     correction_ = config_.third_moment_correction;
     const double rates[3] = {physics.s_e, physics.s_eps, physics.s_q};

@@ -99,6 +99,7 @@ moving interface stops carrying the density in its populations**.
 | MRT collision | Ba et al. Eqs. (11)–(13); Leclaire et al. 2013; Spendlove et al. 2020 | regularised (ghost moments discarded) | **added here**, `--collision=mrt` |
 | Recolouring for unequal rest weights | Leclaire et al. 2012 | not applicable | yes, `rest_weight` |
 | Viscosity mixed as ρν | — | `--viscosity-mixing=dynamic` | on the volume fraction |
+| Generalized equilibria, central-moment collision | Saito et al. 2023, Eqs. (25), (56)–(63) | **added here**, `--collision=central` (D2Q9 form derived here) | no |
 | Velocity-based equilibrium | Zu & He 2013; Fakhari et al. 2017; Subhedar 2022 | no | no — the `droplet` solver |
 | Interface mobility set on its own | Subhedar 2022 | no | no — `phase_temperature` in the `droplet` solver |
 

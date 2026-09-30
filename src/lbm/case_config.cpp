@@ -76,8 +76,11 @@ void print_usage(const std::string& program_name) {
               << "                      segregation strength from the pressure and an\n"
               << "                      interface width, or from the density and beta\n"
               << "  --beta=X            segregation strength of `latva-kokko`, in (0, 1]\n"
-              << "  --collision=bgk|mrt collision of the two-population solver: one rate,\n"
-              << "                      or each moment at its own (Lallemand & Luo)\n"
+              << "  --collision=bgk|mrt|central\n"
+              << "                      collision of the two-population solver: one rate,\n"
+              << "                      or each moment at its own (Lallemand & Luo); or,\n"
+              << "                      `central`, the Solver's in central moments with the\n"
+              << "                      generalized equilibria of Saito et al. (2023)\n"
               << "  --s-e=X, --s-eps=X, --s-q=X\n"
               << "                      MRT rates of the energy, its square and the energy\n"
               << "                      flux, in (0, 2); Ba et al. use 1.25, 1.14, 1.6\n"
@@ -505,8 +508,10 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
                 config.collision = Collision::BGK;
             } else if (value == "mrt") {
                 config.collision = Collision::MRT;
+            } else if (value == "central") {
+                config.collision = Collision::CentralMoment;
             } else {
-                std::cerr << "Unknown collision '" << value << "'; expected bgk or mrt."
+                std::cerr << "Unknown collision '" << value << "'; expected bgk, mrt or central."
                           << std::endl;
                 return CommandLineResult::Error;
             }
@@ -765,7 +770,11 @@ std::string describe(const CaseConfig& config) {
         << (config.viscosity_mixing == ViscosityMixing::Dynamic ? "dynamic" : "kinematic") << "\n"
         << "recolouring = "
         << (config.recolouring == Recolouring::LatvaKokko ? "latva-kokko" : "width") << "\n"
-        << "collision = " << (config.collision == Collision::MRT ? "mrt" : "bgk") << "\n"
+        << "collision = "
+        << (config.collision == Collision::MRT
+                ? "mrt"
+                : (config.collision == Collision::CentralMoment ? "central" : "bgk"))
+        << "\n"
         << "third_moment_correction = " << (config.third_moment_correction ? "true" : "false")
         << "\n"
         << "source_stencil = "

@@ -2748,6 +2748,41 @@ $10^4$; the surface diffusion's share of its damping would be a quarter of
 R = 20's.
 
 
+## Generalized equilibria in central moments
+
+`--collision=central` runs `Solver` with the collision of Saito et al. (2023),
+carried over from D3Q27 to D2Q9 (`src/lbm/central_moments.h`). Their
+derivation writes the colour-gradient equilibrium as
+`g_eq,N + (p − ρc_s²)(E + Φ)`, with `g_eq,N` the Maxwellian projected on every
+Hermite polynomial the lattice carries and `E` Lafarge's isotropic operator,
+and picks `Φ` order by order so that no equilibrium central moment depends on
+the velocity. On D2Q9, with the tensor Hermite polynomials `H_ab` (a, b ≤ 2),
+
+    g_eq,4 = ρw[1 + u·ξ/c_s² + (u_x²H_20 + u_y²H_02 + 2u_xu_yH_11)/(2c_s⁴)
+               + (u_x²u_yH_21 + u_xu_y²H_12)/(2c_s⁶) + u_x²u_y²H_22/(4c_s⁸)]
+    E      = w[(H_20 + H_02)/(2c_s⁴) − H_22/(4c_s⁶)]
+    Φ      = w[(u_xH_12 + u_yH_21)/(2c_s⁶) + |u|²H_22/(4c_s⁸)]
+
+and the central moments are `ρ`, `p` on the diagonal of the second order,
+`p c_s²` for `k_22`, and zero otherwise, whatever the velocity (sympy, and the
+unit test to rounding). `Solver`'s own equilibrium, `g_eq,2 + (p − ρc_s²)(E +
+Φ_3)` with Φ's third-order term only, agrees up to the second order and has
+`k_21 = −ρu_x²u_y`, `k_12 = −ρu_xu_y²` and `k_22 = p c_s² − (p − ρc_s²)|u|² +
+3ρu_x²u_y²`. In a heavy fluid `p − ρc_s² ≈ −ρc_s²`: at a density ratio of 1000
+and |u| = 0.01 its `k_22` is 30 % above `p c_s²`.
+
+The collision relaxes the shear central moments at the rate the viscosity
+sets and puts everything else at equilibrium, the trace included, as Saito et
+al. do. Relaxing the trace at the rate `nu_b` sets instead made the static
+droplet of `laplace` blow up within 70 steps: `k_22` then drops the third of
+the trace's non-equilibrium the raw-moment regularisation keeps in it, and a
+uniform fluid is linearly unstable at a trace relaxation time of 5 or 100,
+ideal gas or not; tying `k_22` to the trace fails at τ = 0.51 instead. So the
+bulk viscosity is `p/2` under this collision whatever `--nu-b` says. At second
+order it is otherwise the regularised collision; what differs is the third and
+fourth order, which keep the products of the velocity with the relaxed stress.
+
+
 ## Structure of the solver
 
 The scheme has one implementation, `cglbm::lbm::Solver` in `src/lbm/solver.cpp`.

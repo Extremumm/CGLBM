@@ -318,7 +318,16 @@ enum class SourceStencil {
     StreamingMatched  ///< the deviatoric part on the stencil the streaming uses
 };
 
-/// The collision operator of `TwoPopulationSolver`.
+/// The collision operator: `BGK` and `MRT` are those of `TwoPopulationSolver`,
+/// `CentralMoment` is one of `Solver`'s.
+///
+/// `Solver` otherwise uses its regularised collision, whatever this is: the
+/// stress relaxed in raw Hermite moments, the higher moments set to those of
+/// its equilibrium. `CentralMoment` is the collision of Saito et al. (2023) in
+/// central moments with their generalized equilibria (see
+/// lbm/central_moments.h): the same at second order, and at third and fourth
+/// order velocity-independent equilibria and the products of the velocity with
+/// the relaxed stress. `TwoPopulationSolver` does not take it.
 ///
 /// `BGK` relaxes every moment at the one rate the viscosity sets,
 /// `1 / tau = p dt / (mu + p dt / 2)`. That rate is small wherever the fluid is
@@ -342,8 +351,9 @@ enum class SourceStencil {
 ///  - Y. Ba, H. Liu, Q. Li, Q. Kang, J. Sun, Phys. Rev. E 94, 023310 (2016),
 ///    Eqs. (11)-(13) and (16): the same basis with the alpha_k equilibrium.
 enum class Collision {
-    BGK,  ///< one relaxation time for every moment
-    MRT   ///< each moment at its own rate, Lallemand & Luo
+    BGK,           ///< one relaxation time for every moment
+    MRT,           ///< each moment at its own rate, Lallemand & Luo
+    CentralMoment  ///< Solver only: central moments, Saito et al. (2023)
 };
 
 // Boundary, how the domain is closed along y, is declared with the gradient
@@ -567,7 +577,7 @@ struct CaseConfig {
     /// How the two components are segregated after collision. See `Recolouring`.
     Recolouring recolouring = Recolouring::InterfaceWidth;
 
-    /// The collision operator of `TwoPopulationSolver`. See `Collision`.
+    /// The collision operator. See `Collision`.
     Collision collision = Collision::BGK;
 
     /// Add Ba et al.'s source term for the diagonal third moment.

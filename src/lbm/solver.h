@@ -106,6 +106,8 @@ private:
     // The eight stages of a step, in the order `step()` applies them.
     void force();
     void collide();
+    /// collide() with Collision::CentralMoment.
+    void collide_central();
     void collide_surface();
     void recolor();
     void stream();
