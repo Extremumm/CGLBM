@@ -624,6 +624,12 @@ struct CaseConfig {
     /// The wall-bounded cases default to E4: it reaches one node, so it stays
     /// exact next to a wall, while a wider stencil becomes one-sided over two
     /// nodes there and has not been validated against those cases.
+    ///
+    /// E10 and E12 reach three and four nodes. On the Laplace case they take
+    /// the spurious currents from 1.66e-5 to 1.58e-5 and 1.50e-5, and the
+    /// droplet's mode-4 deformation from 4.1e-5 to 3.2e-5 and 1.8e-5, for a
+    /// jump 0.1 and 0.3 % further from sigma/R; see docs/numerics.md,
+    /// "Isotropy of the colour gradient".
     GradientStencil stencil = GradientStencil::E8;
 
     /// Which three-dimensional lattice to run on.
@@ -754,7 +760,7 @@ enum class CommandLineResult {
 /// The historical form, a bare stencil name (`laplace E4`), is still accepted.
 /// Beyond it every option is `--key=value`:
 ///
-///     --stencil=E4|E6|E8   --nx=N        --ny=N
+///     --stencil=E4|...|E12 --nx=N        --ny=N
 ///     --steps=N            --interval=N  --precision=N
 ///     --threads=N          --help
 ///

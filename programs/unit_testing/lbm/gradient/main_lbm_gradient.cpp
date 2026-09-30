@@ -5,8 +5,8 @@
 //
 //  1. the lattice tensor sum_l W c_a c_b must equal delta_ab, which makes the
 //     stencil exact for a linear field;
-//  2. the isotropy defect of the rank-4, rank-6 and rank-8 lattice tensors,
-//     which is what separates E4, E6 and E8;
+//  2. the isotropy defect of the lattice tensors of rank 4 to 14, which is
+//     what separates E4, E6, E8, E10 and E12;
 //  3. the angular error of the gradient of a radial interface profile -- the
 //     quantity that actually matters, since the surface-tension operator
 //     divides the colour gradient by its own norm;
@@ -18,6 +18,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <complex>
 #include <cstdlib>
 #include <iostream>
 #include <vector>
@@ -43,27 +44,33 @@ double moment(GradientStencil stencil, int px, int py) {
 
 /// Relative departure from isotropy of the rank-`order` lattice tensor.
 ///
-/// In two dimensions an isotropic tensor of rank 2n satisfies
-/// sum W c_x^2n = (2n-1)!! / (2n-3)!! * ... ; the ratios below are the standard
-/// pairwise conditions, which are simpler to check and equivalent:
-///     rank 4: <x^4> = 3 <x^2 y^2>
-///     rank 6: <x^6> = 5 <x^4 y^2>
-///     rank 8: <x^8> = 7 <x^6 y^2>
+/// A stencil with the square's symmetry carries only the angular harmonics
+/// cos(4 m theta), and its tensor of rank 2k is isotropic when each of them
+/// up to 4m <= 2k vanishes from sum_l W |c_l|^2k e^(i 4 m theta_l), that is
+/// from sum_l W |c_l|^(2k - 4m) Re((c_lx + i c_ly)^(4m)). The defect is the
+/// largest of them over the isotropic part, sum_l W |c_l|^2k. At rank 4 it is
+/// the familiar <x^4> = 3 <x^2 y^2>, and it takes two conditions from rank 8
+/// and three from rank 12.
 double isotropy_defect(GradientStencil stencil, int order) {
-    double lhs = 0.0;
-    double rhs = 0.0;
-    if (order == 4) {
-        lhs = moment(stencil, 4, 0);
-        rhs = 3.0 * moment(stencil, 2, 2);
-    } else if (order == 6) {
-        lhs = moment(stencil, 6, 0);
-        rhs = 5.0 * moment(stencil, 4, 2);
-    } else {
-        lhs = moment(stencil, 8, 0);
-        rhs = 7.0 * moment(stencil, 6, 2);
+    int count = 0;
+    const StencilPoint* points = cglbm::lbm::stencil_points(stencil, &count);
+    const int k = order / 2;
+    double isotropic = 0.0;
+    for (int n = 0; n < count; ++n) {
+        const double r2 = points[n].cx * points[n].cx + points[n].cy * points[n].cy;
+        isotropic += points[n].weight * std::pow(r2, k);
     }
-    const double scale = std::fabs(lhs) + std::fabs(rhs);
-    return (scale > 0.0) ? std::fabs(lhs - rhs) / scale : 0.0;
+    double worst = 0.0;
+    for (int m = 1; 4 * m <= order; ++m) {
+        double harmonic = 0.0;
+        for (int n = 0; n < count; ++n) {
+            const std::complex<double> c(points[n].cx, points[n].cy);
+            const double r2 = std::norm(c);
+            harmonic += points[n].weight * std::pow(r2, k - 2 * m) * std::pow(c, 4 * m).real();
+        }
+        worst = std::max(worst, std::fabs(harmonic) / isotropic);
+    }
+    return worst;
 }
 
 /// Largest angular error, in degrees, of the gradient of a radial interface.
@@ -261,9 +268,10 @@ int main(int argc, char** argv) {
     std::cout << "moment_x = " << moment(stencil, 1, 0) << "\n";
     std::cout << "moment_y = " << moment(stencil, 0, 1) << "\n";
 
-    std::cout << "isotropy_defect_4 = " << isotropy_defect(stencil, 4) << "\n";
-    std::cout << "isotropy_defect_6 = " << isotropy_defect(stencil, 6) << "\n";
-    std::cout << "isotropy_defect_8 = " << isotropy_defect(stencil, 8) << "\n";
+    for (int order = 4; order <= 14; order += 2) {
+        std::cout << "isotropy_defect_" << order << " = " << isotropy_defect(stencil, order)
+                  << "\n";
+    }
 
     std::cout << "linear_error = " << linear_field_error(stencil, 32, 0.37, -0.11) << "\n";
     std::cout << "radial_angle_error_deg = " << radial_angle_error(stencil, 128, 20.0, 1.6)

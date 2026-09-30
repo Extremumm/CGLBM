@@ -53,6 +53,10 @@ struct SolverParameters {
     /// Stencil of the gradients: colour field, normals and capillary stress.
     /// With fourth_order_phase the phase populations sharpen along a normal of
     /// their own, on the lattice's stencil whatever this one is.
+    ///
+    /// E8 is the best of them here. On the static droplet of radius 10 at
+    /// 1e4, E10 and E12 raise the currents from 2.8e-6 to 4.6e-6 and 7.6e-6
+    /// and the mode-4 deformation from 6e-5 to 1.0e-4 and 1.4e-4.
     GradientStencil stencil = GradientStencil::E8;
     /// Lattice temperature of the phase populations' carrier, which sets the
     /// interface mobility M = phase_temperature / 2 (phase_carrier).

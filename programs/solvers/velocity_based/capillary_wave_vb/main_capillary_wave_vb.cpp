@@ -11,7 +11,7 @@
 // src/lbm/velocity_based.h: the same case as the colour-gradient
 // `capillary_wave`, against the same exact viscous normal mode.
 //
-// Usage: capillary_wave_vb [E4|E6|E8] [density_ratio] [mu1] [steps] [amplitude]
+// Usage: capillary_wave_vb [E4|E6|E8|E10|E12] [density_ratio] [mu1] [steps] [amplitude]
 //                          [--wavelength=N] [--fourth-order-phase]
 //
 //   density_ratio  rho1/rho2, default 1000.
@@ -138,8 +138,8 @@ int main(int argc, char** argv) {
     }
     Ly = 2 * Lx;
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &stencil)) {
-        std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8."
-                  << std::endl;
+        std::cerr << "Unknown gradient stencil '" << argv[1]
+                  << "'; expected E4, E6, E8, E10 or E12." << std::endl;
         return 2;
     }
     if (argc > 2 && !(parse_number(argv[2], &density_ratio) && density_ratio > 1.0)) {

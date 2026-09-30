@@ -81,7 +81,8 @@ Every solver takes its case as built-in defaults and accepts overrides on the
 command line, so a resolution or a run length is a flag rather than a rebuild:
 
 ```
-  --stencil=E4|E6|E8  isotropy order of the colour gradient
+  --stencil=E4|E6|E8|E10|E12
+                      isotropy order of the colour gradient
   --initial-profile=colour|normalised
                       field the initial tanh profile is prescribed in
   --interface-field=colour|normalised

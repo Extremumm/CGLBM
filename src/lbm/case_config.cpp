@@ -45,13 +45,14 @@ bool positive_integer(const std::string& text, const char* name, int* out) {
 }
 
 void print_usage(const std::string& program_name) {
-    std::cout << "usage: " << program_name << " [E4|E6|E8] [options]\n"
+    std::cout << "usage: " << program_name << " [E4|E6|E8|E10|E12] [options]\n"
               << "\n"
               << "Run the colour-gradient case built into this program. Output goes to the\n"
               << "current working directory under fixed names, so give every run a directory\n"
               << "of its own.\n"
               << "\n"
-              << "  --stencil=E4|E6|E8  isotropy order of the colour gradient\n"
+              << "  --stencil=E4|E6|E8|E10|E12\n"
+              << "                      isotropy order of the colour gradient\n"
               << "  --initial-state=equilibrium|eos|linear\n"
               << "                      how rho and p are laid down at t = 0; `equilibrium`\n"
               << "                      starts the interface in mechanical equilibrium, which\n"
@@ -356,8 +357,8 @@ parse_command_line(CaseConfig& config, int argc, char** argv, const std::string&
         }
         if (option_value(argument, "stencil", &value)) {
             if (!stencil_from_name(value.c_str(), &config.stencil)) {
-                std::cerr << "Unknown gradient stencil '" << value << "'; expected E4, E6 or E8."
-                          << std::endl;
+                std::cerr << "Unknown gradient stencil '" << value
+                          << "'; expected E4, E6, E8, E10 or E12." << std::endl;
                 return CommandLineResult::Error;
             }
             // The three-dimensional stencils are a subset, E4 and E6. `E8` is

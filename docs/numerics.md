@@ -1568,7 +1568,7 @@ gives 0.374 against 0.342. The case sets arithmetic;
 The colour gradient is differentiated twice per step and divided by its own
 norm to give the interface normal (in Ω⁽²⁾, or in the body forces of `Solver`),
 so gradient anisotropy becomes an anisotropic surface tension.
-`src/lbm/isotropic_gradient.h` offers three stencils, selectable as the first
+`src/lbm/isotropic_gradient.h` offers five stencils, selectable as the first
 argument of every solver:
 
 | Stencil | Neighbours | Reach | Isotropic to | Angular error on a tanh interface |
@@ -1576,13 +1576,45 @@ argument of every solver:
 | `E4` | 8 | 1 | 4th order | 0.145° |
 | `E6` | 12 | 2 | 6th order | 0.038° |
 | `E8` | 24 | 2 | 8th order | 0.012° |
+| `E10` | 36 | 3 | 10th order | 0.0048° |
+| `E12` | 48 | 4 | 12th order | 0.0023° |
 
-All three are exact for a linear field (their normalisation is
+All five are exact for a linear field (their normalisation is
 `Σ W c_α c_β = δ_αβ`); they differ in the higher lattice tensors. The angular
 error is the largest angle between −∇φ and the outward radius over the interface
 band of a radial tanh profile, and is measured by
 `programs/unit_testing/lbm/gradient`. Going from E4 to E8 reduces it twelvefold,
 which is the effect Leclaire et al. report.
+
+The weights come from one set of conditions. A stencil with the square's
+symmetry carries only the angular harmonics `cos 4mθ`, so with
+`Σ W c_x c_x = 1` its tensor of rank 2k is isotropic when
+`Σ_l W |c_l|^(2k−4m) Re((c_lx + i c_ly)^(4m)) = 0` for every `4m ≤ 2k`: one
+condition at ranks 4 and 6, two at 8 and 10, three at 12. Solved exactly on
+the shells in order of |c|², they give back the published E4, E6 and E8
+weights, Sbragaglia et al.'s E10 on the shells 1, 2, 4, 5, 8, 9 and 10, and
+for E12, on 1, 2, 4, 5, 8, 9, 10, 13, 16 and 17, positive weights with the
+last shell empty. The unit test checks each stencil isotropic to its order
+and broken at the next, on those same conditions.
+
+On the static droplets the last two orders buy little, and not in both
+solvers:
+
+| static droplet | E8 | E10 | E12 |
+|---|---|---|---|
+| `laplace <stencil>`, ratio 20: spurious currents | 1.66 × 10⁻⁵ | 1.58 × 10⁻⁵ | 1.50 × 10⁻⁵ |
+| its mode-4 deformation | 4.1 × 10⁻⁵ | 3.2 × 10⁻⁵ | 1.8 × 10⁻⁵ |
+| its jump over σ/R | 1.0264 | 1.0278 | 1.0292 |
+| `droplet <stencil> 1e4 0` (R = 10): currents | 2.8 × 10⁻⁶ | 4.6 × 10⁻⁶ | 7.6 × 10⁻⁶ |
+| its mode-4 deformation | 6.3 × 10⁻⁵ | 1.0 × 10⁻⁴ | 1.4 × 10⁻⁴ |
+
+(after 3 × 10⁴ and 10⁴ steps; the mode-4 deformation is
+`|Σ c z⁴| / Σ c |z|⁴` about the centroid, the most of it over the second half
+of the run). In the colour-gradient solver, whose surface tension is the
+gradient's direction, the wider stencils halve the fourfold deformation and
+take a tenth off the currents, and move the jump a little further from σ/R.
+In the velocity-based one, whose droplet of radius 10 is barely five widths of
+the E12 stencil across, they make both worse. E8 stays the default of both.
 
 `laplace` defaults to E8. The other cases default to E4 because they bounce back
 on y: a stencil reaching two nodes becomes one-sided against the wall, which has
@@ -2318,7 +2350,7 @@ not added to the solver.
 
 ## The velocity-based droplet solver
 
-`programs/solvers/velocity_based/droplet` (`droplet [E4|E6|E8] [ratio]
+`programs/solvers/velocity_based/droplet` (`droplet [E4|E6|E8|E10|E12] [ratio]
 [velocity] [viscosity_ratio]`) is a separate solver for interfaces that move at
 large density ratios, built on `src/lbm/velocity_based.h`; its time step is
 `src/lbm/velocity_based_solver.h`, which `programs/solvers/velocity_based/layers`

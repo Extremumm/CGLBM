@@ -13,13 +13,13 @@ from pycglbm.testing import parse_key_values, run_unit_program
 
 PROGRAM = "lbm_gradient"
 
-STENCILS = ("E4", "E6", "E8")
+STENCILS = ("E4", "E6", "E8", "E10", "E12")
 
 #: Isotropy order each stencil is constructed to reach.
-ISOTROPY_ORDER = {"E4": 4, "E6": 6, "E8": 8}
+ISOTROPY_ORDER = {"E4": 4, "E6": 6, "E8": 8, "E10": 10, "E12": 12}
 
 #: Neighbours in each stencil, and how far it reaches along an axis.
-GEOMETRY = {"E4": (8, 1), "E6": (12, 2), "E8": (24, 2)}
+GEOMETRY = {"E4": (8, 1), "E6": (12, 2), "E8": (24, 2), "E10": (36, 3), "E12": (48, 4)}
 
 
 def _run(stencil):
@@ -66,11 +66,10 @@ def test_unit_test_lbm_gradient_reaches_its_isotropy_order(stencil):
         defect = float(values[f"isotropy_defect_{satisfied}"])
         assert defect < 1e-12, f"{stencil} should be isotropic at rank {satisfied}"
 
-    if order < 8:
-        # the first order it does not reach must be visibly broken, otherwise
-        # the stencil is not what it claims to be
-        defect = float(values[f"isotropy_defect_{order + 2}"])
-        assert defect > 1e-3, f"{stencil} should not be isotropic at rank {order + 2}"
+    # the first order it does not reach must be visibly broken, otherwise the
+    # stencil is not what it claims to be
+    defect = float(values[f"isotropy_defect_{order + 2}"])
+    assert defect > 1e-3, f"{stencil} should not be isotropic at rank {order + 2}"
 
 
 @pytest.mark.unit_test
@@ -83,10 +82,12 @@ def test_unit_test_lbm_gradient_anisotropy_falls_with_order():
     """
     errors = {s: float(_run(s)["radial_angle_error_deg"]) for s in STENCILS}
 
-    assert errors["E8"] < errors["E6"] < errors["E4"]
+    assert errors["E12"] < errors["E10"] < errors["E8"] < errors["E6"] < errors["E4"]
     # E4 is already good to a fraction of a degree; E8 must be an order better
     assert errors["E4"] / errors["E8"] > 5.0
     assert errors["E8"] < 0.05
+    # and E12 better again, by at least a factor of four
+    assert errors["E8"] / errors["E12"] > 4.0
 
 
 @pytest.mark.unit_test

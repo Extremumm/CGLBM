@@ -11,7 +11,7 @@
 // src/lbm/velocity_based.h: static (the Laplace law) or launched through a
 // quiescent lighter fluid (an interface that moves).
 //
-// Usage: droplet [E4|E6|E8] [density_ratio] [velocity] [viscosity_ratio]
+// Usage: droplet [E4|E6|E8|E10|E12] [density_ratio] [velocity] [viscosity_ratio]
 //
 //   density_ratio    rho1/rho2, default 1e4.
 //   velocity         initial speed of the droplet along x, lattice units per
@@ -150,8 +150,8 @@ bool parseNumber(const char* text, double* value) {
 
 int main(int argc, char** argv) {
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &gradient_stencil)) {
-        std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8."
-                  << std::endl;
+        std::cerr << "Unknown gradient stencil '" << argv[1]
+                  << "'; expected E4, E6, E8, E10 or E12." << std::endl;
         return 2;
     }
     double density_ratio = rho1 / rho2;

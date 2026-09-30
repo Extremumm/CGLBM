@@ -16,8 +16,19 @@
 /// where the shell weights `W` are chosen so that the lattice tensors
 /// `sum_l W c_a c_b`, `sum_l W c_a c_b c_g c_d`, ... match their isotropic
 /// continuum counterparts up to a given order. `E4` reproduces the eight
-/// nearest neighbours of D2Q9 and is what the solvers used originally; `E6` and
-/// `E8` reach further and are isotropic to higher order.
+/// nearest neighbours of D2Q9 and is what the solvers used originally; `E6`,
+/// `E8`, `E10` and `E12` reach further and are isotropic to higher order.
+///
+/// In two dimensions the conditions are few. With `sum_l W c_x c_x = 1`, the
+/// tensor of rank 2k is isotropic when, for every m with 4m <= 2k,
+///
+///     sum_l W |c_l|^(2k - 4m) Re((c_lx + i c_ly)^(4m)) = 0,
+///
+/// since a set with the square's symmetry can only carry the harmonics
+/// cos(4 m theta). An order-2n stencil needs one shell per condition: 2, 3, 5,
+/// 7 and 10 shells for E4 to E12. Solved exactly, these conditions give back
+/// the published weights of the first three, and positive weights for the
+/// other two.
 ///
 /// References
 ///  - M. Sbragaglia, R. Benzi, L. Biferale, S. Succi, K. Sugiyama, F. Toschi,
@@ -36,15 +47,22 @@
 ///    W(5) = 2/315, W(8) = 1/5040, as tabulated in arXiv:2505.23647,
 ///    "Higher-order tuning of interface physics in multiphase lattice
 ///    Boltzmann", appendix B.
+///  - Tenth-order weights W(1) = 262/1785, W(2) = 93/1190, W(4) = 7/340,
+///    W(5) = 6/595, W(8) = 9/9520, W(9) = 2/5355, W(10) = 1/7140, as in
+///    Sbragaglia et al. (2007) above, and the twelfth-order set, solved from
+///    the conditions above on the shells |c|^2 = 1, 2, 4, 5, 8, 9, 10, 13, 16
+///    and 17, which leave the last empty.
 
 namespace cglbm {
 namespace lbm {
 
 /// Isotropy order of the gradient stencil.
 enum class GradientStencil {
-    E4,  ///< 8 neighbours, isotropic to 4th order. The original D2Q9 stencil.
-    E6,  ///< 12 neighbours, isotropic to 6th order.
-    E8   ///< 24 neighbours, isotropic to 8th order.
+    E4,   ///< 8 neighbours, isotropic to 4th order. The original D2Q9 stencil.
+    E6,   ///< 12 neighbours, isotropic to 6th order.
+    E8,   ///< 24 neighbours, isotropic to 8th order.
+    E10,  ///< 36 neighbours, three nodes out, isotropic to 10th order.
+    E12   ///< 48 neighbours, four nodes out, isotropic to 12th order.
 };
 
 /// One term of a stencil: a lattice offset and its weight.
@@ -59,7 +77,8 @@ struct StencilPoint {
 /// The returned array has static storage; it must not be freed.
 const StencilPoint* stencil_points(GradientStencil stencil, int* count);
 
-/// Largest offset the stencil reaches along either axis: 1 for E4, 2 otherwise.
+/// Largest offset the stencil reaches along either axis: 1 for E4, 2 for E6
+/// and E8, 3 for E10 and 4 for E12.
 ///
 /// A field whose boundary is not periodic needs at least this many valid nodes
 /// outside the region where the gradient is evaluated.
@@ -68,7 +87,7 @@ int stencil_reach(GradientStencil stencil);
 /// Name of the stencil, as accepted by :func:`stencil_from_name`.
 const char* stencil_name(GradientStencil stencil);
 
-/// Parse "E4", "E6" or "E8", case-insensitively.
+/// Parse "E4", "E6", "E8", "E10" or "E12", with the E in either case.
 ///
 /// Returns false and leaves `stencil` untouched when `name` matches none.
 bool stencil_from_name(const char* name, GradientStencil* stencil);

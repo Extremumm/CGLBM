@@ -475,8 +475,8 @@ void report_taylor_green() {
 int main(int argc, char** argv) {
     GradientStencil stencil = GradientStencil::E8;
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &stencil)) {
-        std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8."
-                  << std::endl;
+        std::cerr << "Unknown gradient stencil '" << argv[1]
+                  << "'; expected E4, E6, E8, E10 or E12." << std::endl;
         return 2;
     }
 

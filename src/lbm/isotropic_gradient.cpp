@@ -80,6 +80,117 @@ const StencilPoint kE8[] = {
     {-2, -2, 1.0 / 5040.0},
 };
 
+/// E10: shells |c|^2 = 1, 2, 4, 5, 8, 9, 10. Isotropic to 10th order. [Sbragaglia 2007]
+const StencilPoint kE10[] = {
+    // |c|^2 = 1, W = 262/1785
+    {1, 0, 262.0 / 1785.0},
+    {-1, 0, 262.0 / 1785.0},
+    {0, 1, 262.0 / 1785.0},
+    {0, -1, 262.0 / 1785.0},
+    // |c|^2 = 2, W = 93/1190
+    {1, 1, 93.0 / 1190.0},
+    {-1, 1, 93.0 / 1190.0},
+    {1, -1, 93.0 / 1190.0},
+    {-1, -1, 93.0 / 1190.0},
+    // |c|^2 = 4, W = 7/340
+    {2, 0, 7.0 / 340.0},
+    {-2, 0, 7.0 / 340.0},
+    {0, 2, 7.0 / 340.0},
+    {0, -2, 7.0 / 340.0},
+    // |c|^2 = 5, W = 6/595
+    {2, 1, 6.0 / 595.0},
+    {-2, 1, 6.0 / 595.0},
+    {2, -1, 6.0 / 595.0},
+    {-2, -1, 6.0 / 595.0},
+    {1, 2, 6.0 / 595.0},
+    {-1, 2, 6.0 / 595.0},
+    {1, -2, 6.0 / 595.0},
+    {-1, -2, 6.0 / 595.0},
+    // |c|^2 = 8, W = 9/9520
+    {2, 2, 9.0 / 9520.0},
+    {-2, 2, 9.0 / 9520.0},
+    {2, -2, 9.0 / 9520.0},
+    {-2, -2, 9.0 / 9520.0},
+    // |c|^2 = 9, W = 2/5355
+    {3, 0, 2.0 / 5355.0},
+    {-3, 0, 2.0 / 5355.0},
+    {0, 3, 2.0 / 5355.0},
+    {0, -3, 2.0 / 5355.0},
+    // |c|^2 = 10, W = 1/7140
+    {3, 1, 1.0 / 7140.0},
+    {-3, 1, 1.0 / 7140.0},
+    {3, -1, 1.0 / 7140.0},
+    {-3, -1, 1.0 / 7140.0},
+    {1, 3, 1.0 / 7140.0},
+    {-1, 3, 1.0 / 7140.0},
+    {1, -3, 1.0 / 7140.0},
+    {-1, -3, 1.0 / 7140.0},
+};
+
+/// E12: shells |c|^2 = 1, 2, 4, 5, 8, 9, 10, 13, 16. Isotropic to 12th order.
+///
+/// Solved exactly from the isotropy conditions in the header, with the shell
+/// |c|^2 = 17 allowed too: its weight comes out zero.
+const StencilPoint kE12[] = {
+    // |c|^2 = 1, W = 68/585
+    {1, 0, 68.0 / 585.0},
+    {-1, 0, 68.0 / 585.0},
+    {0, 1, 68.0 / 585.0},
+    {0, -1, 68.0 / 585.0},
+    // |c|^2 = 2, W = 68/1001
+    {1, 1, 68.0 / 1001.0},
+    {-1, 1, 68.0 / 1001.0},
+    {1, -1, 68.0 / 1001.0},
+    {-1, -1, 68.0 / 1001.0},
+    // |c|^2 = 4, W = 1/45
+    {2, 0, 1.0 / 45.0},
+    {-2, 0, 1.0 / 45.0},
+    {0, 2, 1.0 / 45.0},
+    {0, -2, 1.0 / 45.0},
+    // |c|^2 = 5, W = 62/5005
+    {2, 1, 62.0 / 5005.0},
+    {-2, 1, 62.0 / 5005.0},
+    {2, -1, 62.0 / 5005.0},
+    {-2, -1, 62.0 / 5005.0},
+    {1, 2, 62.0 / 5005.0},
+    {-1, 2, 62.0 / 5005.0},
+    {1, -2, 62.0 / 5005.0},
+    {-1, -2, 62.0 / 5005.0},
+    // |c|^2 = 8, W = 1/520
+    {2, 2, 1.0 / 520.0},
+    {-2, 2, 1.0 / 520.0},
+    {2, -2, 1.0 / 520.0},
+    {-2, -2, 1.0 / 520.0},
+    // |c|^2 = 9, W = 4/4095
+    {3, 0, 4.0 / 4095.0},
+    {-3, 0, 4.0 / 4095.0},
+    {0, 3, 4.0 / 4095.0},
+    {0, -3, 4.0 / 4095.0},
+    // |c|^2 = 10, W = 2/4095
+    {3, 1, 2.0 / 4095.0},
+    {-3, 1, 2.0 / 4095.0},
+    {3, -1, 2.0 / 4095.0},
+    {-3, -1, 2.0 / 4095.0},
+    {1, 3, 2.0 / 4095.0},
+    {-1, 3, 2.0 / 4095.0},
+    {1, -3, 2.0 / 4095.0},
+    {-1, -3, 2.0 / 4095.0},
+    // |c|^2 = 13, W = 2/45045
+    {3, 2, 2.0 / 45045.0},
+    {-3, 2, 2.0 / 45045.0},
+    {3, -2, 2.0 / 45045.0},
+    {-3, -2, 2.0 / 45045.0},
+    {2, 3, 2.0 / 45045.0},
+    {-2, 3, 2.0 / 45045.0},
+    {2, -3, 2.0 / 45045.0},
+    {-2, -3, 2.0 / 45045.0},
+    // |c|^2 = 16, W = 1/480480
+    {4, 0, 1.0 / 480480.0},
+    {-4, 0, 1.0 / 480480.0},
+    {0, 4, 1.0 / 480480.0},
+    {0, -4, 1.0 / 480480.0},
+};
+
 int count_of(const StencilPoint* first, const StencilPoint* last) {
     return static_cast<int>(last - first);
 }
@@ -98,6 +209,16 @@ const StencilPoint* stencil_points(GradientStencil stencil, int* count) {
             *count = count_of(kE8, kE8 + sizeof(kE8) / sizeof(kE8[0]));
         }
         return kE8;
+    case GradientStencil::E10:
+        if (count != nullptr) {
+            *count = count_of(kE10, kE10 + sizeof(kE10) / sizeof(kE10[0]));
+        }
+        return kE10;
+    case GradientStencil::E12:
+        if (count != nullptr) {
+            *count = count_of(kE12, kE12 + sizeof(kE12) / sizeof(kE12[0]));
+        }
+        return kE12;
     case GradientStencil::E4:
     default:
         if (count != nullptr) {
@@ -108,7 +229,18 @@ const StencilPoint* stencil_points(GradientStencil stencil, int* count) {
 }
 
 int stencil_reach(GradientStencil stencil) {
-    return (stencil == GradientStencil::E4) ? 1 : 2;
+    switch (stencil) {
+    case GradientStencil::E4:
+        return 1;
+    case GradientStencil::E10:
+        return 3;
+    case GradientStencil::E12:
+        return 4;
+    case GradientStencil::E6:
+    case GradientStencil::E8:
+    default:
+        return 2;
+    }
 }
 
 const char* stencil_name(GradientStencil stencil) {
@@ -117,6 +249,10 @@ const char* stencil_name(GradientStencil stencil) {
         return "E6";
     case GradientStencil::E8:
         return "E8";
+    case GradientStencil::E10:
+        return "E10";
+    case GradientStencil::E12:
+        return "E12";
     case GradientStencil::E4:
     default:
         return "E4";
@@ -139,6 +275,14 @@ bool stencil_from_name(const char* name, GradientStencil* stencil) {
         *stencil = GradientStencil::E8;
         return true;
     }
+    if (std::strcmp(name, "E10") == 0 || std::strcmp(name, "e10") == 0) {
+        *stencil = GradientStencil::E10;
+        return true;
+    }
+    if (std::strcmp(name, "E12") == 0 || std::strcmp(name, "e12") == 0) {
+        *stencil = GradientStencil::E12;
+        return true;
+    }
     return false;
 }
 
@@ -157,7 +301,7 @@ void gradient_periodic(const double* field,
     double gy = 0.0;
     for (int n = 0; n < count; ++n) {
         // (v % m + m) % m keeps the index non-negative for offsets of either
-        // sign, and for a reach of 2 on a lattice at least 2 nodes wide.
+        // sign, and for any reach on a lattice at least that many nodes wide.
         const int ip = ((i + points[n].cx) % nx + nx) % nx;
         const int jp = ((j + points[n].cy) % ny + ny) % ny;
         const double value = field[ip * ny + jp];
