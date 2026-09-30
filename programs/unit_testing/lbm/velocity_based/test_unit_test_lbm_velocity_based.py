@@ -212,3 +212,20 @@ def test_unit_test_lbm_velocity_based_sixth_order_phase_keeps_the_shape(values):
     assert abs(sixth - 1.0) < 0.1 * (1.0 - plain)
     assert float(values["sixth_order_phase_mass_error"]) < 1e-12
     assert float(values["sixth_order_phase_min"]) >= 0.0
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_threads_change_nothing(values):
+    """A droplet at 1e4 launched with the fourth-order phase, 200 steps on one
+    thread and on three: every field identical to the last bit (on one thread
+    both, in a build without OpenMP)."""
+    assert values["parallel_finite"] == "1"
+    assert values["parallel_identical"] == "1"
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_parse_number(values):
+    """The programs' argument reader takes a whole finite number and refuses
+    anything else, leaving the value alone."""
+    assert values["parse_number_read"] == "1"
+    assert values["parse_number_rejected"] == "6"

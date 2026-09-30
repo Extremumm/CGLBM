@@ -85,3 +85,16 @@ def test_unit_test_omp_environment_explicit_count_overrides_the_environment():
 @pytest.mark.unit_test
 def test_unit_test_omp_environment_wall_time_does_not_go_backwards():
     assert _run()["wall_time_monotonic"] == "1"
+
+
+@pytest.mark.unit_test
+def test_unit_test_omp_environment_takes_the_threads_option():
+    """--threads=N comes out of argv, the other arguments keep their order, and
+    a count that is not a whole number of at least 1 is refused and dropped,
+    leaving the count as it was. It does not need OpenMP."""
+    values = _run()
+    assert values["take_threads_valid"] == "1"
+    assert values["take_threads_value"] == "3"
+    assert values["take_threads_rest"] == "E8 1e4"
+    assert values["take_threads_absent"] == "1"
+    assert values["take_threads_rejected"] == "5"

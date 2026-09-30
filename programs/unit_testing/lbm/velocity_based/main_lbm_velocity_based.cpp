@@ -35,6 +35,9 @@
 #include "lbm/isotropic_gradient.h"
 #include "lbm/surface_force.h"
 #include "lbm/velocity_based.h"
+#include "lbm/velocity_based_output.h"
+#include "lbm/velocity_based_solver.h"
+#include "omp/omp_environment.h"
 
 namespace {
 
@@ -888,6 +891,73 @@ void report_sixth_order_operators() {
     std::cout << "transport6_convergence = " << coarse.transport6 / fine.transport6 << "\n";
 }
 
+/// A droplet of radius 8 at a density ratio of 1e4, launched at 0.01 with the
+/// fourth-order phase, 200 steps on one thread and on three: every field at
+/// every node must be the same to the last bit, since no loop of the step
+/// writes another node's value or sums across nodes.
+void report_parallel_identity() {
+    auto run = [](bool parallel) {
+        vb::SolverParameters parameters;
+        parameters.nx = 48;
+        parameters.ny = 48;
+        parameters.rho1 = 1.0e4;
+        parameters.rho2 = 1.0;
+        parameters.mu1 = parameters.mu2 = 0.05;
+        parameters.surface_tension = 0.01;
+        parameters.fourth_order_phase = true;
+        parameters.parallel = parallel;
+        vb::Solver solver(parameters);
+        solver.initialize([](int i, int j) {
+            vb::NodeState state;
+            const double r = std::hypot(i - 24.0, j - 24.0);
+            state.c = 0.5 * (1.0 - std::tanh((r - 8.0) / 1.6));
+            state.ux = 0.01 * state.c;
+            return state;
+        });
+        for (int step = 0; step < 200; ++step) {
+            solver.step();
+        }
+        std::vector<double> fields;
+        for (int i = 0; i < parameters.nx; ++i) {
+            for (int j = 0; j < parameters.ny; ++j) {
+                fields.insert(fields.end(),
+                              {solver.density(i, j),
+                               solver.velocity_x(i, j),
+                               solver.velocity_y(i, j),
+                               solver.phase(i, j),
+                               solver.pressure(i, j)});
+            }
+        }
+        return fields;
+    };
+    const std::vector<double> serial = run(false);
+    cglbm::omp::set_thread_count(3);
+    const std::vector<double> threaded = run(true);
+    cglbm::omp::set_thread_count(0);
+    bool finite = true;
+    for (double v : serial) {
+        finite = finite && std::isfinite(v);
+    }
+    std::cout << "parallel_threads = " << (cglbm::omp::available() ? 3 : 1) << "\n";
+    std::cout << "parallel_finite = " << (finite ? 1 : 0) << "\n";
+    std::cout << "parallel_identical = " << (serial == threaded ? 1 : 0) << "\n";
+}
+
+/// parse_number, which the velocity-based programs read their arguments with.
+void report_parse_number() {
+    double value = -1.0;
+    const bool read = vb::parse_number("1e4", &value) && value == 1.0e4;
+    int rejected = 0;
+    for (const char* bad : {"", "1e4x", "x", "nan", "inf", "1 "}) {
+        double untouched = 7.0;
+        if (!vb::parse_number(bad, &untouched) && untouched == 7.0) {
+            ++rejected;
+        }
+    }
+    std::cout << "parse_number_read = " << (read ? 1 : 0) << "\n";
+    std::cout << "parse_number_rejected = " << rejected << "\n";
+}
+
 /// Deformation of a mode-2 droplet of radius 10 after `steps` steps of its
 /// phase field alone, the fluid held at rest, over its initial deformation.
 /// With `order` 4 or 6 the phase is built as the solver builds it with
@@ -1023,6 +1093,8 @@ int main() {
     report_fourth_order_operators();
     report_fourth_order_phase();
     report_sixth_order_operators();
+    report_parallel_identity();
+    report_parse_number();
     std::cout << std::flush;
     return 0;
 }
