@@ -2782,6 +2782,37 @@ bulk viscosity is `p/2` under this collision whatever `--nu-b` says. At second
 order it is otherwise the regularised collision; what differs is the third and
 fourth order, which keep the products of the velocity with the relaxed stress.
 
+Against the regularised collision, on the long tests' cases (damping and
+frequency over the exact mode's) and on a droplet translating with the flow
+(`laplace` at its default ratio of 20, R = 10, the whole box started at
+U = 0.01 along x; research copy, 1.2 × 10⁴ steps):
+
+| case | regularised | central |
+|---|---|---|
+| wave at 100, nine-point source | 1.497, 0.989 | 1.492, 0.989 |
+| wave at 1000, nine-point source | 3.727, 0.903 | 3.919, 0.902 |
+| wave at 1000, matched source | 2.809, 0.890 | not damped: grows to 0.46 and wanders |
+| droplet at 1000, nine-point source | 7.900, 0.963 | 8.020, 0.962 |
+| droplet at 1000, matched source | 0.621, 1.007 | 0.949, 1.016 |
+| translating droplet: max \|u − U\| | 1.1 × 10⁻² | 6.2 × 10⁻³ |
+| translating droplet: deformation | −0.0043 | −0.0033 |
+| translating droplet: speed over U | 0.855 | 0.866 |
+
+What the moments themselves do shows on the translating droplet, the
+Galilean-invariance test Saito et al. use: the co-moving spurious velocity
+falls by 45 % and the deformation by a quarter. Both droplets lag the flow by
+14 %, which the collision does not decide. At U = 0.05 both lag by 22 % and
+deform by 8 and 12 %, but there the droplet's kinetic temperature p/ρ = 1/60
+is below U and its populations cannot stay positive, whatever the collision.
+
+The rest is the bulk rate. The regularised collision with a bulk relaxation
+time of 1 in both fluids (`--nu-b=1.667e-4 --nu-b2=0.1667`) gives the matched
+droplet 0.953 and 1.016, the central collision's figures, and leaves the
+matched wave undamped too, worse (it swings to 2.1). The wave needs the bulk
+viscosity the default gives it, `μ_b = μ`; the droplet, it turns out, is
+short of damping because of it. See
+[What is not solved](#what-is-not-solved).
+
 
 ## Structure of the solver
 
