@@ -219,6 +219,12 @@ has gone. In this code it is the velocity-based
   damping, but at 10³ the moving interface is wrong with either stencil —
   3.7 and 2.8 times for the wave, and a mode-2 droplet damped eight times too
   fast or at 0.62 of the rate — where the velocity-based solver is within 5 %.
+  The 0.62 follows the heavy fluid's bulk relaxation time (0.95 at τ_b = 1,
+  where the wave is no longer damped); taking the trace of the correction in
+  its continuum form, (p − ρc²)∇·u, brings the droplet to 1.26 and the wave
+  to 2.4, and diverges on static droplets at 10⁴, because only the published
+  time difference telescopes over the steps a slow bulk rate holds it
+  ([numerics.md](numerics.md#the-heavy-fluids-bulk-rate-and-the-trace-of-the-correction)).
   For the wave that is resolution rather than a wall, below the positivity
   bound: at twice the resolution it is at 2.9 with the nine-point source and
   1.6 with the matched one, and a wider interface no longer helps. The

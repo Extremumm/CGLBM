@@ -12,9 +12,16 @@
 /// See programs/solvers/color_gradient/laplace/tests/ for what is asserted of
 /// the result, and docs/numerics.md for the gap between the relaxed jump and
 /// the analytic one.
+///
+/// `--translate=U`, which this program reads before the shared options, starts
+/// the whole box moving at U along x instead: the droplet should then be
+/// carried along unchanged, and how far it falls behind the flow is the
+/// Galilean-invariance test of tests/test_laplace_translating.py.
 
 #include <cmath>
+#include <cstdlib>
 #include <iostream>
+#include <string>
 
 #include "lbm/case_config.h"
 #include "lbm/solver.h"
@@ -86,12 +93,48 @@ CaseConfig laplace_case() {
     return config;
 }
 
+/// Remove `--translate=U` from the arguments and store U; false if the value
+/// is not a number.
+bool take_translation(int* argc, char** argv, double* speed) {
+    const std::string prefix = "--translate=";
+    int kept = 1;
+    for (int n = 1; n < *argc; ++n) {
+        const std::string argument = argv[n];
+        if (argument.rfind(prefix, 0) != 0) {
+            argv[kept++] = argv[n];
+            continue;
+        }
+        const std::string value = argument.substr(prefix.size());
+        char* end = nullptr;
+        *speed = std::strtod(value.c_str(), &end);
+        if (value.empty() || *end != '\0' || !std::isfinite(*speed)) {
+            std::cerr << "laplace: --translate expects a number, got '" << value << "'."
+                      << std::endl;
+            return false;
+        }
+    }
+    *argc = kept;
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
+    double speed = 0.0;
+    if (!take_translation(&argc, argv, &speed)) {
+        return 2;
+    }
     CaseConfig config = laplace_case();
+    if (speed != 0.0) {
+        config.initial_velocity = [speed](const CaseConfig&, int, int, double* u_x, double* u_y) {
+            *u_x = speed;
+            *u_y = 0.0;
+        };
+    }
     switch (cglbm::lbm::parse_command_line(config, argc, argv, "laplace")) {
     case cglbm::lbm::CommandLineResult::Finished:
+        std::cout << "  --translate=U       start the whole box moving at U along x (0)"
+                  << std::endl;
         return 0;
     case cglbm::lbm::CommandLineResult::Error:
         return 2;
@@ -99,7 +142,7 @@ int main(int argc, char** argv) {
         break;
     }
 
-    std::cout << cglbm::lbm::describe(config) << std::endl;
+    std::cout << cglbm::lbm::describe(config) << "\ntranslate = " << speed << std::endl;
     try {
         cglbm::lbm::Solver solver(config);
         solver.run();

@@ -2217,7 +2217,10 @@ its first three half-periods. It does now feel the heavy fluid's viscosity:
 over 1.2 × 10⁴ steps, at μ₁ = 1, 2 and 4, it is damped at 1.26, 1.52 and
 3.23 × 10⁻⁵ per step against the exact 1.02, 1.91 and 3.58 × 10⁻⁵, where the
 plain stencil gave 0.39, −0.20 and 0.49 × 10⁻⁵ at μ₁ = 0.05, 2 and 4. The gap
-is large only beside a droplet this nearly inviscid (ν₁ = 0.002).
+is large only beside a droplet this nearly inviscid (ν₁ = 0.002). What sets
+it is the heavy fluid's bulk relaxation time, and no correction of the trace
+found closes it stably:
+[The heavy fluid's bulk rate](#the-heavy-fluids-bulk-rate-and-the-trace-of-the-correction).
 
 Three variants, the droplet measured over 1.2 × 10⁴ steps (0.795 with the 1 %
 gate) and the wave over 1.3 × 10⁴, show how narrow the choice is:
@@ -2242,6 +2245,76 @@ of face values. And the gap is not a lag in `S_t`, the temporal correction
 taken as a backward difference half a step behind: centring it on the step
 (second-order backward) or half a step ahead of it gives 0.621 and 0.622 over
 the long test, and lagging it a further half step 0.620, against 0.621.
+
+### The heavy fluid's bulk rate, and the trace of the correction
+
+What sets the matched droplet's 0.62 is the heavy fluid's bulk relaxation.
+`--nu-b` is `--nu` unless given, so in `oscillation` (ν₁ = 0.002 at a kinetic
+temperature p/ρ = 3.3 × 10⁻⁴) the heavy fluid's bulk relaxation time is 6.5,
+as its shear's is. Setting each fluid's on its own, with the matched stencil,
+the droplet over the long test's 2.4 × 10⁴ steps and the capillary wave at 1000
+over 1.3 × 10⁴ (damping and frequency over the exact mode's; research copies):
+
+| bulk relaxation time | droplet | wave |
+|---|---|---|
+| heavy 6.5, light 0.65 (as shipped) | 0.621, 1.007 | 2.73, 0.914 |
+| heavy 3.0 (`--nu-b=8.333e-4`) | 0.749, 1.011 | 2.81, 0.931 |
+| heavy 1.0 (`--nu-b=1.667e-4`) | 0.954, 1.015 | not damped: from 0.3 to −0.61 in half a period |
+| light 1.0 (`--nu-b2=0.1667`) | 0.633, 1.008 | 2.69, 0.916 |
+
+The light fluid's has nothing to do with it, and the heavy fluid's trades the
+droplet against the wave.
+
+Why the trace. With ψ = p − ρc_s², D2Q9's diagonal third moment is short by
+3ψu_a on each axis, and `S_Sp` puts back −3∂_a(ψu_a) on each diagonal. What is
+then left in the trace of the stress, against the `p(∇u + ∇uᵀ)` the scheme is
+after, is 2[∂_tψ + ∇·(ψu)]: `S_t` cancels the first as a backward difference
+in time, `S_Sp`'s trace the second on the nine-point stencil. At rest both
+vanish. Across a moving interface ψ jumps by the density ratio, each is that
+large, and they cancel only to the difference between a time difference and
+a space difference of the same sharp profile. What they miss is relaxed at
+the bulk rate, and the trace's non-equilibrium holds it for τ_b steps.
+
+In the continuum, `∂_tψ + ∇·(ψu) = (p − ρc²)∇·u + (∂p/∂φ)Dφ/Dt` with
+`c² = ∂p/∂ρ` at fixed φ, and the recolouring keeps `Dφ/Dt` at zero on a profile
+at rest or translating. Taking the first term alone, from the nine-point
+divergence of the velocity, which is smooth where ψ jumps, and keeping only
+the fourth-order part of `S_t` (research copy):
+
+| case | as shipped | (p − ρc²)∇·u |
+|---|---|---|
+| droplet at 1000, matched | 0.621, 1.007 | 1.255, 1.003 |
+| droplet at 1000, R = 40, matched | 0.46, 1.009 over 5.5 × 10⁴ steps | 1.05 over its first half-period, which the widening interface inflates; diverges before 2.8 × 10⁴ steps |
+| droplet at 1000, nine-point | 7.90, 0.963 | 7.75, 0.966 |
+| wave at 1000, matched | 2.73, 0.914 | 2.42, 0.926 |
+| wave at 1000, nine-point | 3.72, 0.910 | 3.49, 0.913 |
+| wave at 100, matched (1.6 × 10⁴ steps) | 1.187, 0.983 | 1.193, 0.984 |
+| droplet at 100, μ₁ = 2, matched (1.2 × 10⁴ steps) | 0.982, 1.003 | 1.007, 0.999 |
+| Taylor–Green vortex, 10 to 10⁴ | unchanged | unchanged |
+
+and it is not stable. Besides the droplet at R = 40, the static droplet at
+10⁴ of `test_laplace_high_density_ratio.py` (τ = 5.5 in it) diverges within
+5000 steps, and the unit test's droplet at 1000 with the colour field, the
+Ω⁽²⁾ tension and τ = 5000 within 250, where the split form runs all three.
+Nor does any other continuum form survive that last case: ψ in place of
+p − ρc² grows (currents 0.012 to 0.032 over 300 steps, against 0.006 and
+steady), adding (∂p/∂φ)(D_tφ + u·∇φ) back diverges at 300 steps, and
+`D_t p + ∇·(p u)`, which differences the smooth pressure rather than the sharp
+density and equals the split form less c_s² times the discrete continuity
+residual, within 30. Taking `S_Sp`'s trace on the matched stencil as well
+gives, with the split form, 0.721 and 1.011 for the droplet and 2.76 and
+0.935 for the wave; with the material form the wave diverges within 500
+steps.
+
+The split form's time difference telescopes: summed over the steps the
+trace's non-equilibrium holds it, it is ψ now less ψ then, bounded whatever
+happens between, as the lattice's own time derivative of the equilibrium is.
+Any other form leaves its difference from that to accumulate over τ_b steps,
+and where τ_b is in the thousands a part in a thousand of the heavy fluid's
+ψ∇·u, against its bulk stress p∇·u, is a negative bulk viscosity. So the
+matched droplet's missing damping comes with the heavy fluid's bulk rate, and
+no correction found moves it without costing the wave or stability. It was
+not added to the solver.
 
 ## The velocity-based droplet solver
 
@@ -2805,13 +2878,38 @@ falls by 45 % and the deformation by a quarter. Both droplets lag the flow by
 deform by 8 and 12 %, but there the droplet's kinetic temperature p/ρ = 1/60
 is below U and its populations cannot stay positive, whatever the collision.
 
+**The lag is not the collision's.** The rows above ran `laplace`'s own
+tension, the continuum surface force, and on a moving droplet that does not
+conserve momentum: the box, started at U, keeps 0.985 U after 2000 steps.
+With the capillary stress (`--surface-tension=stress
+--viscosity-mixing=dynamic`) it keeps U to rounding, and the lag is then a
+transfer: with the nine-point source the droplet moves at 0.919 U, the fluid
+inside it at 0.933 U and the fluid more than 2R from it at 1.031 U, steady
+from 1000 steps on. That is `S_Sp`'s deviatoric part taken on a stencil the
+streaming did not make the error with. Across a translating interface
+`d_x(ψ U)` is the density ratio times the stress that is left, and the
+mismatch between the two stencils is a stress dipole across the interface,
+holding the heavy side back and pushing the light side on; the error stress
+and the drag that balances it both scale with the viscosity, so the lag does
+not. With `--source-stencil=matched` the droplet moves at 0.9997 U, the
+fluid inside it at 0.998 U, and the co-moving spurious velocity is 4 × 10⁻³
+against 1.2 × 10⁻² (research copy; `tests/test_laplace_translating.py` pins
+both, over 3000 steps). At ν = 0.05 instead of 1.66 (τ = 3.5 in the droplet)
+what the matched stencil leaves shows: a lag that is not proportional to τ,
+and so, against a drag that is, grows as the viscosity falls; 2.2 % after
+3 × 10⁴ steps, converging (0.9775 U in the droplet), where the nine-point
+source is at 6 % after 4000 steps and still falling. At a density ratio of
+1000 and U = 10⁻³ (the same dynamic viscosity in both fluids, so τ = 5.5 in
+the droplet), the matched droplet keeps up (0.99 U) but its co-moving
+velocities reach 10 U and it deforms; the nine-point one lags by 6 %.
+
 The rest is the bulk rate. The regularised collision with a bulk relaxation
 time of 1 in both fluids (`--nu-b=1.667e-4 --nu-b2=0.1667`) gives the matched
 droplet 0.953 and 1.016, the central collision's figures, and leaves the
 matched wave undamped too, worse (it swings to 2.1). The wave needs the bulk
 viscosity the default gives it, `μ_b = μ`; the droplet, it turns out, is
-short of damping because of it. See
-[What is not solved](#what-is-not-solved).
+short of damping because of it, and of the heavy fluid's alone:
+[The heavy fluid's bulk rate](#the-heavy-fluids-bulk-rate-and-the-trace-of-the-correction).
 
 
 ## Structure of the solver

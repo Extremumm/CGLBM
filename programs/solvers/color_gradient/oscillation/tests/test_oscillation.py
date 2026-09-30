@@ -19,8 +19,11 @@ That stencil's six-point face values used to overshoot the jump of the
 corrected quantity at the interface, which cancelled the heavy fluid's
 viscous normal stress there, and the droplet did not ring down at all (-0.23);
 they are now limited where the density changes (docs/numerics.md, "The
-matched stencil at an interface"). The velocity-based solver runs the same
-case in `oscillation_vb`.
+matched stencil at an interface"). What is still missing follows the heavy
+fluid's bulk relaxation time, 6.5 here: at 1 the droplet is at 0.95, and the
+capillary wave is no longer damped ("The heavy fluid's bulk rate, and the
+trace of the correction"). The velocity-based solver runs the same case in
+`oscillation_vb`.
 
 Both are known gaps, pinned as measured with a tolerance that catches a change
 in the scheme. The frequency, which the interface disturbs much less, is

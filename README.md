@@ -465,9 +465,14 @@ same vortex decays at 0.998 of its Navier–Stokes rate at 1000 and 1.010 at
 10⁴. It fixes the heavy fluid's interior, not a moving interface: a capillary
 wave at a ratio of 100 goes from 1.50 to 1.19 times its exact damping, but at
 1000 the interface itself dominates (2.8 times), a mode-2 droplet there rings
-down at 0.62 of its exact rate, and the option is off by default. The
+down at 0.62 of its exact rate, which the heavy fluid's bulk relaxation time
+sets, and the option is off by default. The
 stencil's face values are limited where the density jumps; without that the
-droplet was not damped at all. The
+droplet was not damped at all. A droplet carried by a uniform flow shows the
+difference plainly: at a ratio of 20 it falls 8 % behind the flow with the
+nine-point source and keeps up to 0.04 % with the matched one
+(`laplace --translate=0.01`, with the capillary stress, which conserves
+momentum where the continuum surface force does not). The
 velocity-based `droplet` solver is free of both limits by construction: its
 populations carry the velocity at the lattice temperature, not the density.
 See [`docs/literature.md`](docs/literature.md) and

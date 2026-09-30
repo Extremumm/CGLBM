@@ -18,8 +18,8 @@ jobs:
     name: Laplace benchmark
     runs-on: ubuntu-latest
     # five full laplace runs of about ten minutes each (density ratio 20 with E8
-    # and E4, density ratios 1e4, 1e5 and 1e6), eight droplet runs of about five
-    # and a layers run of under one
+    # and E4, density ratios 1e4, 1e5 and 1e6), two translating ones of about
+    # two, eight droplet runs of about five and a layers run of under one
     timeout-minutes: 120
 
     steps:
@@ -95,6 +95,25 @@ jobs:
               print(f"| jump / (sigma / R_rho) | {jump / (SIGMA / r_rho):.4f} |")
               print(f"| max spurious velocity | {speed.max():.3e} |")
               print()
+
+          print("### a droplet carried by the flow (`laplace --translate=0.01 ...`)\n")
+          print("| source stencil | droplet speed over U, steps 1000 to 3000 |")
+          print("| --- | --- |")
+          for stencil in ("isotropic", "matched"):
+              rundir = pathlib.Path(f"artifacts/laplace_translating_{stencil}")
+              if not rundir.is_dir():
+                  continue
+              case = CaseOutput(rundir)
+              rho1, rho2 = case.parameter("rho1"), case.parameter("rho2")
+              centres = []
+              for t in (1000, 3000):
+                  fraction = ((case.density(t) - rho2) / (rho1 - rho2)).sum(axis=0)
+                  nx = fraction.size
+                  moment = (fraction * np.exp(2j * np.pi * np.arange(nx) / nx)).sum()
+                  centres.append(np.angle(moment) / (2 * np.pi) * nx)
+              travelled = (centres[1] - centres[0] - 20.0 + nx / 2) % nx - nx / 2 + 20.0
+              print(f"| {stencil} | {travelled / 20.0:.4f} |")
+          print()
 
           print("## Velocity-based droplet solver\n")
           static = pathlib.Path("artifacts/droplet_static")
