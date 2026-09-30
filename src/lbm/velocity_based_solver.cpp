@@ -124,7 +124,7 @@ void Solver::step() {
 // c from the phase populations, then everything that follows from it and P.
 void Solver::macroscopic() {
     const int nodes = parameters_.nx * parameters_.ny;
-    const bool parallel = parameters_.parallel;
+    [[maybe_unused]] const bool parallel = parameters_.parallel;
 #pragma omp parallel for if (parallel)
     for (int m = 0; m < nodes; ++m) {
         double sum_h = 0.0;
@@ -146,7 +146,7 @@ void Solver::acceleration() {
     const int nx = parameters_.nx;
     const int ny = parameters_.ny;
     const GradientStencil stencil = parameters_.stencil;
-    const bool parallel = parameters_.parallel;
+    [[maybe_unused]] const bool parallel = parameters_.parallel;
 #pragma omp parallel for if (parallel)
     for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < ny; ++j) {
@@ -286,7 +286,7 @@ void Solver::acceleration() {
 void Solver::momentum() {
     const int nx = parameters_.nx;
     const int ny = parameters_.ny;
-    const bool parallel = parameters_.parallel;
+    [[maybe_unused]] const bool parallel = parameters_.parallel;
 #pragma omp parallel for if (parallel)
     for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < ny; ++j) {
@@ -336,7 +336,7 @@ void Solver::momentum() {
 // half acceleration of the forcing scheme.
 void Solver::velocity() {
     const int nodes = parameters_.nx * parameters_.ny;
-    const bool parallel = parameters_.parallel;
+    [[maybe_unused]] const bool parallel = parameters_.parallel;
 #pragma omp parallel for if (parallel)
     for (int m = 0; m < nodes; ++m) {
         set_velocity(&g_[m * kQ], lattice_ux_[m], lattice_uy_[m]);
@@ -358,7 +358,7 @@ void Solver::save_step() {
 void Solver::collide_and_stream() {
     const int nx = parameters_.nx;
     const int ny = parameters_.ny;
-    const bool parallel = parameters_.parallel;
+    [[maybe_unused]] const bool parallel = parameters_.parallel;
 #pragma omp parallel for if (parallel)
     for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < ny; ++j) {

@@ -118,7 +118,7 @@ void TwoPopulationSolver::equilibrium(
 }
 
 void TwoPopulationSolver::densities() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double rho1_bulk = config_.physics.rho1;
     const double rho2_bulk = config_.physics.rho2;
 #pragma omp parallel for collapse(2) if (parallel)
@@ -156,7 +156,7 @@ void TwoPopulationSolver::gradient_at(
 }
 
 void TwoPopulationSolver::update_colour_gradient() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -177,7 +177,7 @@ void TwoPopulationSolver::update_colour_gradient() {
 }
 
 void TwoPopulationSolver::surface_force() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double sigma = config_.physics.sigma;
     const double gravity = config_.physics.gravity;
     const bool has_gravity = gravity != 0.0;
@@ -208,7 +208,7 @@ void TwoPopulationSolver::surface_force() {
 }
 
 void TwoPopulationSolver::update_velocity() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -228,7 +228,7 @@ void TwoPopulationSolver::update_velocity() {
 }
 
 void TwoPopulationSolver::third_moment_error() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     // 1 - 3 (c_s^k)^2 in lattice units: zero for a fluid at the lattice sound
     // speed, and 1.8 alpha_k - 0.8 in Ba et al.'s notation.
     const double weight1 = 1.0 - cs_squared_[0] / cs2_;
@@ -358,7 +358,7 @@ void TwoPopulationSolver::collide() {
     if (correction_) {
         third_moment_error();
     }
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -391,7 +391,7 @@ double TwoPopulationSolver::rest_weight(int i, int j, int k) const {
 }
 
 void TwoPopulationSolver::recolor() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double beta = config_.physics.beta;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
@@ -427,7 +427,7 @@ void TwoPopulationSolver::recolor() {
 void TwoPopulationSolver::stream() {
     Field next1(nx_, ny_, kQ);
     Field next2(nx_, ny_, kQ);
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const bool wall = wall_y_;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {

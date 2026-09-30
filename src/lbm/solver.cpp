@@ -85,7 +85,7 @@ void Solver::update_interface_field() {
     if (!normalise_interface_) {
         return;
     }
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double rho1 = config_.physics.rho1;
     const double rho2 = config_.physics.rho2;
 #pragma omp parallel for collapse(2) if (parallel)
@@ -134,7 +134,7 @@ void Solver::viscosity_at(int i, int j, double* nu, double* nu_b) const {
 }
 
 void Solver::update_colour_gradient() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -147,7 +147,7 @@ void Solver::update_colour_gradient() {
 }
 
 void Solver::equilibrium() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -190,7 +190,7 @@ void Solver::equilibrium() {
 }
 
 void Solver::macroscopic() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double gravity = config_.physics.gravity;
     const bool has_gravity = gravity != 0.0;
 #pragma omp parallel for collapse(2) if (parallel)
@@ -219,7 +219,7 @@ void Solver::macroscopic() {
 }
 
 void Solver::phase_field() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const ComponentPair components = components_;
     const bool warn = config_.warn_phase_out_of_range;
 #pragma omp parallel for collapse(2) if (parallel)
@@ -251,7 +251,7 @@ void Solver::phase_field() {
 }
 
 void Solver::collide() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     if (config_.collision == Collision::CentralMoment) {
         collide_central();
         return;
@@ -311,7 +311,7 @@ void Solver::collide() {
 // or 100, ideal gas or not; research copy), because k_22 then drops the part
 // of the trace's non-equilibrium the rest population needs.
 void Solver::collide_central() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -333,7 +333,7 @@ void Solver::collide_central() {
 }
 
 void Solver::force() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const bool wall = wall_y_;
     const bool matched = config_.source_stencil == SourceStencil::StreamingMatched;
 #pragma omp parallel for collapse(2) if (parallel)
@@ -469,7 +469,7 @@ void Solver::surface_force() {
     if (config_.surface_tension != SurfaceTension::ContinuumSurfaceForce) {
         return;
     }
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double sigma = config_.physics.sigma;
 
     // Pass one: the interface normal, pointing out of component 1.
@@ -534,7 +534,7 @@ void Solver::surface_force() {
 }
 
 void Solver::capillary_stress_force() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double sigma = config_.physics.sigma;
     const Boundary boundary = config_.boundary;
     const GradientStencil stencil = config_.stencil;
@@ -579,7 +579,7 @@ void Solver::collide_surface() {
         // The tension is a body force there, already in `force_surface_`.
         return;
     }
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double sigma = config_.physics.sigma;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {
@@ -615,7 +615,7 @@ void Solver::collide_surface() {
 }
 
 void Solver::recolor() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double ch_width_ope = config_.physics.ch_width_ope;
     const double beta = config_.physics.beta;
     const bool latva_kokko = config_.recolouring == Recolouring::LatvaKokko;
@@ -666,7 +666,7 @@ void Solver::recolor() {
 }
 
 void Solver::stream() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const bool wall = wall_y_;
 #pragma omp parallel for collapse(2) if (parallel)
     for (int i = 0; i < nx_; i++) {

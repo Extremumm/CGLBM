@@ -126,7 +126,7 @@ void TwoPopulationSolver3D::equilibrium(
 }
 
 void TwoPopulationSolver3D::densities() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double rho1_bulk = config_.physics.rho1;
     const double rho2_bulk = config_.physics.rho2;
     const int q_count = lattice_->q;
@@ -169,7 +169,7 @@ void TwoPopulationSolver3D::gradient_at(const double* field,
 }
 
 void TwoPopulationSolver3D::update_colour_gradient() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {
         for (int j = 0; j < ny_; j++) {
@@ -195,7 +195,7 @@ void TwoPopulationSolver3D::update_colour_gradient() {
 }
 
 void TwoPopulationSolver3D::surface_force() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double sigma = config_.physics.sigma;
     const double gravity = config_.physics.gravity;
     const bool has_gravity = gravity != 0.0;
@@ -254,7 +254,7 @@ void TwoPopulationSolver3D::surface_force() {
 }
 
 void TwoPopulationSolver3D::update_velocity(bool with_force) {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const int q_count = lattice_->q;
     const Lattice3D& lattice = *lattice_;
     const double half_step = with_force ? 0.5 * dt_ : 0.0;
@@ -279,7 +279,7 @@ void TwoPopulationSolver3D::update_velocity(bool with_force) {
 }
 
 void TwoPopulationSolver3D::collide() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const int q_count = lattice_->q;
     const Lattice3D& lattice = *lattice_;
 #pragma omp parallel for collapse(3) if (parallel)
@@ -328,7 +328,7 @@ double TwoPopulationSolver3D::rest_weight(int i, int j, int k, int q) const {
 }
 
 void TwoPopulationSolver3D::recolor() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double beta = config_.physics.beta;
     const int q_count = lattice_->q;
     const Lattice3D& lattice = *lattice_;
@@ -368,7 +368,7 @@ void TwoPopulationSolver3D::stream() {
     const int q_count = lattice.q;
     Field3D next1(nx_, ny_, nz_, q_count);
     Field3D next2(nx_, ny_, nz_, q_count);
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const bool wall = wall_y_;
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {

@@ -141,7 +141,7 @@ inline void step_along(int axis, int delta, int nx, int ny, int nz, int i, int j
 }  // namespace
 
 double QuasiStaticMhd3D::dot(const std::vector<double>& a, const std::vector<double>& b) const {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const long chunks = static_cast<long>(chunk_count_);
     const std::size_t nodes = nodes_;
 #pragma omp parallel for if (parallel)
@@ -162,7 +162,7 @@ double QuasiStaticMhd3D::dot(const std::vector<double>& a, const std::vector<dou
 }
 
 void QuasiStaticMhd3D::remove_mean(std::vector<double>& v) const {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const long chunks = static_cast<long>(chunk_count_);
     const std::size_t nodes = nodes_;
 #pragma omp parallel for if (parallel)
@@ -191,7 +191,7 @@ void QuasiStaticMhd3D::remove_mean(std::vector<double>& v) const {
 }
 
 void QuasiStaticMhd3D::update_conductivity(const Field3D& phase) {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double sigma1 = physics_.conductivity1;
     const double sigma2 = physics_.conductivity2;
     const bool harmonic = physics_.harmonic_conductivity;
@@ -260,7 +260,7 @@ void QuasiStaticMhd3D::update_conductivity(const Field3D& phase) {
 }
 
 void QuasiStaticMhd3D::update_drive(const Field3D& velocity) {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double bx = physics_.b[0], by = physics_.b[1], bz = physics_.b[2];
     const int nx = nx_, ny = ny_, nz = nz_;
 
@@ -312,7 +312,7 @@ void QuasiStaticMhd3D::update_drive(const Field3D& velocity) {
 }
 
 void QuasiStaticMhd3D::apply_operator(const Field3D& in, Field3D& out) const {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const int nx = nx_, ny = ny_, nz = nz_;
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {
@@ -343,7 +343,7 @@ void apply_flat(const std::vector<double>& in,
                 int nx,
                 int ny,
                 int nz,
-                bool parallel) {
+                [[maybe_unused]] bool parallel) {
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx; i++) {
         for (int j = 0; j < ny; j++) {
@@ -379,7 +379,7 @@ void QuasiStaticMhd3D::solve_potential(const Field3D& rhs) {
 }
 
 void QuasiStaticMhd3D::solve_flat() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const long chunks = static_cast<long>(chunk_count_);
     const std::size_t nodes = nodes_;
     std::vector<double>& z = preconditioned_;
@@ -496,7 +496,7 @@ void QuasiStaticMhd3D::solve_flat() {
 }
 
 void QuasiStaticMhd3D::solve_lattice_boltzmann() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const bool wall = wall_y_;
     const int nx = nx_, ny = ny_, nz = nz_;
 
@@ -681,7 +681,7 @@ void QuasiStaticMhd3D::solve_lattice_boltzmann() {
 }
 
 void QuasiStaticMhd3D::update_current() {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const int nx = nx_, ny = ny_, nz = nz_;
 
     // The face current, built on the difference the potential was solved
@@ -752,7 +752,7 @@ double QuasiStaticMhd3D::charge_imbalance() const {
 }
 
 void QuasiStaticMhd3D::add_lorentz_force(Field3D& force) const {
-    const bool parallel = parallel_;
+    [[maybe_unused]] const bool parallel = parallel_;
     const double bx = physics_.b[0], by = physics_.b[1], bz = physics_.b[2];
 #pragma omp parallel for collapse(3) if (parallel)
     for (int i = 0; i < nx_; i++) {
