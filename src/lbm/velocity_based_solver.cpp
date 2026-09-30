@@ -160,14 +160,19 @@ void Solver::acceleration() {
         for (int i = 0; i < nx; ++i) {
             for (int j = 0; j < ny; ++j) {
                 const int m = node(i, j);
-                interface_normal(psi_.data(),
-                                 laplacian_psi_.data(),
-                                 nx,
-                                 ny,
-                                 i,
-                                 j,
-                                 &phase_normal_x_[m],
-                                 &phase_normal_y_[m]);
+                if (1.0 - psi_[m] * psi_[m] < kFourthOrderNormalBand) {
+                    phase_normal_x_[m] = normal_x_[m];
+                    phase_normal_y_[m] = normal_y_[m];
+                } else {
+                    interface_normal(psi_.data(),
+                                     laplacian_psi_.data(),
+                                     nx,
+                                     ny,
+                                     i,
+                                     j,
+                                     &phase_normal_x_[m],
+                                     &phase_normal_y_[m]);
+                }
                 phase_correction_flux(laplacian_c_.data(),
                                       nx,
                                       ny,

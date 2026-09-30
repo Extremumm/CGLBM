@@ -197,6 +197,8 @@ double lattice_laplacian(const double* field, int nx, int ny, int i, int j);
 /// which relaxes a mode-2 droplet with the fluid at rest at a rate
 /// ~ M n^2 (n^2 - 1) / (6 R^4), whatever its density or viscosity. Taking
 /// the error out makes the gradient fourth-order.
+///
+/// The solver takes it only within kFourthOrderNormalBand of the interface.
 void interface_normal(const double* psi,
                       const double* laplacian_psi,
                       int nx,
@@ -205,6 +207,23 @@ void interface_normal(const double* psi,
                       int j,
                       double* normal_x,
                       double* normal_y);
+
+/// 1 - psi^2 below which the phase populations sharpen along the solver's own
+/// normal rather than interface_normal's: |psi| above 0.995, beyond 4.8
+/// nodes from the centre of an interface of width 1.6.
+///
+/// Out there the fourth-order gradient is a third difference of a profile
+/// within 1e-3 of its bulk value, and around a disturbance it turns by up to
+/// 30 degrees from the plain one. Taken there, together with
+/// phase_correction_flux, the sharpening pumped the other phase into the
+/// bulk: a capillary wave of wavelength 128 at a density ratio of 1000 grew a
+/// row of cells six nodes wide, seven to eleven nodes into the heavy fluid,
+/// and its interface's harmonics rose from 8e-6 to 4e-3 in 2e4 steps. Either
+/// correction alone, or the normal confined to the band, keeps the wave
+/// clean; confining the flux instead does not. The surface diffusion
+/// interface_normal takes out is carried by c (1 - c), of which half a
+/// percent lies beyond the band.
+constexpr double kFourthOrderNormalBand = 0.01;
 
 /// The flux -(T/24) G L c that cancels the memoryless transport's own
 /// fourth-order error on the equilibrium profile.

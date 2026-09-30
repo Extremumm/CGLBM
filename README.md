@@ -202,7 +202,13 @@ modes, within 5 % in damping and 1 % in frequency; a fifth argument sets the
 wave's amplitude, and at 8 nodes (`capillary_wave_vb E8 1000 2 12500 8`) the
 wave rings down at 1.02 times the linear damping rate; the colour-gradient
 `capillary_wave --source-stencil=matched --amplitude=8` runs it too, since its
-equation of state clamps the phase field, at 1.87. See
+equation of state clamps the phase field, at 1.87. At 10⁴ the droplet rings
+down 1.76 times too fast: its phase field relaxes the shape by a surface
+diffusion of its own, which `--fourth-order-phase` takes out
+(`oscillation_vb E8 1e4 2 45000 --fourth-order-phase`, 1.07). That option is
+off by default, since the diffusion had also been hiding the waves'
+under-resolved boundary layer (0.93 at 1000 on the default wavelength of 64
+nodes, 0.976 with `--wavelength=128`). See
 [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
 
 ### About the generated files

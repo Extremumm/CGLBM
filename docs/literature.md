@@ -255,3 +255,6 @@ has gone. In this code it is the velocity-based
   the interface normal and of the memoryless transport move a curved
   interface at `C ∂_s²κ`. Taken out to fourth order (`fourth_order_phase`,
   opt-in), the droplet at $10^4$ goes from 1.76 to 1.07 times the exact rate.
+  The fourth-order normal has to be kept to the interface itself: taken in
+  its far tails as well, it let a capillary wave on a wavelength of 128 grow
+  cells in the heavy fluid.

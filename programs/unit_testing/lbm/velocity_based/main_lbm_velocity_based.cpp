@@ -801,6 +801,8 @@ void report_fourth_order_operators() {
 
 /// Deformation of a mode-2 droplet of radius 10 after `steps` steps of its
 /// phase field alone, the fluid held at rest, over its initial deformation.
+/// With `fourth_order` the phase is built as the solver builds it with
+/// fourth_order_phase, the normal confined to kFourthOrderNormalBand.
 double droplet_shape_kept(bool fourth_order, int steps, double* mass_error, double* lowest) {
     const int n = 64;
     const double radius = 10.0;
@@ -849,9 +851,12 @@ double droplet_shape_kept(bool fourth_order, int steps, double* mass_error, doub
         for (int i = 0; i < n; ++i) {
             for (int j = 0; j < n; ++j) {
                 double nx = 0.0, ny = 0.0, fx = 0.0, fy = 0.0;
+                const double p = psi[i * n + j];
                 if (fourth_order) {
-                    vb::interface_normal(psi.data(), lap_psi.data(), n, n, i, j, &nx, &ny);
                     vb::phase_correction_flux(lap_c.data(), n, n, i, j, temperature, &fx, &fy);
+                }
+                if (fourth_order && 1.0 - p * p >= vb::kFourthOrderNormalBand) {
+                    vb::interface_normal(psi.data(), lap_psi.data(), n, n, i, j, &nx, &ny);
                 } else {
                     double gx = 0.0, gy = 0.0;
                     cglbm::lbm::gradient_periodic(

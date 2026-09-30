@@ -70,23 +70,28 @@ struct SolverParameters {
     /// where the rest weight is still positive.
     double phase_temperature = 0.2;
     /// Build the phase populations on the fourth-order normal of
-    /// interface_normal and with the flux of phase_correction_flux.
+    /// interface_normal, within kFourthOrderNormalBand of the interface, and
+    /// with the flux of phase_correction_flux. capillary_wave_vb and
+    /// oscillation_vb take it as --fourth-order-phase.
     ///
     /// Without them the phase field alone, the fluid held at rest, relaxes a
     /// mode-2 droplet of radius 20 at 2.9e-6 per step with the E8 normal:
     /// surface diffusion, proportional to phase_temperature and to R^-4, three
     /// quarters of it from the normal's truncation error and the rest from the
-    /// transport's own fourth-order error. With them it relaxes at 1.0e-7. At
+    /// transport's own fourth-order error. With them it relaxes at 1.1e-7. At
     /// a density ratio of 1e4 the droplet's own viscous damping is 2e-6 per
     /// step and half the shape relaxation adds to it: the droplet is damped
     /// 1.76 times the exact rate, and 1.07 times with them.
     ///
-    /// Off by default for now. The same surface diffusion had been offsetting
-    /// the under-resolved boundary layer of the capillary waves, which come to
-    /// 0.976, 0.930 and 0.711 of the exact rate at 100, 1000 and 1e4 with it
-    /// on (0.990 at 1e4 once the layer is resolved), and the static droplet
-    /// at 1e4 keeps currents of 1.3e-5 instead of 3e-6. See docs/numerics.md,
-    /// "The phase field's own surface diffusion".
+    /// Off by default. The same surface diffusion had been offsetting the
+    /// under-resolved boundary layer of the capillary waves on a wavelength of
+    /// 64, which come to 0.976, 0.931 and 0.719 of the exact rate at 100, 1000
+    /// and 1e4 with it on; on a wavelength of 128 the wave at 1000 comes to
+    /// 0.976, and at 1e4 with the layer resolved by a heavier viscosity to
+    /// 0.992. The static droplet at 1e4 keeps ringing in its mode 4, which the
+    /// surface diffusion had damped, with currents swinging up to 1.5e-5
+    /// instead of 3e-6.
+    /// See docs/numerics.md, "The phase field's own surface diffusion".
     bool fourth_order_phase = false;
 };
 

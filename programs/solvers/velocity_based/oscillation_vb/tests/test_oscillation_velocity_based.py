@@ -8,6 +8,11 @@ damps it eight times too fast with its published source term and at 0.62 of
 the exact rate with the matched one, because its interface moves wrongly at
 this density ratio; this is the solver whose interface is meant to be right.
 
+A second run takes the droplet to a density ratio of 1e4, for one period of
+45 000 steps, with the phase populations built to fourth order
+(`--fourth-order-phase`). Without that its phase field alone relaxes the shape
+by surface diffusion, and the droplet is damped 1.76 times the exact rate.
+
 The measured values are pinned, so a change in the scheme shows up; the
 closeness to the exact mode is asserted separately.
 """
@@ -21,8 +26,17 @@ from pycglbm.testing import artifacts_dir, run_program
 #: Steps skipped before the fit: the acoustic start-up of the release.
 SETTLING_STEPS = 500
 
+#: The program's arguments, per run.
+CASES = {
+    "1000": ("E8",),
+    "1e4_fourth_order": ("E8", "1e4", "2", "45000", "--fourth-order-phase"),
+}
+
 #: Measured decay rate and angular frequency, over the exact mode's.
-MEASURED = {"damping": 1.050, "frequency": 0.990}
+MEASURED = {
+    "1000": {"damping": 1.050, "frequency": 0.990},
+    "1e4_fourth_order": {"damping": 1.069, "frequency": 0.988},
+}
 MEASURED_TOLERANCE = 0.02
 
 #: How close to the exact mode the solver has to be, whatever it measured.
@@ -30,12 +44,15 @@ DAMPING_BOUND = 0.2
 FREQUENCY_BOUND = 0.03
 
 
-@pytest.fixture(scope="module")
-def droplet_run():
-    """One shared run of the case."""
-    return run_program(
-        "oscillation_vb", artifacts_dir() / "oscillation_vb", args=("E8",), timeout=2400
+@pytest.fixture(scope="module", params=sorted(CASES))
+def droplet_run(request):
+    """One shared run per case."""
+    name = "oscillation_vb" if request.param == "1000" else f"oscillation_vb_{request.param}"
+    run = run_program(
+        "oscillation_vb", artifacts_dir() / name, args=CASES[request.param], timeout=5400
     )
+    run.key = request.param
+    return run
 
 
 @pytest.fixture(scope="module")
@@ -58,7 +75,19 @@ def result(droplet_run):
         "frequency": fit.angular_frequency / exact.angular_frequency,
         "fit": fit,
         "signal": signal,
+        "measured": MEASURED[droplet_run.key],
     }
+
+
+@pytest.mark.long
+@pytest.mark.verification
+def test_verification_oscillation_vb_runs_the_intended_case(droplet_run):
+    """The arguments reached the solver."""
+    fourth_order = droplet_run.key == "1e4_fourth_order"
+    assert droplet_run.parameter("rho1") / droplet_run.parameter("rho2") == (
+        1e4 if fourth_order else 1000.0
+    )
+    assert droplet_run.parameter("fourth_order_phase", int) == fourth_order
 
 
 @pytest.mark.long
@@ -90,5 +119,7 @@ def test_validation_oscillation_vb_against_the_normal_mode(result):
     """Decay rate and frequency close to the exact mode's, and at their measured values."""
     assert result["damping"] == pytest.approx(1.0, abs=DAMPING_BOUND)
     assert result["frequency"] == pytest.approx(1.0, abs=FREQUENCY_BOUND)
-    assert result["damping"] == pytest.approx(MEASURED["damping"], abs=MEASURED_TOLERANCE)
-    assert result["frequency"] == pytest.approx(MEASURED["frequency"], abs=MEASURED_TOLERANCE / 4)
+    assert result["damping"] == pytest.approx(result["measured"]["damping"], abs=MEASURED_TOLERANCE)
+    assert result["frequency"] == pytest.approx(
+        result["measured"]["frequency"], abs=MEASURED_TOLERANCE / 4
+    )

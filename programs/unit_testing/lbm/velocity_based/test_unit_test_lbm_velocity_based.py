@@ -176,7 +176,8 @@ def test_unit_test_lbm_velocity_based_fourth_order_operators(values):
 def test_unit_test_lbm_velocity_based_fourth_order_phase_keeps_the_shape(values):
     """A mode-2 droplet of radius 10, its phase field alone with the fluid at
     rest: over 2000 steps the E8 normal loses 9 % of the deformation to
-    surface diffusion, the fourth-order phase 0.2 %, conserving c and staying
+    surface diffusion, the fourth-order phase, its normal confined to the
+    interface as the solver takes it, 0.1 %, conserving c and staying
     non-negative."""
     plain = float(values["plain_phase_shape_kept"])
     corrected = float(values["fourth_order_phase_shape_kept"])

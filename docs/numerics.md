@@ -2764,50 +2764,58 @@ lattice shrinks it only as R⁻² against the viscous damping; the phase
 carrier's temperature was lowered to 0.2 for what turns out to be this, 0.088
 of the wave's rate at 1000 at `c_s²` and 0.053 at 0.2, the 0.035 it gained.
 
-`SolverParameters::fourth_order_phase` takes both out. It is off by default
-for now, for the reasons after the table below. The
+`SolverParameters::fourth_order_phase` takes both out. It is off by default,
+for the reasons after the table below; `capillary_wave_vb` and
+`oscillation_vb` take it as `--fourth-order-phase`. Within the interface the
 phase populations sharpen along `interface_normal`, the direction of
-`G ψ − (1/6) G L ψ`, a fourth-order gradient, and carry the flux of
-`phase_correction_flux`, `−(T/24) G L c`, bounded with the sharpening. `G` is
-the lattice's own gradient (E4) and `L = 6 Σ_i w_i (f(x + ξ_i) − f(x))` its own
-Laplacian, whatever `stencil` is; the capillary stress, the layer weight and
-the colour gradient keep theirs. The unit test checks that the three are
-exact on a quartic, where the plain E4 normal is 2 % off, and that a mode-2
-droplet of radius 10, its phase field alone, loses 0.2 % of its deformation
-in 2000 steps where the E8 normal loses 9 %. In the solver:
+`G ψ − (1/6) G L ψ`, a fourth-order gradient, and everywhere they carry the
+flux of `phase_correction_flux`, `−(T/24) G L c`, bounded with the sharpening.
+`G` is the lattice's own gradient (E4) and `L = 6 Σ_i w_i (f(x + ξ_i) − f(x))`
+its own Laplacian, whatever `stencil` is; the capillary stress, the layer
+weight and the colour gradient keep theirs. Within the interface means
+`1 − ψ² ≥ 0.01` (`kFourthOrderNormalBand`), 4.8 nodes either side of its
+centre; beyond, the populations sharpen along the solver's own normal (see
+*Confined to the interface* below). With the fluid at rest the mode-2 droplet
+of radius 20 then relaxes at 1.1 × 10⁻⁷ per step. The unit test checks that
+the three are exact on a quartic, where the plain E4 normal is 2 % off, and
+that a mode-2 droplet of radius 10, its phase field alone, keeps its
+deformation to 0.1 % over 2000 steps where the E8 normal loses 9 %. In the
+solver:
 
 | case | before | with `fourth_order_phase` |
 |---|---|---|
-| droplet at $10^4$ | 1.764, 0.988 | 1.067, 0.988 |
-| wave at $10^4$ | 1.268, 0.992 | 0.711, 0.991 |
-| wave at $10^4$, μ₁ = 20, 2 × 10⁴ steps | 1.064, 1.008 | 0.990, 1.005 |
+| droplet at $10^4$ | 1.764, 0.988 | 1.069, 0.988 |
+| wave at $10^4$ | 1.268, 0.992 | 0.719, 0.991 |
+| wave at $10^4$, μ₁ = 20, 2 × 10⁴ steps | 1.064, 1.008 | 0.992, 1.005 |
 | wave at 100 | 1.001, 0.991 | 0.976, 0.991 |
-| wave at 1000 | 0.991, 0.992 | 0.930, 0.991 |
-| wave at 1000, amplitude 8 | 1.024, 0.909 | 0.964, 0.906 |
+| wave at 1000 | 0.991, 0.992 | 0.931, 0.991 |
+| wave at 1000, amplitude 8 | 1.024, 0.909 | 0.965, 0.906 |
+| wave at 1000, λ = 128, 2.5 × 10⁴ steps | 0.996, 0.999 | 0.976, 0.999 |
 
 The wave at $10^4$ is now damped too slowly, and that is the boundary layer:
-1.6 nodes thick at μ₁ = 2 and 5 at μ₁ = 20, where the wave comes to 0.990.
+1.6 nodes thick at μ₁ = 2 and 5 at μ₁ = 20, where the wave comes to 0.992.
 The surface diffusion had added 0.50 to a deficit of about 0.3, and hidden
 it. At 100 and 1000 the same holds on a smaller scale: the waves, 1.001 and
-0.991 before, were a deficit of 0.02 and 0.06 plus a surface diffusion of
-0.02 and 0.05, and λ = 128, which resolved the layer at 1000 before, is the
-case to settle them. Why the droplet, whose layer is as thin, shows no such
-deficit is not established.
+0.991 before, were a deficit of 0.02 and 0.07 plus a surface diffusion of
+0.02 and 0.06. On a wavelength of 128, which resolves the layer at 1000, the
+deficit falls to 0.024 and the surface diffusion to 0.02: a third of each
+for twice the resolution. Why the droplet, whose layer is as thin, shows no
+such deficit is not established.
 
-The static droplet at $10^4$ (R = 10) is the other cost. The surface
-diffusion damped its shape modes far faster than viscosity: mode 4 at 4.7 ×
-10⁻⁴ per step against a viscous 4.5 × 10⁻⁵. Without it the currents the
-start-up leaves ring on: 1.5 × 10⁻⁵ at the end of the long test's 10⁴ steps
-and 1.3 × 10⁻⁵ after 2.5 × 10⁴, where they are 3 × 10⁻⁶ and slowly rising
-with it; the jump stays at 0.997 σ/R. At R = 10 the corrected phase field
-leaves a small anti-diffusion on modes 2 and 4, −9.6 × 10⁻⁷ and −1.5 × 10⁻⁵
-per step with the fluid at rest, so every mode is still damped, mode 4 at
-about 0.8 of its viscous rate; modes 6 and 8 relax faster than viscosity
-alone would. Whether the remaining currents are that ringing or a steady
-flow from the phase field's normal (E4, fourth-order) and the capillary
-stress's (E8) disagreeing about the equilibrium shape is still open, and
-until it is settled, and the waves' boundary layer with it, the correction is
-off by default. The droplet programs do not expose it yet.
+The static droplet at $10^4$ (R = 10) is the other cost, and it is ringing. The
+start-up excites its mode 4, the one shape mode the lattice's fourfold
+anisotropy reaches (modes 2 and 3 stay at 10⁻¹⁶), to about 10⁻³ of the radius.
+The surface diffusion damped it far faster than viscosity: at 4.7 × 10⁻⁴ per
+step against a viscous 4.5 × 10⁻⁵. Without it the mode rings on, its amplitude
+passing close to zero every half period and a quarter lower after 2.5 × 10⁴
+steps, and the currents are its velocity, not a steady flow: they swing
+between 2 × 10⁻⁶ and 1.5 × 10⁻⁵ over those steps, where without the correction
+they are 3 × 10⁻⁶ and slowly rising; the jump stays at 0.997 σ/R. The
+fourth-order normal alone, which leaves the transport's share of the surface
+diffusion, damps the mode thirty-fold over the same 2.5 × 10⁴ steps and leaves
+6.5 × 10⁻⁶. A mode-2 droplet of radius 10, its phase field alone, relaxes at
+3.3 × 10⁻⁷ per step with the correction confined to the band, where unconfined
+it grew, at 9.7 × 10⁻⁷.
 
 Two things that were not the cause. At rest the phase populations' diffusion
 and sharpening cancel at each node but not on each link, and `link_momentum`
@@ -2819,6 +2827,43 @@ upwinding is what keeps the interface quiet, and it stays. And the
 droplet at R = 40, the resolution check, needs 1.2 × 10⁵ steps a period at
 $10^4$; the surface diffusion's share of its damping would be a quarter of
 R = 20's.
+
+**Confined to the interface.** As first written the fourth-order normal was
+taken everywhere, and the wave on λ = 128 went unstable. Over its first 2.5 ×
+10⁴ steps it was damped at 0.799 of the exact rate, over 3.6 × 10⁴ at 0.66.
+Its interface's harmonics above the second rose from 8 × 10⁻⁶ at 5000 steps to
+4.4 × 10⁻³ at 2.5 × 10⁴ (9 × 10⁻⁷ without the correction), and the fit's
+residual was twelve times the others'. What grew was not at the interface.
+Seven to eleven nodes from it, in the heavy fluid, a row of cells six nodes
+wide formed, and light phase was drawn in where they turned: c fell to 0.995
+there, where it is within 2 × 10⁻⁵ of 1 in the bulk. Each half of the
+correction alone kept the wave clean, and at $10^4$ each takes out its share of
+the droplet's excess:
+
+| correction | wave at 1000, λ = 128 | its harmonics above the 2nd | droplet at $10^4$ |
+|---|---|---|---|
+| neither | 0.996, 0.999 | 9 × 10⁻⁷ | 1.764, 0.988 |
+| the fourth-order normal alone | 0.980, 0.999 | 8 × 10⁻⁷ | 1.228, 0.988 |
+| the flux alone | 0.992, 0.999 | 6 × 10⁻⁷ | 1.587, 0.988 |
+| both, the normal everywhere | 0.799, 0.998 | 4.4 × 10⁻³ | 1.067, 0.988 |
+| both, the normal within the band | 0.976, 0.999 | 1.7 × 10⁻⁶ | 1.069, 0.988 |
+
+Out in the tail, where the profile is within 10⁻³ of its bulk value, the
+fourth-order gradient is a third difference of it. On the undisturbed tail it
+is parallel to the plain one, but around the cells it turned by up to 30°, and
+there the sharpening, weighted by c(1 − c), is weak but not zero. Confining
+the normal to the band, where 99.5 % of c(1 − c) lies, keeps the wave clean to
+2.5 × 10⁴ steps, with the heavy fluid as it is with the flux alone, and leaves
+everything else in the tables above within 0.01 of the unconfined values.
+Confining the flux instead does not: its harmonics were at 8 × 10⁻⁵ after 1.5
+× 10⁴ steps. At rest none of this shows. A flat interface's phase field alone,
+perturbed at wavelengths from 4 to 64 nodes, is damped at every one of them
+with either half of the correction; with both it anti-diffuses only the
+longest, at 5 × 10⁻⁷ per step on 64 and 1.5 × 10⁻⁶ on 32 (4.5 × 10⁻⁷ and 1.0 ×
+10⁻⁶ with the band), far too slowly to matter against viscosity. The growth
+needs the flow. The long tests pin the wave on λ = 128 with its interface's
+harmonics, and the droplet at $10^4$, both with the correction, in a shard of the
+validation workflow of their own.
 
 
 ## Generalized equilibria in central moments

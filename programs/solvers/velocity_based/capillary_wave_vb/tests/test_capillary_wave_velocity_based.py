@@ -27,6 +27,14 @@ viscosities, for one period. The heavy fluid's oscillatory boundary layer is
 then 1.6 nodes thick, and the collision's non-equilibrium, filtered in time
 rather than rebuilt from the finite-difference velocity gradient, is what
 reads it: the gradient took the damping to 2.10 times the exact rate.
+
+A fifth runs the wave at 1000 on a wavelength of 128, which resolves the heavy
+fluid's boundary layer, with the phase populations built to fourth order
+(`--fourth-order-phase`, SolverParameters::fourth_order_phase). Before its
+normal was confined to the interface, this wave grew a row of cells in the
+heavy fluid seven to eleven nodes from it, and its interface's harmonics rose
+from 8e-6 at 5000 steps to 4e-3 at 25 000; the linear runs are held to a
+clean interface.
 """
 
 import numpy as np
@@ -39,12 +47,21 @@ from pycglbm.testing import artifacts_dir, run_program
 SETTLING_STEPS = 500
 
 #: Density ratio, dynamic viscosity of the heavy layer, run length and initial
-#: amplitude (nodes) of each run.
+#: amplitude (nodes) of each run, and for some the wavelength (64 otherwise) and
+#: the fourth-order phase.
 CASES = {
     "100": {"ratio": "100", "mu1": 0.5, "steps": 16000, "amplitude": 0.3},
     "1000": {"ratio": "1000", "mu1": 2.0, "steps": 25000, "amplitude": 0.3},
     "1000_large": {"ratio": "1000", "mu1": 2.0, "steps": 12500, "amplitude": 8.0},
     "1e4": {"ratio": "1e4", "mu1": 2.0, "steps": 40000, "amplitude": 0.3},
+    "1000_128_fourth_order": {
+        "ratio": "1000",
+        "mu1": 2.0,
+        "steps": 25000,
+        "amplitude": 0.3,
+        "wavelength": 128,
+        "fourth_order_phase": True,
+    },
 }
 
 #: Measured decay rate and angular frequency, over the exact linear mode's.
@@ -53,19 +70,41 @@ MEASURED = {
     "1000": {"damping": 0.991, "frequency": 0.992},
     "1000_large": {"damping": 1.024, "frequency": 0.909},
     "1e4": {"damping": 1.268, "frequency": 0.992},
+    "1000_128_fourth_order": {"damping": 0.976, "frequency": 0.999},
 }
 MEASURED_TOLERANCE = 0.02
 
 #: How close to the exact mode the solver has to be, whatever it measured. At
 #: 1e4 the heavy fluid's oscillatory boundary layer is 1.6 nodes thick.
-DAMPING_BOUND = {"100": 0.15, "1000": 0.15, "1000_large": 0.15, "1e4": 0.35}
-FREQUENCY_BOUND = {"100": 0.03, "1000": 0.03, "1000_large": 0.12, "1e4": 0.03}
+DAMPING_BOUND = {
+    "100": 0.15,
+    "1000": 0.15,
+    "1000_large": 0.15,
+    "1e4": 0.35,
+    "1000_128_fourth_order": 0.15,
+}
+FREQUENCY_BOUND = {
+    "100": 0.03,
+    "1000": 0.03,
+    "1000_large": 0.12,
+    "1e4": 0.03,
+    "1000_128_fourth_order": 0.03,
+}
+
+#: The linear runs whose interface should hold no harmonic above the second,
+#: and the bound on them, over the initial amplitude. At 1e4 the third follows
+#: the wave's own swing, to 2e-4.
+CLEAN_INTERFACE = ("100", "1000", "1000_128_fourth_order")
+HARMONIC_BOUND = 1.0e-4
 
 
 @pytest.fixture(scope="module", params=sorted(CASES))
 def wave_run(request):
     """One shared run per case."""
     case = CASES[request.param]
+    options = (f"--wavelength={case.get('wavelength', 64)}",)
+    if case.get("fourth_order_phase", False):
+        options += ("--fourth-order-phase",)
     run = run_program(
         "capillary_wave_vb",
         artifacts_dir() / f"capillary_wave_vb_{request.param}",
@@ -75,8 +114,9 @@ def wave_run(request):
             str(case["mu1"]),
             str(case["steps"]),
             str(case["amplitude"]),
+            *options,
         ),
-        timeout=2400,
+        timeout=3600,
     )
     run.key = request.param
     return run
@@ -111,6 +151,15 @@ def initial_amplitude(wave_run):
     return wave_run.mode_track()[1][0]
 
 
+def interface_harmonics(wave_run, timestep):
+    """Fourier amplitudes of the lower interface's height, as mode.csv reads
+    the first: from the heavy fluid's volume in each column of the lower half."""
+    fraction = 0.5 * (1.0 + wave_run.phase(timestep))
+    ny, nx = fraction.shape
+    height = ny / 2 - fraction[: ny // 2].sum(axis=0)
+    return np.abs(np.fft.rfft(height)) * 2 / nx
+
+
 @pytest.mark.long
 @pytest.mark.verification
 def test_verification_capillary_wave_vb_runs_the_intended_case(wave_run):
@@ -120,6 +169,8 @@ def test_verification_capillary_wave_vb_runs_the_intended_case(wave_run):
     assert wave_run.parameter("mu1") == case["mu1"]
     assert wave_run.parameter("steps", int) == case["steps"]
     assert wave_run.parameter("amplitude") == case["amplitude"]
+    assert wave_run.parameter("nx", int) == case.get("wavelength", 64)
+    assert wave_run.parameter("fourth_order_phase", int) == case.get("fourth_order_phase", False)
     assert initial_amplitude(wave_run) == pytest.approx(case["amplitude"], rel=1.0e-3)
 
 
@@ -133,6 +184,16 @@ def test_verification_capillary_wave_vb_stays_bounded(wave_run, result):
     phase = wave_run.phase(wave_run.last_timestep)
     assert phase.min() >= -1.0 - 1.0e-9
     assert phase.max() <= 1.0 + 1.0e-9
+
+
+@pytest.mark.long
+@pytest.mark.verification
+def test_verification_capillary_wave_vb_keeps_a_clean_interface(wave_run):
+    """The linear runs end with no harmonic above the second standing out."""
+    if wave_run.key not in CLEAN_INTERFACE:
+        pytest.skip("nonlinear, or at 1e4 where the third harmonic follows the wave")
+    harmonics = interface_harmonics(wave_run, wave_run.last_timestep)
+    assert harmonics[3:].max() < HARMONIC_BOUND * CASES[wave_run.key]["amplitude"]
 
 
 @pytest.mark.long

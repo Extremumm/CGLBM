@@ -12,6 +12,7 @@
 // `capillary_wave`, against the same exact viscous normal mode.
 //
 // Usage: capillary_wave_vb [E4|E6|E8] [density_ratio] [mu1] [steps] [amplitude]
+//                          [--wavelength=N] [--fourth-order-phase]
 //
 //   density_ratio  rho1/rho2, default 1000.
 //   mu1            dynamic viscosity of the heavy layer, lattice units,
@@ -23,6 +24,11 @@
 //                  where the interface moves at about 2e-3; this one does not
 //                  (docs/numerics.md, "Oscillations against exact normal
 //                  modes").
+//   --wavelength=N the wavelength and width of the box, nodes, default 64; the
+//                  box is twice as tall.
+//   --fourth-order-phase
+//                  builds the phase populations as
+//                  SolverParameters::fourth_order_phase describes.
 //
 // A band of component 1 fills Ly/4 < y < 3Ly/4 of a doubly periodic box. The
 // lower interface is displaced by `amplitude cos(2 pi x / Lx)` and released;
@@ -33,8 +39,9 @@ namespace vb = cglbm::lbm::velocity_based;
 
 namespace {
 
-const int Lx = 64;
-const int Ly = 128;
+// Set from --wavelength before anything is built.
+int Lx = 64;
+int Ly = 128;
 const double kPi = 3.14159265358979323846;
 
 const double c_dx = 1.e-5;  // m : conversion factor from lattice units to physical units
@@ -90,6 +97,33 @@ bool parse_number(const char* text, double* value) {
     return true;
 }
 
+// Takes the options out of argv, leaving the positional arguments.
+bool take_options(int* argc, char** argv, int* wavelength, bool* fourth_order_phase) {
+    const std::string wavelength_prefix = "--wavelength=";
+    int kept = 1;
+    for (int n = 1; n < *argc; ++n) {
+        const std::string argument = argv[n];
+        if (argument == "--fourth-order-phase") {
+            *fourth_order_phase = true;
+        } else if (argument.rfind(wavelength_prefix, 0) == 0) {
+            const std::string value = argument.substr(wavelength_prefix.size());
+            double parsed = 0.0;
+            if (!parse_number(value.c_str(), &parsed) || parsed < 8.0 ||
+                parsed != std::floor(parsed)) {
+                std::cerr << "capillary_wave_vb: --wavelength expects a whole number of nodes, "
+                             "at least 8, got '"
+                          << value << "'." << std::endl;
+                return false;
+            }
+            *wavelength = static_cast<int>(parsed);
+        } else {
+            argv[kept++] = argv[n];
+        }
+    }
+    *argc = kept;
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -98,6 +132,11 @@ int main(int argc, char** argv) {
     double mu1 = 2.0;
     double steps = 25000.0;
     double amplitude = 0.3;
+    bool fourth_order_phase = false;
+    if (!take_options(&argc, argv, &Lx, &fourth_order_phase)) {
+        return 2;
+    }
+    Ly = 2 * Lx;
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &stencil)) {
         std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8."
                   << std::endl;
@@ -133,6 +172,7 @@ int main(int argc, char** argv) {
     parameters.mu2 = mu2;
     parameters.surface_tension = sigma;
     parameters.stencil = stencil;
+    parameters.fourth_order_phase = fourth_order_phase;
 
     std::cout << "gradient stencil = " << cglbm::lbm::stencil_name(stencil) << "\n"
               << "nx = " << Lx << "\n"
@@ -144,7 +184,8 @@ int main(int argc, char** argv) {
               << "mu2 = " << mu2 << "\n"
               << "sigma = " << sigma << "\n"
               << "width = " << parameters.width << "\n"
-              << "amplitude = " << amplitude << std::endl;
+              << "amplitude = " << amplitude << "\n"
+              << "fourth_order_phase = " << fourth_order_phase << std::endl;
 
     vb::Solver solver(parameters);
     solver.initialize([&](int i, int j) {

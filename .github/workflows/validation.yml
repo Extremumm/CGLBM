@@ -187,15 +187,26 @@ jobs:
           retention-days: 30
 
   oscillations:
-    name: Oscillation benchmarks
+    name: Oscillation benchmarks (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    # fourteen runs of three to ten minutes each: the capillary wave at density
-    # ratios of 100 and 1000 and the droplet at 1000, in the colour-gradient
-    # solver with both source stencils and in the velocity-based solver, the
-    # droplet in the two-population solver with both stencils, a
-    # large-amplitude wave at 1000 in both solvers, and the wave at 1e4 in the
-    # velocity-based solver
+    # main: fourteen runs of three to ten minutes each: the capillary wave at
+    # density ratios of 100 and 1000 and the droplet at 1000, in the
+    # colour-gradient solver with both source stencils and in the
+    # velocity-based solver, the droplet in the two-population solver with
+    # both stencils, a large-amplitude wave at 1000 in both solvers, and the
+    # wave at 1e4 in the velocity-based solver.
+    # fourth-order: the velocity-based solver with --fourth-order-phase, the
+    # wave of wavelength 128 at 1000 (half an hour) and the droplet at 1e4
+    # (under an hour).
     timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - shard: main
+            select: not fourth_order
+          - shard: fourth-order
+            select: fourth_order
 
     steps:
       - uses: actions/checkout@v4
@@ -228,7 +239,8 @@ jobs:
             programs/solvers/color_gradient/oscillation \
             programs/solvers/color_gradient/oscillation_high_ratio \
             programs/solvers/velocity_based/capillary_wave_vb \
-            programs/solvers/velocity_based/oscillation_vb --runlong -v
+            programs/solvers/velocity_based/oscillation_vb --runlong -v \
+            -k "${{ matrix.select }}"
 
       - name: Record what was measured
         if: always()
@@ -239,7 +251,7 @@ jobs:
           from pycglbm.normal_modes import capillary_wave, droplet_mode
           from pycglbm.oscillation import fit_damped_oscillation
 
-          print("## Oscillation benchmarks\n")
+          print("## Oscillation benchmarks (${{ matrix.shard }})\n")
           print("Decay rate and angular frequency over the exact viscous normal mode's.\n")
           print("| run | damping | frequency |")
           print("| --- | --- | --- |")
@@ -273,7 +285,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: oscillation-logs
+          name: oscillation-logs-${{ matrix.shard }}
           path: |
             artifacts/**/run.log
             artifacts/**/mode.csv

@@ -12,11 +12,15 @@
 // `oscillation`, against the same exact viscous normal mode.
 //
 // Usage: oscillation_vb [E4|E6|E8] [density_ratio] [mu1] [steps]
+//                       [--fourth-order-phase]
 //
 //   density_ratio  rho1/rho2, default 1000.
 //   mu1            dynamic viscosity of the droplet, lattice units, default 2.
 //                  The surrounding fluid's is 0.05.
 //   steps          default 24000.
+//   --fourth-order-phase
+//                  builds the phase populations as
+//                  SolverParameters::fourth_order_phase describes.
 //
 // The droplet is laid down as r = R' (1 + eps cos 2 theta), with R' shrunk so
 // that it holds the area of a circle of radius 20, and released with the
@@ -92,6 +96,21 @@ bool parse_number(const char* text, double* value) {
     return true;
 }
 
+// Takes --fourth-order-phase out of argv, leaving the positional arguments.
+bool take_fourth_order_phase(int* argc, char** argv) {
+    bool found = false;
+    int kept = 1;
+    for (int n = 1; n < *argc; ++n) {
+        if (std::string(argv[n]) == "--fourth-order-phase") {
+            found = true;
+        } else {
+            argv[kept++] = argv[n];
+        }
+    }
+    *argc = kept;
+    return found;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
@@ -99,6 +118,7 @@ int main(int argc, char** argv) {
     double density_ratio = 1000.0;
     double mu1 = 2.0;
     double steps = 24000.0;
+    const bool fourth_order_phase = take_fourth_order_phase(&argc, argv);
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &stencil)) {
         std::cerr << "Unknown gradient stencil '" << argv[1] << "'; expected E4, E6 or E8."
                   << std::endl;
@@ -128,6 +148,7 @@ int main(int argc, char** argv) {
     parameters.mu2 = mu2;
     parameters.surface_tension = sigma;
     parameters.stencil = stencil;
+    parameters.fourth_order_phase = fourth_order_phase;
 
     std::cout << "gradient stencil = " << cglbm::lbm::stencil_name(stencil) << "\n"
               << "nx = " << Lx << "\n"
@@ -140,7 +161,8 @@ int main(int argc, char** argv) {
               << "sigma = " << sigma << "\n"
               << "radius = " << radius << "\n"
               << "width = " << parameters.width << "\n"
-              << "deformation = " << deformation_0 << std::endl;
+              << "deformation = " << deformation_0 << "\n"
+              << "fourth_order_phase = " << fourth_order_phase << std::endl;
 
     vb::Solver solver(parameters);
     const double scale = 1.0 / std::sqrt(1.0 + 0.5 * deformation_0 * deformation_0);
