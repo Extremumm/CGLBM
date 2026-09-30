@@ -168,6 +168,65 @@ void phase_correction_flux(const double* laplacian_c,
     *flux_y = -temperature / 24.0 * hy;
 }
 
+namespace {
+
+/// field at (i, j), both axes periodic, for i and j a few nodes outside.
+double periodic_at(const double* field, int nx, int ny, int i, int j) {
+    return field[((i % nx + nx) % nx) * ny + (j % ny + ny) % ny];
+}
+
+}  // namespace
+
+void sixth_order_normal(const double* psi,
+                        const double* laplacian_psi,
+                        const double* laplacian2_psi,
+                        int nx,
+                        int ny,
+                        int i,
+                        int j,
+                        double* normal_x,
+                        double* normal_y) {
+    double gx = 0.0, gy = 0.0, hx = 0.0, hy = 0.0, kx = 0.0, ky = 0.0;
+    gradient_periodic(psi, nx, ny, i, j, GradientStencil::E4, &gx, &gy);
+    gradient_periodic(laplacian_psi, nx, ny, i, j, GradientStencil::E4, &hx, &hy);
+    gradient_periodic(laplacian2_psi, nx, ny, i, j, GradientStencil::E4, &kx, &ky);
+    // (f(3) - 4 f(2) + 5 f(1) - 5 f(-1) + 4 f(-2) - f(-3)) / 2 = f^(5) + O(h^2)
+    auto fifth = [&](int di, int dj) {
+        return 0.5 * (periodic_at(psi, nx, ny, i + 3 * di, j + 3 * dj) -
+                      4.0 * periodic_at(psi, nx, ny, i + 2 * di, j + 2 * dj) +
+                      5.0 * periodic_at(psi, nx, ny, i + di, j + dj) -
+                      5.0 * periodic_at(psi, nx, ny, i - di, j - dj) +
+                      4.0 * periodic_at(psi, nx, ny, i - 2 * di, j - 2 * dj) -
+                      periodic_at(psi, nx, ny, i - 3 * di, j - 3 * dj));
+    };
+    unit_normal(gx - hx / 6.0 + kx / 36.0 + fifth(1, 0) / 180.0,
+                gy - hy / 6.0 + ky / 36.0 + fifth(0, 1) / 180.0,
+                normal_x,
+                normal_y);
+}
+
+void sixth_order_flux(const double* laplacian_c,
+                      const double* laplacian2_c,
+                      int nx,
+                      int ny,
+                      int i,
+                      int j,
+                      double temperature,
+                      double* flux_x,
+                      double* flux_y) {
+    double hx = 0.0, hy = 0.0, kx = 0.0, ky = 0.0;
+    gradient_periodic(laplacian_c, nx, ny, i, j, GradientStencil::E4, &hx, &hy);
+    gradient_periodic(laplacian2_c, nx, ny, i, j, GradientStencil::E4, &kx, &ky);
+    // D_x d_yy L c and D_y d_xx L c, from L c directly
+    auto l = [&](int di, int dj) { return periodic_at(laplacian_c, nx, ny, i + di, j + dj); };
+    const double mixed_x =
+        0.5 * ((l(1, 1) - 2.0 * l(1, 0) + l(1, -1)) - (l(-1, 1) - 2.0 * l(-1, 0) + l(-1, -1)));
+    const double mixed_y =
+        0.5 * ((l(1, 1) - 2.0 * l(0, 1) + l(-1, 1)) - (l(1, -1) - 2.0 * l(0, -1) + l(-1, -1)));
+    *flux_x = temperature * (-hx / 24.0 + 7.0 * kx / 480.0 - mixed_x / 360.0);
+    *flux_y = temperature * (-hy / 24.0 + 7.0 * ky / 480.0 - mixed_y / 360.0);
+}
+
 void forcing(double ux, double uy, double ax, double ay, double* source) {
     for (int k = 0; k < kQ; ++k) {
         const double ex = kVelocity[k][0];

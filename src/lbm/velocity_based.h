@@ -243,6 +243,45 @@ void phase_correction_flux(const double* laplacian_c,
                            double* flux_x,
                            double* flux_y);
 
+/// interface_normal carried to sixth order: the direction of
+///
+///     G psi - (1/6) G L psi + (1/36) G L^2 psi + (1/180) (D5x psi, D5y psi),
+///
+/// where D5x is the seven-point fifth difference along x. On D2Q9 the E4
+/// gradient and the lattice Laplacian leave G (1 - L/6) psi with the error
+/// -(1/36) grad del^4 psi - (1/180) (d_x^5 psi, d_y^5 psi), the second part
+/// anisotropic; the last two terms take it out, to an error of seventh order.
+/// `laplacian_psi` holds L psi and `laplacian2_psi` L L psi.
+void sixth_order_normal(const double* psi,
+                        const double* laplacian_psi,
+                        const double* laplacian2_psi,
+                        int nx,
+                        int ny,
+                        int i,
+                        int j,
+                        double* normal_x,
+                        double* normal_y);
+
+/// phase_correction_flux carried to sixth order:
+///
+///     -(T/24) G L c + (7 T/480) G L^2 c - (T/360) (D_x d_yy L c, D_y d_xx L c),
+///
+/// with D the central difference and d_xx the second difference. With the
+/// fourth-order flux, streaming the memoryless populations still changes c
+/// on the equilibrium profile by T ((7/480) del^6 - (1/180) d_x^2 d_y^2 del^2) c,
+/// the second term from the lattice Laplacian's own sixth-order anisotropy;
+/// the last two terms take it out, to an error of eighth order. `laplacian_c`
+/// holds L c and `laplacian2_c` L L c.
+void sixth_order_flux(const double* laplacian_c,
+                      const double* laplacian2_c,
+                      int nx,
+                      int ny,
+                      int i,
+                      int j,
+                      double temperature,
+                      double* flux_x,
+                      double* flux_y);
+
 /// Guo et al. forcing populations for an acceleration a (force per unit mass).
 void forcing(double ux, double uy, double ax, double ay, double* source);
 

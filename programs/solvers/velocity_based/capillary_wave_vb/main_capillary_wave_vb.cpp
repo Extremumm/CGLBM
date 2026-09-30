@@ -13,6 +13,7 @@
 //
 // Usage: capillary_wave_vb [E4|E6|E8|E10|E12] [density_ratio] [mu1] [steps] [amplitude]
 //                          [--wavelength=N] [--fourth-order-phase]
+//                          [--sixth-order-phase]
 //
 //   density_ratio  rho1/rho2, default 1000.
 //   mu1            dynamic viscosity of the heavy layer, lattice units,
@@ -29,6 +30,8 @@
 //   --fourth-order-phase
 //                  builds the phase populations as
 //                  SolverParameters::fourth_order_phase describes.
+//   --sixth-order-phase
+//                  and as SolverParameters::sixth_order_phase does.
 //
 // A band of component 1 fills Ly/4 < y < 3Ly/4 of a doubly periodic box. The
 // lower interface is displaced by `amplitude cos(2 pi x / Lx)` and released;
@@ -98,13 +101,16 @@ bool parse_number(const char* text, double* value) {
 }
 
 // Takes the options out of argv, leaving the positional arguments.
-bool take_options(int* argc, char** argv, int* wavelength, bool* fourth_order_phase) {
+bool take_options(
+    int* argc, char** argv, int* wavelength, bool* fourth_order_phase, bool* sixth_order_phase) {
     const std::string wavelength_prefix = "--wavelength=";
     int kept = 1;
     for (int n = 1; n < *argc; ++n) {
         const std::string argument = argv[n];
         if (argument == "--fourth-order-phase") {
             *fourth_order_phase = true;
+        } else if (argument == "--sixth-order-phase") {
+            *sixth_order_phase = true;
         } else if (argument.rfind(wavelength_prefix, 0) == 0) {
             const std::string value = argument.substr(wavelength_prefix.size());
             double parsed = 0.0;
@@ -133,7 +139,8 @@ int main(int argc, char** argv) {
     double steps = 25000.0;
     double amplitude = 0.3;
     bool fourth_order_phase = false;
-    if (!take_options(&argc, argv, &Lx, &fourth_order_phase)) {
+    bool sixth_order_phase = false;
+    if (!take_options(&argc, argv, &Lx, &fourth_order_phase, &sixth_order_phase)) {
         return 2;
     }
     Ly = 2 * Lx;
@@ -173,6 +180,7 @@ int main(int argc, char** argv) {
     parameters.surface_tension = sigma;
     parameters.stencil = stencil;
     parameters.fourth_order_phase = fourth_order_phase;
+    parameters.sixth_order_phase = sixth_order_phase;
 
     std::cout << "gradient stencil = " << cglbm::lbm::stencil_name(stencil) << "\n"
               << "nx = " << Lx << "\n"
@@ -185,7 +193,8 @@ int main(int argc, char** argv) {
               << "sigma = " << sigma << "\n"
               << "width = " << parameters.width << "\n"
               << "amplitude = " << amplitude << "\n"
-              << "fourth_order_phase = " << fourth_order_phase << std::endl;
+              << "fourth_order_phase = " << fourth_order_phase << "\n"
+              << "sixth_order_phase = " << sixth_order_phase << std::endl;
 
     vb::Solver solver(parameters);
     solver.initialize([&](int i, int j) {

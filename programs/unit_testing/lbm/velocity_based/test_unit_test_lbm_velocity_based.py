@@ -185,3 +185,30 @@ def test_unit_test_lbm_velocity_based_fourth_order_phase_keeps_the_shape(values)
     assert abs(corrected - 1.0) < 0.1 * (1.0 - plain)
     assert float(values["fourth_order_phase_mass_error"]) < 1e-12
     assert float(values["fourth_order_phase_min"]) >= 0.0
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_sixth_order_operators(values):
+    """On a plane wave, halving the wavenumber divides the fourth-order
+    normal's angle and transport residual by 16 and the sixth-order ones by
+    64: the sixth-order normal is exact to sixth order, and the sixth-order
+    flux leaves the transport an error of eighth order (sixth relative to the
+    diffusion)."""
+    assert float(values["normal4_convergence"]) == pytest.approx(16.0, rel=0.05)
+    assert float(values["normal6_convergence"]) == pytest.approx(64.0, rel=0.05)
+    assert float(values["transport4_convergence"]) == pytest.approx(16.0, rel=0.05)
+    assert float(values["transport6_convergence"]) == pytest.approx(64.0, rel=0.05)
+    assert float(values["normal6_angle"]) < 0.1 * float(values["normal4_angle"])
+    assert float(values["transport6_error"]) < 0.1 * float(values["transport4_error"])
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_sixth_order_phase_keeps_the_shape(values):
+    """The phase-only droplet of the fourth-order test with the sixth-order
+    phase: it keeps its deformation to 0.3 %, a little less well than the
+    fourth order's 0.1 %, conserving c and staying non-negative."""
+    plain = float(values["plain_phase_shape_kept"])
+    sixth = float(values["sixth_order_phase_shape_kept"])
+    assert abs(sixth - 1.0) < 0.1 * (1.0 - plain)
+    assert float(values["sixth_order_phase_mass_error"]) < 1e-12
+    assert float(values["sixth_order_phase_min"]) >= 0.0

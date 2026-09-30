@@ -54,6 +54,8 @@ Solver::Solver(const SolverParameters& parameters) : parameters_(parameters) {
                                        &normal_y_,
                                        &laplacian_psi_,
                                        &laplacian_c_,
+                                       &laplacian2_psi_,
+                                       &laplacian2_c_,
                                        &phase_normal_x_,
                                        &phase_normal_y_,
                                        &phase_flux_x_,
@@ -149,7 +151,8 @@ void Solver::acceleration() {
             unit_normal(grad_x_[m], grad_y_[m], &normal_x_[m], &normal_y_[m]);
         }
     }
-    if (parameters_.fourth_order_phase) {
+    const bool sixth = parameters_.sixth_order_phase;
+    if (parameters_.fourth_order_phase || sixth) {
         for (int i = 0; i < nx; ++i) {
             for (int j = 0; j < ny; ++j) {
                 const int m = node(i, j);
@@ -157,12 +160,32 @@ void Solver::acceleration() {
                 laplacian_c_[m] = lattice_laplacian(c_.data(), nx, ny, i, j);
             }
         }
+        if (sixth) {
+            for (int i = 0; i < nx; ++i) {
+                for (int j = 0; j < ny; ++j) {
+                    const int m = node(i, j);
+                    laplacian2_psi_[m] = lattice_laplacian(laplacian_psi_.data(), nx, ny, i, j);
+                    laplacian2_c_[m] = lattice_laplacian(laplacian_c_.data(), nx, ny, i, j);
+                }
+            }
+        }
+        const double temperature = parameters_.phase_temperature;
         for (int i = 0; i < nx; ++i) {
             for (int j = 0; j < ny; ++j) {
                 const int m = node(i, j);
                 if (1.0 - psi_[m] * psi_[m] < kFourthOrderNormalBand) {
                     phase_normal_x_[m] = normal_x_[m];
                     phase_normal_y_[m] = normal_y_[m];
+                } else if (sixth) {
+                    sixth_order_normal(psi_.data(),
+                                       laplacian_psi_.data(),
+                                       laplacian2_psi_.data(),
+                                       nx,
+                                       ny,
+                                       i,
+                                       j,
+                                       &phase_normal_x_[m],
+                                       &phase_normal_y_[m]);
                 } else {
                     interface_normal(psi_.data(),
                                      laplacian_psi_.data(),
@@ -173,14 +196,26 @@ void Solver::acceleration() {
                                      &phase_normal_x_[m],
                                      &phase_normal_y_[m]);
                 }
-                phase_correction_flux(laplacian_c_.data(),
-                                      nx,
-                                      ny,
-                                      i,
-                                      j,
-                                      parameters_.phase_temperature,
-                                      &phase_flux_x_[m],
-                                      &phase_flux_y_[m]);
+                if (sixth) {
+                    sixth_order_flux(laplacian_c_.data(),
+                                     laplacian2_c_.data(),
+                                     nx,
+                                     ny,
+                                     i,
+                                     j,
+                                     temperature,
+                                     &phase_flux_x_[m],
+                                     &phase_flux_y_[m]);
+                } else {
+                    phase_correction_flux(laplacian_c_.data(),
+                                          nx,
+                                          ny,
+                                          i,
+                                          j,
+                                          temperature,
+                                          &phase_flux_x_[m],
+                                          &phase_flux_y_[m]);
+                }
             }
         }
     } else {

@@ -2951,6 +2951,40 @@ needs the flow. The long tests pin the wave on λ = 128 with its interface's
 harmonics, and the droplet at $10^4$, both with the correction, in a shard of the
 validation workflow of their own.
 
+**Sixth order.** The same expansion carried two orders further gives
+`SolverParameters::sixth_order_phase` (`--sixth-order-phase`). With the E4
+gradient G and the lattice Laplacian L, `G(1 − L/6)ψ` leaves
+`−(1/36)∇∇⁴ψ − (1/180)(∂_x⁵ψ, ∂_y⁵ψ)`, the second part anisotropic;
+`sixth_order_normal` adds `(1/36) G L²ψ` and the seven-point fifth
+differences, and is exact to sixth order. With the fourth-order flux, the
+transport still leaves `T((7/480)∇⁶ − (1/180)∂_x²∂_y²∇²)c` on the equilibrium
+profile, the second term from the lattice Laplacian's own sixth-order
+anisotropy; `sixth_order_flux` adds `(7T/480) G L²c` and
+`−(T/360)(D_x δ_yy Lc, D_y δ_xx Lc)`, which leaves eighth order (sympy on the
+exact symbols; the unit test halves a plane wave's wavenumber and finds the
+normal's angle and the transport's residual 16 times smaller at fourth
+order and 64 times at sixth). It pays little:
+
+| | fourth order | sixth order |
+|---|---|---|
+| phase field alone, mode 2, R = 20 | 1.1 × 10⁻⁷ per step | 1.0 × 10⁻⁷ |
+| the same, R = 10 | 3.3 × 10⁻⁷ | 1.5 × 10⁻⁶ |
+| the same, R = 20 on W = 3.2 | 7.5 × 10⁻⁸ | 9.3 × 10⁻⁸ |
+| droplet at $10^4$ | 1.069, 0.988 | 1.061, 0.988 |
+| wave at 1000, λ = 128 | 0.976, 0.999 | 0.973, 0.999 |
+| wave at 1000 | 0.931, 0.991 | 0.928, 0.991 |
+| wave at $10^4$ | 0.719, 0.991 | 0.719, 0.991 |
+
+The wave on λ = 128 stays clean (harmonics 2.9 × 10⁻⁶). What the fourth
+order leaves of the phase field's relaxation is no longer the operators'
+truncation error: at R = 10 the band alone moves it by 1.3 × 10⁻⁶ (−9.7 ×
+10⁻⁷ unconfined), the sixth-order normal with the fourth-order flux gives
+9.4 × 10⁻⁷ and the reverse 1.1 × 10⁻⁶, and on an interface twice as wide,
+where the expansion converges faster, the fourth order unconfined is already
+at −4.6 × 10⁻⁹. What is left is the band's edge and the sharpening's own
+nonlinearity, which no higher derivative reaches. The option stays off, and
+the fourth order is the one the long tests pin.
+
 
 ## Generalized equilibria in central moments
 

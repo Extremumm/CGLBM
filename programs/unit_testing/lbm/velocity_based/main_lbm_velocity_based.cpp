@@ -799,16 +799,107 @@ void report_fourth_order_operators() {
               << "\n";
 }
 
+/// Errors of the fourth- and sixth-order phase on a plane wave of wavevector
+/// 2 pi (mx, my) / n: the angle between the normal and the wave's direction,
+/// and what streaming the memoryless populations leaves of c on the
+/// equilibrium relation S = (T/2) grad c, (T/2) L c - G.(T/2) grad c - G.F,
+/// over the diffusion's own amplitude (T/2) k^2. Both at the node where the
+/// wave's phase is zero.
+struct PlaneWaveErrors {
+    double normal4;
+    double normal6;
+    double transport4;
+    double transport6;
+};
+
+PlaneWaveErrors plane_wave_errors(int n, int mx, int my) {
+    const double two_pi = 2.0 * std::acos(-1.0);
+    const double kx = two_pi * mx / n;
+    const double ky = two_pi * my / n;
+    const double temperature = 0.2;
+    const std::size_t nodes = static_cast<std::size_t>(n) * n;
+    std::vector<double> psi(nodes), c(nodes), lp(nodes), llp(nodes), lc(nodes), llc(nodes);
+    std::vector<double> gx(nodes), gy(nodes), f4x(nodes), f4y(nodes), f6x(nodes), f6y(nodes);
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            const double phase = kx * i + ky * j;
+            psi[i * n + j] = std::sin(phase);
+            c[i * n + j] = std::cos(phase);
+            // the exact gradient of c, times T/2: the sharpening at equilibrium
+            gx[i * n + j] = -0.5 * temperature * kx * std::sin(phase);
+            gy[i * n + j] = -0.5 * temperature * ky * std::sin(phase);
+        }
+    }
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            lp[i * n + j] = vb::lattice_laplacian(psi.data(), n, n, i, j);
+            lc[i * n + j] = vb::lattice_laplacian(c.data(), n, n, i, j);
+        }
+    }
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            llp[i * n + j] = vb::lattice_laplacian(lp.data(), n, n, i, j);
+            llc[i * n + j] = vb::lattice_laplacian(lc.data(), n, n, i, j);
+        }
+    }
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            const int m = i * n + j;
+            vb::phase_correction_flux(lc.data(), n, n, i, j, temperature, &f4x[m], &f4y[m]);
+            vb::sixth_order_flux(lc.data(), llc.data(), n, n, i, j, temperature, &f6x[m], &f6y[m]);
+        }
+    }
+    PlaneWaveErrors errors{};
+    const double k = std::hypot(kx, ky);
+    auto angle = [&](double nx, double ny) {
+        return std::fabs(std::atan2(nx * ky - ny * kx, nx * kx + ny * ky));
+    };
+    double nx = 0.0, ny = 0.0;
+    vb::interface_normal(psi.data(), lp.data(), n, n, 0, 0, &nx, &ny);
+    errors.normal4 = angle(nx, ny);
+    vb::sixth_order_normal(psi.data(), lp.data(), llp.data(), n, n, 0, 0, &nx, &ny);
+    errors.normal6 = angle(nx, ny);
+    auto divergence = [&](const std::vector<double>& fx, const std::vector<double>& fy) {
+        double dx = 0.0, dy = 0.0, unused = 0.0;
+        cglbm::lbm::gradient_periodic(
+            fx.data(), n, n, 0, 0, cglbm::lbm::GradientStencil::E4, &dx, &unused);
+        cglbm::lbm::gradient_periodic(
+            fy.data(), n, n, 0, 0, cglbm::lbm::GradientStencil::E4, &unused, &dy);
+        return dx + dy;
+    };
+    const double plain = 0.5 * temperature * lc[0] - divergence(gx, gy);
+    const double scale = 0.5 * temperature * k * k;
+    errors.transport4 = std::fabs(plain - divergence(f4x, f4y)) / scale;
+    errors.transport6 = std::fabs(plain - divergence(f6x, f6y)) / scale;
+    return errors;
+}
+
+void report_sixth_order_operators() {
+    // the same wave on two lattices, the second twice as fine
+    const PlaneWaveErrors coarse = plane_wave_errors(64, 2, 1);
+    const PlaneWaveErrors fine = plane_wave_errors(128, 2, 1);
+    std::cout << "normal4_angle = " << coarse.normal4 << "\n";
+    std::cout << "normal6_angle = " << coarse.normal6 << "\n";
+    std::cout << "normal4_convergence = " << coarse.normal4 / fine.normal4 << "\n";
+    std::cout << "normal6_convergence = " << coarse.normal6 / fine.normal6 << "\n";
+    std::cout << "transport4_error = " << coarse.transport4 << "\n";
+    std::cout << "transport6_error = " << coarse.transport6 << "\n";
+    std::cout << "transport4_convergence = " << coarse.transport4 / fine.transport4 << "\n";
+    std::cout << "transport6_convergence = " << coarse.transport6 / fine.transport6 << "\n";
+}
+
 /// Deformation of a mode-2 droplet of radius 10 after `steps` steps of its
 /// phase field alone, the fluid held at rest, over its initial deformation.
-/// With `fourth_order` the phase is built as the solver builds it with
-/// fourth_order_phase, the normal confined to kFourthOrderNormalBand.
-double droplet_shape_kept(bool fourth_order, int steps, double* mass_error, double* lowest) {
+/// With `order` 4 or 6 the phase is built as the solver builds it with
+/// fourth_order_phase or sixth_order_phase, the normal confined to
+/// kFourthOrderNormalBand; with 2, on the E8 normal alone.
+double droplet_shape_kept(int order, int steps, double* mass_error, double* lowest) {
     const int n = 64;
     const double radius = 10.0;
     const double width = 1.6;
     const double temperature = 0.2;
     std::vector<double> c(n * n), psi(n * n), lap_psi(n * n), lap_c(n * n), next(n * n);
+    std::vector<double> lap2_psi(n * n), lap2_c(n * n);
     for (int i = 0; i < n; ++i) {
         for (int j = 0; j < n; ++j) {
             const double x = i - n / 2;
@@ -847,16 +938,31 @@ double droplet_shape_kept(bool fourth_order, int steps, double* mass_error, doub
                 lap_c[i * n + j] = vb::lattice_laplacian(c.data(), n, n, i, j);
             }
         }
+        if (order == 6) {
+            for (int i = 0; i < n; ++i) {
+                for (int j = 0; j < n; ++j) {
+                    lap2_psi[i * n + j] = vb::lattice_laplacian(lap_psi.data(), n, n, i, j);
+                    lap2_c[i * n + j] = vb::lattice_laplacian(lap_c.data(), n, n, i, j);
+                }
+            }
+        }
         std::fill(next.begin(), next.end(), 0.0);
         for (int i = 0; i < n; ++i) {
             for (int j = 0; j < n; ++j) {
                 double nx = 0.0, ny = 0.0, fx = 0.0, fy = 0.0;
                 const double p = psi[i * n + j];
-                if (fourth_order) {
+                const bool band = 1.0 - p * p >= vb::kFourthOrderNormalBand;
+                if (order == 4) {
                     vb::phase_correction_flux(lap_c.data(), n, n, i, j, temperature, &fx, &fy);
+                } else if (order == 6) {
+                    vb::sixth_order_flux(
+                        lap_c.data(), lap2_c.data(), n, n, i, j, temperature, &fx, &fy);
                 }
-                if (fourth_order && 1.0 - p * p >= vb::kFourthOrderNormalBand) {
+                if (order == 4 && band) {
                     vb::interface_normal(psi.data(), lap_psi.data(), n, n, i, j, &nx, &ny);
+                } else if (order == 6 && band) {
+                    vb::sixth_order_normal(
+                        psi.data(), lap_psi.data(), lap2_psi.data(), n, n, i, j, &nx, &ny);
                 } else {
                     double gx = 0.0, gy = 0.0;
                     cglbm::lbm::gradient_periodic(
@@ -888,12 +994,16 @@ double droplet_shape_kept(bool fourth_order, int steps, double* mass_error, doub
 
 void report_fourth_order_phase() {
     double mass_error = 0.0, lowest = 0.0;
-    const double plain = droplet_shape_kept(false, 2000, &mass_error, &lowest);
+    const double plain = droplet_shape_kept(2, 2000, &mass_error, &lowest);
     std::cout << "plain_phase_shape_kept = " << plain << "\n";
-    const double corrected = droplet_shape_kept(true, 2000, &mass_error, &lowest);
+    const double corrected = droplet_shape_kept(4, 2000, &mass_error, &lowest);
     std::cout << "fourth_order_phase_shape_kept = " << corrected << "\n";
     std::cout << "fourth_order_phase_mass_error = " << mass_error << "\n";
     std::cout << "fourth_order_phase_min = " << lowest << "\n";
+    const double sixth = droplet_shape_kept(6, 2000, &mass_error, &lowest);
+    std::cout << "sixth_order_phase_shape_kept = " << sixth << "\n";
+    std::cout << "sixth_order_phase_mass_error = " << mass_error << "\n";
+    std::cout << "sixth_order_phase_min = " << lowest << "\n";
 }
 
 }  // namespace
@@ -912,6 +1022,7 @@ int main() {
     report_phase_transport();
     report_fourth_order_operators();
     report_fourth_order_phase();
+    report_sixth_order_operators();
     std::cout << std::flush;
     return 0;
 }

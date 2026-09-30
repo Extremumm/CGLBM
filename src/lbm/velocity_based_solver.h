@@ -97,6 +97,21 @@ struct SolverParameters {
     /// instead of 3e-6.
     /// See docs/numerics.md, "The phase field's own surface diffusion".
     bool fourth_order_phase = false;
+    /// fourth_order_phase carried a further two orders: the phase populations
+    /// sharpen along sixth_order_normal, within the same band, and carry the
+    /// flux of sixth_order_flux. It implies fourth_order_phase.
+    ///
+    /// It pays little. The droplet at 1e4 goes from 1.069 to 1.061 times the
+    /// exact damping, the waves on a wavelength of 64 stay within 0.003. The
+    /// fourth-order correction leaves the phase field's own relaxation of a
+    /// mode-2 droplet of radius 20 at 1.1e-7 per step, and this one at
+    /// 1.0e-7; at radius 10 it takes it from 3.3e-7 to 1.5e-6, and on an
+    /// interface twice as wide (W = 3.2) from 7.5e-8 to 9.3e-8. What the
+    /// fourth-order correction leaves is no longer the truncation error of the
+    /// lattice operators, which this one takes to eighth order, but the band's
+    /// edge and the sharpening's own nonlinearity. See docs/numerics.md,
+    /// "The phase field's own surface diffusion".
+    bool sixth_order_phase = false;
 };
 
 /// The state of one node, to initialise from.
@@ -204,6 +219,9 @@ private:
     // Laplacians of psi and c they are taken from
     std::vector<double> laplacian_psi_;
     std::vector<double> laplacian_c_;
+    // and L L psi and L L c, for sixth_order_phase
+    std::vector<double> laplacian2_psi_;
+    std::vector<double> laplacian2_c_;
     std::vector<double> phase_normal_x_;
     std::vector<double> phase_normal_y_;
     std::vector<double> phase_flux_x_;
