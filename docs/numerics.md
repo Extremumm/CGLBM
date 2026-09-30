@@ -2348,6 +2348,60 @@ matched droplet's missing damping comes with the heavy fluid's bulk rate, and
 no correction found moves it without costing the wave or stability. It was
 not added to the solver.
 
+### A higher-order lattice for the heavy fluid
+
+`S_Sp` exists because D2Q9 cannot carry the diagonal third moment:
+`ξ_x³ = ξ_x` on its velocities, so `H_xxx = ξ_x³ − 3c_s²ξ_x` vanishes and
+Lafarge's third-order term, `(p − ρc_s²) w (u_x(H_xxx + H_xyy) +
+u_y(H_yyy + H_xxy))/(2c_s⁶)`, loses the part that would make
+`Σ f ξ_x³ = 3p u_x`. Saito et al. suggest a higher-order lattice for exactly
+this ("a higher-order lattice (e.g., D3Q39 lattice) and the corresponding
+third-order equilibrium may be needed"). In two dimensions the smallest is
+the 17-velocity, seventh-degree quadrature of Shan, Yuan & Chen (2006):
+the rest node, the shells (1, 0), (1, 1), (2, 2) and (3, 0), weights
+(575 + 193√193)/8100, (3355 − 91√193)/18000, (655 + 17√193)/27000,
+(685 − 49√193)/54000 and (1445 − 101√193)/162000, all positive, and
+`c_s² = 5/6 − √193/30 = 0.3703`. Its moments are exact to sixth order
+(checked in rational arithmetic), so the same equilibrium formula, unchanged,
+gives `Σ f_eq ξ_x³ = 3p u_x`: the lattice carries what `S_Sp` repairs, with
+the streaming's own symbol, and `S_Sp` goes.
+
+A research copy of `Solver` took the lattice at run time, bit-identical on
+D2Q9, and ran on D2Q17 without `S_Sp`. A Taylor–Green vortex at a density
+ratio of 1, where `p = ρc_s²` nearly, decays at 1.0025 of the Navier–Stokes
+rate. At 2 it diverges at step 1358, at 10 at 789, at 1000 at 676; the
+droplet of `oscillation` at 1000 within 20 steps, `laplace` at 20 within 50.
+So does every variant tried: without `S_t`, with BGK instead of the
+regularised collision, and with an equilibrium matched to the 14 moments
+D2Q17 can set, those of a Maxwellian at the fluid's own temperature
+`θ = p/ρ` up to fourth order.
+
+A linear stability analysis of a uniform fluid at rest (`p₀ = θρ₀`,
+`dp = c₁² dρ`, the largest amplification over all wavenumbers) says why:
+
+| amplification per step | τ = 0.51 | 0.8 | 1 | 2 |
+|---|---|---|---|---|
+| D2Q9, regularised, θ = 10⁻³ | 1.040 | 1.000 | 1.000 | 1.000 |
+| D2Q17, regularised, θ = 0.333 | 1.000 | 1.000 | 1.000 | 1.000 |
+| D2Q17, regularised, θ = 0.2 | 1.063 | 1.021 | 1.021 | 1.021 |
+| D2Q17, regularised, θ = 10⁻³ | 1.173 | 1.053 | 1.053 | 1.053 |
+| the same, velocity smoothed in the third-order term | 1.115 | 1.016 | 1.015 | 1.019 |
+
+Without the third-order term both lattices are neutral at every θ; with it
+D2Q17 is unstable as soon as the fluid is cooler than the lattice. For a
+cold fluid the term makes the (3, 0) populations answer the velocity with
+`−74 ρw u` against `+4.5 ρw u` on the (1, 0) shell, which is how it moves the
+third moment down to `3pu_x`; both shells are odd, so at the Nyquist
+wavenumber the streaming flips their sign together, and the correction feeds
+the mode it should damp. Smoothing the velocity the term sees removes that
+mode but not the growth at k ≈ 0.6–1.1, and costs the exactness the lattice
+was for. At τ = 1 the collision puts every population on its equilibrium,
+so the instability is in the equilibrium and the streaming, and no
+collision cures it; it is the known narrow temperature range of the
+multispeed lattices, met at a temperature a thousand times below theirs.
+The lattice was not added to the solver: the heavy fluid's third moment
+stays with the matched stencil on D2Q9.
+
 ## The velocity-based droplet solver
 
 `programs/solvers/velocity_based/droplet` (`droplet [E4|E6|E8|E10|E12] [ratio]

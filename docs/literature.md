@@ -178,7 +178,11 @@ finite differences introduces numerical errors that distort the droplet",
 and "a higher-order lattice (e.g., D3Q39 lattice) and the corresponding
 third-order equilibrium may be needed to solve it completely". The matched
 stencil here makes the same repair inside the heavy fluid without a new
-lattice. Neither touches the first limit, which no lattice can lift. On any
+lattice. The new lattice itself does not work, tried here in two dimensions:
+on the 17-velocity lattice of Shan, Yuan & Chen (2006) the same equilibrium
+carries the third moment exactly, and is linearly unstable for any fluid
+cooler than the lattice, by 5 % a step at the heavy fluid's temperature
+([numerics.md](numerics.md#a-higher-order-lattice-for-the-heavy-fluid)). Neither touches the first limit, which no lattice can lift. On any
 lattice whose moving velocities have integer components, non-negative
 populations satisfy `Σ f e_x² ≥ Σ f |e_x| ≥ |Σ f e_x|`, so a fluid carried
 by them has `T + u_x² ≥ |u_x|`, with `T = p/ρ` its kinetic temperature: it

@@ -395,6 +395,15 @@ entry above says otherwise, each is cited for what its abstract or Ba et al.
    Referenced throughout the sources: periodic boundary conditions (p. 170),
    conversion between lattice and physical units for the viscosity (p. 284).
 
+3. **X. Shan, X.-F. Yuan, H. Chen.** *Kinetic theory representation of
+   hydrodynamics: a way beyond the Navier–Stokes equation.* Journal of Fluid
+   Mechanics **550**, 413–441, 2006.
+
+   The Hermite construction of higher-order lattices, and the 17-velocity,
+   seventh-degree one tried here to carry the heavy fluid's third moment
+   ([`numerics.md`](numerics.md#a-higher-order-lattice-for-the-heavy-fluid)):
+   exact, and linearly unstable for any fluid cooler than the lattice.
+
 ## Unit conversion
 
 The programs work in lattice units and convert with two factors defined at the
