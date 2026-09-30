@@ -34,7 +34,7 @@ import numpy as np
 import pytest
 from pycglbm.normal_modes import droplet_mode
 from pycglbm.oscillation import fit_damped_oscillation
-from pycglbm.testing import artifacts_dir, run_program
+from pycglbm.testing import artifacts_dir, default_threads, run_program
 
 #: Steps skipped before the fit: the acoustic start-up of the release.
 SETTLING_STEPS = 500
@@ -57,6 +57,7 @@ def droplet_run(request):
         artifacts_dir() / f"oscillation_{stencil}",
         args=(f"--source-stencil={stencil}",),
         timeout=2400,
+        threads=default_threads(),
     )
     run.key = stencil
     return run

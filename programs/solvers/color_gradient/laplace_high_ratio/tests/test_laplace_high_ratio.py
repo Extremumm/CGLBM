@@ -11,7 +11,7 @@ at this density ratio, with spurious currents of 1.25e-4.
 """
 
 import pytest
-from pycglbm.testing import artifacts_dir, run_program
+from pycglbm.testing import artifacts_dir, default_threads, run_program
 
 #: Measured relative error on the interfacial tension, sigma_cal / sigma_th.
 #: Reached from below and flat to three digits over the last 10^4 steps.
@@ -33,7 +33,12 @@ MEASURED_RADIUS = 24.895
 @pytest.fixture(scope="module")
 def high_ratio_run():
     """One shared run of the case, reused by every test in this module."""
-    return run_program("laplace_high_ratio", artifacts_dir() / "laplace_high_ratio", timeout=1800)
+    return run_program(
+        "laplace_high_ratio",
+        artifacts_dir() / "laplace_high_ratio",
+        timeout=1800,
+        threads=default_threads(),
+    )
 
 
 @pytest.fixture(scope="module")

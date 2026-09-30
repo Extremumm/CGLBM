@@ -209,7 +209,8 @@ diffusion of its own, which `--fourth-order-phase` takes out
 (`oscillation_vb E8 1e4 2 45000 --fourth-order-phase`, 1.07). That option is
 off by default, since the diffusion had also been hiding the waves'
 under-resolved boundary layer (0.93 at 1000 on the default wavelength of 64
-nodes, 0.976 with `--wavelength=128`). See
+nodes, 0.976 with `--wavelength=128`). The four velocity-based programs take
+`--threads=N`. See
 [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
 
 ### About the generated files
@@ -363,6 +364,13 @@ matching marker: `unit_test`, `validation` or `verification`. Tests that launch
 a solver are additionally marked `long` and skipped unless `--runlong` is given.
 `pycglbm.testing.run_program` runs a program in its own directory and returns
 the resulting `CaseOutput`.
+
+The two-dimensional long tests run each program on every core
+(`--threads`, `CGLBM_TEST_THREADS` to choose another count), about three
+times faster on four. Every solver loop writes only its own node, so the
+fields are the same to the last bit on any number of threads, and the pinned
+values do not move: the colour-gradient, two-population and velocity-based
+programs give byte-identical output on one thread and on four.
 
 > **Where the Laplace case stands.** The shipped `laplace` case relaxes to a
 > stationary pressure jump of about 1.02 σ/R instead of σ/R, measured against

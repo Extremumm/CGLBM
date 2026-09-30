@@ -21,7 +21,7 @@ import numpy as np
 import pytest
 from pycglbm.normal_modes import droplet_mode
 from pycglbm.oscillation import fit_damped_oscillation
-from pycglbm.testing import artifacts_dir, run_program
+from pycglbm.testing import artifacts_dir, default_threads, run_program
 
 #: Steps skipped before the fit: the acoustic start-up of the release.
 SETTLING_STEPS = 500
@@ -49,7 +49,11 @@ def droplet_run(request):
     """One shared run per case."""
     name = "oscillation_vb" if request.param == "1000" else f"oscillation_vb_{request.param}"
     run = run_program(
-        "oscillation_vb", artifacts_dir() / name, args=CASES[request.param], timeout=5400
+        "oscillation_vb",
+        artifacts_dir() / name,
+        args=CASES[request.param],
+        timeout=5400,
+        threads=default_threads(),
     )
     run.key = request.param
     return run

@@ -30,7 +30,7 @@ why this runs the capillary stress.
 import numpy as np
 import pytest
 from pycglbm import CaseOutput
-from pycglbm.testing import artifacts_dir, run_program
+from pycglbm.testing import artifacts_dir, default_threads, run_program
 
 SPEED = 0.01
 STEPS = 3000
@@ -58,6 +58,7 @@ def translating_run(request) -> CaseOutput:
             "--interval=500",
         ),
         timeout=1800,
+        threads=default_threads(),
     )
     run.stencil = stencil
     return run

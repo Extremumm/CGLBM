@@ -69,6 +69,29 @@ int set_thread_count(int count) {
 #endif
 }
 
+bool take_threads_option(int* argc, char** argv, int* threads) {
+    const std::string prefix = "--threads=";
+    bool valid = true;
+    int kept = 1;
+    for (int n = 1; n < *argc; ++n) {
+        const std::string argument = argv[n];
+        if (argument.rfind(prefix, 0) != 0) {
+            argv[kept++] = argv[n];
+            continue;
+        }
+        const std::string value = argument.substr(prefix.size());
+        char* end = nullptr;
+        const long parsed = std::strtol(value.c_str(), &end, 10);
+        if (value.empty() || *end != '\0' || parsed < 1 || parsed > 4096) {
+            valid = false;
+        } else {
+            *threads = static_cast<int>(parsed);
+        }
+    }
+    *argc = kept;
+    return valid;
+}
+
 double wall_time() {
 #ifdef _OPENMP
     return omp_get_wtime();

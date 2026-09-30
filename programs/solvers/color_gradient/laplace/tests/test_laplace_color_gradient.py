@@ -20,7 +20,7 @@ the same program at a density ratio of 1e4.
 import math
 
 import pytest
-from pycglbm.testing import artifacts_dir, run_program
+from pycglbm.testing import artifacts_dir, default_threads, run_program
 
 # The case parameters are not repeated here: the solver reports them as
 # `key = value` lines at the top of run.log, and CaseOutput.parameter reads them
@@ -70,7 +70,9 @@ MEASURED_INITIAL_DENSITY_RADIUS = 10.06
 @pytest.fixture(scope="module")
 def laplace_run():
     """One shared run of the Laplace case, reused by every test in this module."""
-    return run_program("laplace", artifacts_dir() / "laplace", timeout=1800)
+    return run_program(
+        "laplace", artifacts_dir() / "laplace", timeout=1800, threads=default_threads()
+    )
 
 
 @pytest.fixture(scope="module")
@@ -178,7 +180,13 @@ def test_validation_laplace_color_gradient_higher_isotropy_helps(laplace_run, ca
     gradient cutting spurious currents; this checks the direction of that claim
     on the real case rather than on the stencil alone.
     """
-    coarse = run_program("laplace", artifacts_dir() / "laplace_e4", args=("E4",), timeout=1800)
+    coarse = run_program(
+        "laplace",
+        artifacts_dir() / "laplace_e4",
+        args=("E4",),
+        timeout=1800,
+        threads=default_threads(),
+    )
 
     def peak(run):
         v = run.velocity(case["steps"])

@@ -15,7 +15,7 @@ restores; see src/lbm/velocity_based.h and docs/numerics.md.
 
 import numpy as np
 import pytest
-from pycglbm.testing import artifacts_dir, run_program
+from pycglbm.testing import artifacts_dir, default_threads, run_program
 
 NUM_STEPS = 10000
 AMPLITUDE = 0.01
@@ -31,7 +31,11 @@ MOMENTUM_TOLERANCE = 1.0e-9
 @pytest.fixture(scope="module")
 def layers_run():
     return run_program(
-        "layers", artifacts_dir() / "layers", args=("E8", "1e4", str(AMPLITUDE)), timeout=600
+        "layers",
+        artifacts_dir() / "layers",
+        args=("E8", "1e4", str(AMPLITUDE)),
+        timeout=600,
+        threads=default_threads(),
     )
 
 

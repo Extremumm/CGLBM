@@ -28,7 +28,7 @@ import math
 
 import numpy as np
 import pytest
-from pycglbm.testing import artifacts_dir, run_program
+from pycglbm.testing import artifacts_dir, default_threads, run_program
 
 # Compile-time constants of main_droplet.cpp.
 C_DX = 1.0e-5
@@ -64,7 +64,11 @@ MOMENTUM_TOLERANCE = 1.0e-9
 @pytest.fixture(scope="module")
 def static_run():
     return run_program(
-        "droplet", artifacts_dir() / "droplet_static", args=("E8", "1e4", "0"), timeout=2400
+        "droplet",
+        artifacts_dir() / "droplet_static",
+        args=("E8", "1e4", "0"),
+        timeout=2400,
+        threads=default_threads(),
     )
 
 
@@ -75,13 +79,18 @@ def moving_run(request):
         artifacts_dir() / f"droplet_moving_{request.param}",
         args=("E8", request.param, str(SPEED)),
         timeout=2400,
+        threads=default_threads(),
     )
 
 
 @pytest.fixture(scope="module")
 def heaviest_static_run():
     return run_program(
-        "droplet", artifacts_dir() / "droplet_static_1e6", args=("E8", "1e6", "0"), timeout=2400
+        "droplet",
+        artifacts_dir() / "droplet_static_1e6",
+        args=("E8", "1e6", "0"),
+        timeout=2400,
+        threads=default_threads(),
     )
 
 
@@ -92,6 +101,7 @@ def heaviest_moving_run():
         artifacts_dir() / "droplet_moving_1e6",
         args=("E8", "1e6", str(SPEED)),
         timeout=2400,
+        threads=default_threads(),
     )
 
 
@@ -102,6 +112,7 @@ def fast_run(request):
         artifacts_dir() / f"droplet_fast_{request.param}",
         args=("E8", "1e4", str(FAST_SPEED), request.param),
         timeout=2400,
+        threads=default_threads(),
     )
 
 

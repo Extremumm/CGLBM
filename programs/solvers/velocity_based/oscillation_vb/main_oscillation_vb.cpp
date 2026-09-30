@@ -6,13 +6,14 @@
 
 #include "lbm/isotropic_gradient.h"
 #include "lbm/velocity_based_solver.h"
+#include "omp/omp_environment.h"
 
 // Mode-2 oscillation of a two-dimensional droplet, with the velocity-based
 // scheme of src/lbm/velocity_based.h: the same case as the colour-gradient
 // `oscillation`, against the same exact viscous normal mode.
 //
 // Usage: oscillation_vb [E4|E6|E8|E10|E12] [density_ratio] [mu1] [steps]
-//                       [--fourth-order-phase] [--sixth-order-phase]
+//                       [--fourth-order-phase] [--sixth-order-phase] [--threads=N]
 //
 //   density_ratio  rho1/rho2, default 1000.
 //   mu1            dynamic viscosity of the droplet, lattice units, default 2.
@@ -23,6 +24,8 @@
 //                  SolverParameters::fourth_order_phase describes.
 //   --sixth-order-phase
 //                  and as SolverParameters::sixth_order_phase does.
+//   --threads=N    runs the solver's loops on N OpenMP threads; the fields
+//                  are the same to the last bit as on one.
 //
 // The droplet is laid down as r = R' (1 + eps cos 2 theta), with R' shrunk so
 // that it holds the area of a circle of radius 20, and released with the
@@ -122,6 +125,11 @@ int main(int argc, char** argv) {
     double steps = 24000.0;
     const bool fourth_order_phase = take_flag(&argc, argv, "--fourth-order-phase");
     const bool sixth_order_phase = take_flag(&argc, argv, "--sixth-order-phase");
+    int threads = 0;
+    if (!cglbm::omp::take_threads_option(&argc, argv, &threads)) {
+        std::cerr << "oscillation_vb: --threads expects a whole number of at least 1." << std::endl;
+        return 2;
+    }
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &stencil)) {
         std::cerr << "Unknown gradient stencil '" << argv[1]
                   << "'; expected E4, E6, E8, E10 or E12." << std::endl;
@@ -153,6 +161,10 @@ int main(int argc, char** argv) {
     parameters.stencil = stencil;
     parameters.fourth_order_phase = fourth_order_phase;
     parameters.sixth_order_phase = sixth_order_phase;
+    if (threads > 0) {
+        cglbm::omp::set_thread_count(threads);
+        parameters.parallel = true;
+    }
 
     std::cout << "gradient stencil = " << cglbm::lbm::stencil_name(stencil) << "\n"
               << "nx = " << Lx << "\n"

@@ -20,7 +20,7 @@ third-moment source in the two-population solver".
 import subprocess
 
 import pytest
-from pycglbm.testing import artifacts_dir, find_program, run_program
+from pycglbm.testing import artifacts_dir, default_threads, find_program, run_program
 
 #: Ba et al.'s kinematic viscosity, the same in both fluids.
 NU = 0.1667
@@ -53,7 +53,11 @@ BA_MAX_VELOCITY = 1.25e-4
 def mrt_run():
     """One shared run of Ba et al.'s case, reused by every test in this module."""
     return run_program(
-        "laplace_high_ratio", artifacts_dir() / "laplace_high_ratio_mrt", args=ARGS, timeout=3600
+        "laplace_high_ratio",
+        artifacts_dir() / "laplace_high_ratio_mrt",
+        args=ARGS,
+        timeout=3600,
+        threads=default_threads(),
     )
 
 

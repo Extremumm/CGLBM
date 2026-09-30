@@ -41,7 +41,7 @@ import numpy as np
 import pytest
 from pycglbm.normal_modes import capillary_wave
 from pycglbm.oscillation import fit_damped_oscillation
-from pycglbm.testing import artifacts_dir, run_program
+from pycglbm.testing import artifacts_dir, default_threads, run_program
 
 #: Steps skipped before the fit: the acoustic start-up of the release.
 SETTLING_STEPS = 500
@@ -117,6 +117,7 @@ def wave_run(request):
             *options,
         ),
         timeout=3600,
+        threads=default_threads(),
     )
     run.key = request.param
     return run

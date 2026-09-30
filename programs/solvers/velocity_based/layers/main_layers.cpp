@@ -6,16 +6,19 @@
 
 #include "lbm/isotropic_gradient.h"
 #include "lbm/velocity_based_solver.h"
+#include "omp/omp_environment.h"
 
 // Two layers at a large density ratio sheared across their interfaces, with
 // the velocity-based scheme of src/lbm/velocity_based.h: a Kolmogorov flow.
 //
-// Usage: layers [E4|E6|E8|E10|E12] [density_ratio] [amplitude] [viscosity_ratio]
+// Usage: layers [E4|E6|E8|E10|E12] [density_ratio] [amplitude] [viscosity_ratio] [--threads=N]
 //
 //   density_ratio    rho1/rho2, default 1e4.
 //   amplitude        peak velocity U of the lighter layer, lattice units per
 //                    step. Default 0.01.
 //   viscosity_ratio  mu1/mu2, default 1.
+//   --threads=N      runs the solver's loops on N OpenMP threads; the fields
+//                    are the same to the last bit as on one.
 //
 // Component 1 fills 0 < y < Ly/2, component 2 the rest; both boundaries are
 // periodic. A body force G = U mu2 k^2 sin(k y), k = 2 pi / Ly, along x drives
@@ -60,6 +63,9 @@ double mu1 = mu2;                  // dynamic viscosity of component 1
 
 // Isotropy order of the gradients (surface tension, normals).
 cglbm::lbm::GradientStencil gradient_stencil = cglbm::lbm::GradientStencil::E8;
+
+// OpenMP threads from --threads; 0 runs the solver serially.
+int threads = 0;
 
 // Four ASCII grids per output, as the droplet case writes them.
 void outputDataCSV(const vb::Solver& solver, int timestep) {
@@ -115,6 +121,10 @@ void runSimulation() {
     parameters.surface_tension = sigma;
     parameters.width = width;
     parameters.stencil = gradient_stencil;
+    if (threads > 0) {
+        cglbm::omp::set_thread_count(threads);
+        parameters.parallel = true;
+    }
     vb::Solver solver(parameters);
 
     const double k = 2.0 * M_PI / Ly;
@@ -151,6 +161,10 @@ bool parseNumber(const char* text, double* value) {
 }
 
 int main(int argc, char** argv) {
+    if (!cglbm::omp::take_threads_option(&argc, argv, &threads)) {
+        std::cerr << "--threads expects a whole number of at least 1." << std::endl;
+        return 2;
+    }
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &gradient_stencil)) {
         std::cerr << "Unknown gradient stencil '" << argv[1]
                   << "'; expected E4, E6, E8, E10 or E12." << std::endl;

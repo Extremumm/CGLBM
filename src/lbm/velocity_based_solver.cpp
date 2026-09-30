@@ -124,6 +124,8 @@ void Solver::step() {
 // c from the phase populations, then everything that follows from it and P.
 void Solver::macroscopic() {
     const int nodes = parameters_.nx * parameters_.ny;
+    const bool parallel = parameters_.parallel;
+#pragma omp parallel for if (parallel)
     for (int m = 0; m < nodes; ++m) {
         double sum_h = 0.0;
         double sum_g = 0.0;
@@ -144,6 +146,8 @@ void Solver::acceleration() {
     const int nx = parameters_.nx;
     const int ny = parameters_.ny;
     const GradientStencil stencil = parameters_.stencil;
+    const bool parallel = parameters_.parallel;
+#pragma omp parallel for if (parallel)
     for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < ny; ++j) {
             const int m = node(i, j);
@@ -153,6 +157,7 @@ void Solver::acceleration() {
     }
     const bool sixth = parameters_.sixth_order_phase;
     if (parameters_.fourth_order_phase || sixth) {
+#pragma omp parallel for if (parallel)
         for (int i = 0; i < nx; ++i) {
             for (int j = 0; j < ny; ++j) {
                 const int m = node(i, j);
@@ -161,6 +166,7 @@ void Solver::acceleration() {
             }
         }
         if (sixth) {
+#pragma omp parallel for if (parallel)
             for (int i = 0; i < nx; ++i) {
                 for (int j = 0; j < ny; ++j) {
                     const int m = node(i, j);
@@ -170,6 +176,7 @@ void Solver::acceleration() {
             }
         }
         const double temperature = parameters_.phase_temperature;
+#pragma omp parallel for if (parallel)
         for (int i = 0; i < nx; ++i) {
             for (int j = 0; j < ny; ++j) {
                 const int m = node(i, j);
@@ -222,6 +229,7 @@ void Solver::acceleration() {
         phase_normal_x_ = normal_x_;
         phase_normal_y_ = normal_y_;
     }
+#pragma omp parallel for if (parallel)
     for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < ny; ++j) {
             const int m = node(i, j);
@@ -237,6 +245,7 @@ void Solver::acceleration() {
                              &stress_yy_[m]);
         }
     }
+#pragma omp parallel for if (parallel)
     for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < ny; ++j) {
             const int m = node(i, j);
@@ -277,6 +286,8 @@ void Solver::acceleration() {
 void Solver::momentum() {
     const int nx = parameters_.nx;
     const int ny = parameters_.ny;
+    const bool parallel = parameters_.parallel;
+#pragma omp parallel for if (parallel)
     for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < ny; ++j) {
             const int m = node(i, j);
@@ -325,6 +336,8 @@ void Solver::momentum() {
 // half acceleration of the forcing scheme.
 void Solver::velocity() {
     const int nodes = parameters_.nx * parameters_.ny;
+    const bool parallel = parameters_.parallel;
+#pragma omp parallel for if (parallel)
     for (int m = 0; m < nodes; ++m) {
         set_velocity(&g_[m * kQ], lattice_ux_[m], lattice_uy_[m]);
         ux_[m] = lattice_ux_[m] + 0.5 * ax_[m];
@@ -345,6 +358,8 @@ void Solver::save_step() {
 void Solver::collide_and_stream() {
     const int nx = parameters_.nx;
     const int ny = parameters_.ny;
+    const bool parallel = parameters_.parallel;
+#pragma omp parallel for if (parallel)
     for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < ny; ++j) {
             const int m = node(i, j);

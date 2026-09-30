@@ -40,7 +40,7 @@ import math
 
 import numpy as np
 import pytest
-from pycglbm.testing import artifacts_dir, run_program
+from pycglbm.testing import artifacts_dir, default_threads, run_program
 
 C_DX = 1.0e-5
 C_DT = C_DX / 347.0 / math.sqrt(3.0)
@@ -77,7 +77,11 @@ def high_ratio_run(request):
     """One shared run of the Laplace case per density ratio."""
     ratio = request.param
     run = run_program(
-        "laplace", artifacts_dir() / f"laplace_ratio_{ratio}", args=arguments(ratio), timeout=2400
+        "laplace",
+        artifacts_dir() / f"laplace_ratio_{ratio}",
+        args=arguments(ratio),
+        timeout=2400,
+        threads=default_threads(),
     )
     run.ratio_name = ratio
     return run

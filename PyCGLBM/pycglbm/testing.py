@@ -42,6 +42,20 @@ def find_program(name: str, variant: str = "opt") -> Path:
     return matches[0]
 
 
+def default_threads() -> int:
+    """OpenMP threads a long test gives each run.
+
+    ``CGLBM_TEST_THREADS`` when set, otherwise every core of the machine. The
+    solvers' threaded loops each write only their own node, so a run gives the
+    same fields to the last bit on any number of threads, and the choice only
+    sets how long it takes.
+    """
+    requested = os.environ.get("CGLBM_TEST_THREADS")
+    if requested is not None:
+        return max(1, int(requested))
+    return os.cpu_count() or 1
+
+
 def mpi_launcher() -> str | None:
     """The MPI launcher to use, or None when MPI is unavailable.
 
@@ -116,13 +130,17 @@ def run_program(
     env: dict[str, str] | None = None,
     args=(),
     nprocs: int | None = None,
+    threads: int | None = None,
 ) -> CaseOutput:
     """Run one solver inside ``rundir`` and return its output.
 
     The programs write their CSV files into the current working directory with
-    fixed names, so each run needs a directory of its own.
+    fixed names, so each run needs a directory of its own. ``threads`` above 1
+    passes ``--threads``, which every two-dimensional solver takes.
     """
     executable = find_program(name, variant)
+    if threads is not None and threads > 1:
+        args = (*args, f"--threads={threads}")
     rundir = Path(rundir)
     if clean and rundir.exists():
         shutil.rmtree(rundir)

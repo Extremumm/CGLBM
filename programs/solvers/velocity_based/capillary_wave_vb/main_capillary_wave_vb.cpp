@@ -6,6 +6,7 @@
 
 #include "lbm/isotropic_gradient.h"
 #include "lbm/velocity_based_solver.h"
+#include "omp/omp_environment.h"
 
 // A capillary wave on a heavy layer, with the velocity-based scheme of
 // src/lbm/velocity_based.h: the same case as the colour-gradient
@@ -13,7 +14,7 @@
 //
 // Usage: capillary_wave_vb [E4|E6|E8|E10|E12] [density_ratio] [mu1] [steps] [amplitude]
 //                          [--wavelength=N] [--fourth-order-phase]
-//                          [--sixth-order-phase]
+//                          [--sixth-order-phase] [--threads=N]
 //
 //   density_ratio  rho1/rho2, default 1000.
 //   mu1            dynamic viscosity of the heavy layer, lattice units,
@@ -32,6 +33,8 @@
 //                  SolverParameters::fourth_order_phase describes.
 //   --sixth-order-phase
 //                  and as SolverParameters::sixth_order_phase does.
+//   --threads=N    runs the solver's loops on N OpenMP threads; the fields
+//                  are the same to the last bit as on one.
 //
 // A band of component 1 fills Ly/4 < y < 3Ly/4 of a doubly periodic box. The
 // lower interface is displaced by `amplitude cos(2 pi x / Lx)` and released;
@@ -143,6 +146,12 @@ int main(int argc, char** argv) {
     if (!take_options(&argc, argv, &Lx, &fourth_order_phase, &sixth_order_phase)) {
         return 2;
     }
+    int threads = 0;
+    if (!cglbm::omp::take_threads_option(&argc, argv, &threads)) {
+        std::cerr << "capillary_wave_vb: --threads expects a whole number of at least 1."
+                  << std::endl;
+        return 2;
+    }
     Ly = 2 * Lx;
     if (argc > 1 && !cglbm::lbm::stencil_from_name(argv[1], &stencil)) {
         std::cerr << "Unknown gradient stencil '" << argv[1]
@@ -181,6 +190,10 @@ int main(int argc, char** argv) {
     parameters.stencil = stencil;
     parameters.fourth_order_phase = fourth_order_phase;
     parameters.sixth_order_phase = sixth_order_phase;
+    if (threads > 0) {
+        cglbm::omp::set_thread_count(threads);
+        parameters.parallel = true;
+    }
 
     std::cout << "gradient stencil = " << cglbm::lbm::stencil_name(stencil) << "\n"
               << "nx = " << Lx << "\n"

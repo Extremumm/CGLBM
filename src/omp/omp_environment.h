@@ -31,6 +31,14 @@ int thread_id();
 /// which is 1 without OpenMP.
 int set_thread_count(int count);
 
+/// Take `--threads=N` out of argv, keeping the other arguments in order.
+///
+/// For the programs that read their own positional arguments rather than
+/// `parse_command_line`. Sets `*threads` to N and returns true; leaves it
+/// alone when the option is absent, and returns false when N is not a whole
+/// number of at least 1.
+bool take_threads_option(int* argc, char** argv, int* threads);
+
 /// Wall clock seconds, from `omp_get_wtime()` when available.
 double wall_time();
 

@@ -112,6 +112,14 @@ struct SolverParameters {
     /// edge and the sharpening's own nonlinearity. See docs/numerics.md,
     /// "The phase field's own surface diffusion".
     bool sixth_order_phase = false;
+    /// Run the per-node loops across OpenMP threads.
+    ///
+    /// Every loop of a step writes only its own node, or in the streaming a
+    /// slot that exactly one node writes, and none sums across nodes, so the
+    /// fields are the same to the last bit whatever the thread count. Off by
+    /// default, as in the colour-gradient solvers; the programs turn it on
+    /// with --threads=N.
+    bool parallel = false;
 };
 
 /// The state of one node, to initialise from.
