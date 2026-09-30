@@ -19,7 +19,10 @@
 //     moment only;
 //  6. the memoryless phase transport keeps its tanh profile, conserves c and
 //     stays within [0, 1]; at |u| = 0.2 the limited sharpening keeps every
-//     phase population between 0 and its carrier.
+//     phase population between 0 and its carrier;
+//  7. the lattice Laplacian, the fourth-order interface normal and the
+//     correction flux are exact on a quartic, and with them a mode-2 droplet's
+//     phase field, the fluid held at rest, keeps its shape.
 //
 //   main_lbm_velocity_based
 
@@ -733,6 +736,161 @@ void report_phase_transport() {
     std::cout << "phase_max = " << highest << "\n";
 }
 
+/// A quartic on a 16 x 16 lattice, read at its centre, where no stencil wraps.
+double quartic(int i, int j) {
+    const double x = 0.37 * (i - 8);
+    const double y = 0.29 * (j - 8);
+    return 0.3 + 0.8 * x - 0.5 * y + 0.7 * x * x - 0.4 * x * y + 0.2 * y * y + 0.3 * x * x * x -
+           0.6 * x * y * y + 0.25 * x * x * y + 0.15 * x * x * x * x - 0.2 * x * x * y * y +
+           0.1 * y * y * y * y + 0.05 * x * y * y * y;
+}
+
+void report_fourth_order_operators() {
+    const int n = 16;
+    std::vector<double> field(n * n);
+    std::vector<double> laplacian(n * n);
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            field[i * n + j] = quartic(i, j);
+        }
+    }
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            laplacian[i * n + j] = vb::lattice_laplacian(field.data(), n, n, i, j);
+        }
+    }
+    // exact derivatives at the centre, x = y = 0, in lattice units: each
+    // derivative along i brings a factor 0.37, along j 0.29
+    const double sx = 0.37;
+    const double sy = 0.29;
+    const double fxx = 2.0 * 0.7 * sx * sx;
+    const double fyy = 2.0 * 0.2 * sy * sy;
+    // the lattice Laplacian is del^2 f + (1/12) del^4 f on a quartic
+    const double fxxxx = 24.0 * 0.15 * std::pow(sx, 4);
+    const double fxxyy = 4.0 * -0.2 * sx * sx * sy * sy;
+    const double fyyyy = 24.0 * 0.1 * std::pow(sy, 4);
+    const double lattice = fxx + fyy + (fxxxx + 2.0 * fxxyy + fyyyy) / 12.0;
+    std::cout << "lattice_laplacian_error = "
+              << std::fabs(laplacian[8 * n + 8] - lattice) / std::fabs(lattice) << "\n";
+
+    // the fourth-order normal is grad f / |grad f| exactly
+    const double gx = 0.8 * sx;
+    const double gy = -0.5 * sy;
+    double nx = 0.0, ny = 0.0;
+    vb::interface_normal(field.data(), laplacian.data(), n, n, 8, 8, &nx, &ny);
+    const double norm = std::hypot(gx, gy);
+    double plain_x = 0.0, plain_y = 0.0, px = 0.0, py = 0.0;
+    cglbm::lbm::gradient_periodic(
+        field.data(), n, n, 8, 8, cglbm::lbm::GradientStencil::E4, &plain_x, &plain_y);
+    cglbm::lbm::unit_normal(plain_x, plain_y, &px, &py);
+    std::cout << "interface_normal_error = " << std::hypot(nx - gx / norm, ny - gy / norm) << "\n";
+    std::cout << "plain_normal_error = " << std::hypot(px - gx / norm, py - gy / norm) << "\n";
+
+    // the correction flux is -(T/24) grad del^2 f exactly
+    const double temperature = 0.2;
+    // grad del^2 f: f_xxx + f_xyy and f_xxy + f_yyy
+    const double lap_x = 6.0 * 0.3 * sx * sx * sx - 2.0 * 0.6 * sx * sy * sy;
+    const double lap_y = 2.0 * 0.25 * sx * sx * sy;
+    double fx = 0.0, fy = 0.0;
+    vb::phase_correction_flux(laplacian.data(), n, n, 8, 8, temperature, &fx, &fy);
+    std::cout << "correction_flux_error = "
+              << std::hypot(fx + temperature / 24.0 * lap_x, fy + temperature / 24.0 * lap_y) /
+                     (temperature / 24.0 * std::hypot(lap_x, lap_y))
+              << "\n";
+}
+
+/// Deformation of a mode-2 droplet of radius 10 after `steps` steps of its
+/// phase field alone, the fluid held at rest, over its initial deformation.
+double droplet_shape_kept(bool fourth_order, int steps, double* mass_error, double* lowest) {
+    const int n = 64;
+    const double radius = 10.0;
+    const double width = 1.6;
+    const double temperature = 0.2;
+    std::vector<double> c(n * n), psi(n * n), lap_psi(n * n), lap_c(n * n), next(n * n);
+    for (int i = 0; i < n; ++i) {
+        for (int j = 0; j < n; ++j) {
+            const double x = i - n / 2;
+            const double y = j - n / 2;
+            const double r = std::hypot(x, y);
+            const double cos_2theta = r > 0.0 ? (x * x - y * y) / (r * r) : 0.0;
+            c[i * n + j] =
+                0.5 * (1.0 - std::tanh((r - radius * (1.0 + 0.03 * cos_2theta)) / width));
+        }
+    }
+    auto deformation = [&]() {
+        double difference = 0.0, sum = 0.0;
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) {
+                const double x = i - n / 2;
+                const double y = j - n / 2;
+                difference += c[i * n + j] * (x * x - y * y);
+                sum += c[i * n + j] * (x * x + y * y);
+            }
+        }
+        return difference / sum;
+    };
+    const double initial = deformation();
+    double mass0 = 0.0;
+    for (double v : c) {
+        mass0 += v;
+    }
+    *lowest = 1.0;
+    for (int step = 0; step < steps; ++step) {
+        for (int m = 0; m < n * n; ++m) {
+            psi[m] = 2.0 * std::clamp(c[m], 0.0, 1.0) - 1.0;
+        }
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) {
+                lap_psi[i * n + j] = vb::lattice_laplacian(psi.data(), n, n, i, j);
+                lap_c[i * n + j] = vb::lattice_laplacian(c.data(), n, n, i, j);
+            }
+        }
+        std::fill(next.begin(), next.end(), 0.0);
+        for (int i = 0; i < n; ++i) {
+            for (int j = 0; j < n; ++j) {
+                double nx = 0.0, ny = 0.0, fx = 0.0, fy = 0.0;
+                if (fourth_order) {
+                    vb::interface_normal(psi.data(), lap_psi.data(), n, n, i, j, &nx, &ny);
+                    vb::phase_correction_flux(lap_c.data(), n, n, i, j, temperature, &fx, &fy);
+                } else {
+                    double gx = 0.0, gy = 0.0;
+                    cglbm::lbm::gradient_periodic(
+                        psi.data(), n, n, i, j, cglbm::lbm::GradientStencil::E8, &gx, &gy);
+                    cglbm::lbm::unit_normal(gx, gy, &nx, &ny);
+                }
+                double pop[vb::kQ];
+                vb::phase_populations(
+                    c[i * n + j], 0.0, 0.0, nx, ny, width, pop, temperature, fx, fy);
+                for (int k = 0; k < vb::kQ; ++k) {
+                    const int ip = (i + vb::kVelocity[k][0] + n) % n;
+                    const int jp = (j + vb::kVelocity[k][1] + n) % n;
+                    next[ip * n + jp] += pop[k];
+                }
+            }
+        }
+        c.swap(next);
+        for (double v : c) {
+            *lowest = std::min(*lowest, v);
+        }
+    }
+    double mass = 0.0;
+    for (double v : c) {
+        mass += v;
+    }
+    *mass_error = std::fabs(mass - mass0) / mass0;
+    return deformation() / initial;
+}
+
+void report_fourth_order_phase() {
+    double mass_error = 0.0, lowest = 0.0;
+    const double plain = droplet_shape_kept(false, 2000, &mass_error, &lowest);
+    std::cout << "plain_phase_shape_kept = " << plain << "\n";
+    const double corrected = droplet_shape_kept(true, 2000, &mass_error, &lowest);
+    std::cout << "fourth_order_phase_shape_kept = " << corrected << "\n";
+    std::cout << "fourth_order_phase_mass_error = " << mass_error << "\n";
+    std::cout << "fourth_order_phase_min = " << lowest << "\n";
+}
+
 }  // namespace
 
 int main() {
@@ -747,6 +905,8 @@ int main() {
     report_set_velocity();
     report_phase_limiter();
     report_phase_transport();
+    report_fourth_order_operators();
+    report_fourth_order_phase();
     std::cout << std::flush;
     return 0;
 }

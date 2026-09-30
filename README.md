@@ -200,8 +200,9 @@ velocity). `capillary_wave_vb` and `oscillation_vb` ring down a capillary
 wave and a droplet at a density ratio of 1000 against the exact viscous normal
 modes, within 5 % in damping and 1 % in frequency; a fifth argument sets the
 wave's amplitude, and at 8 nodes (`capillary_wave_vb E8 1000 2 12500 8`) the
-wave still rings down, where the colour-gradient `capillary_wave` diverges from
-4. See
+wave rings down at 1.02 times the linear damping rate; the colour-gradient
+`capillary_wave --source-stencil=matched --amplitude=8` runs it too, since its
+equation of state clamps the phase field, at 1.87. See
 [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
 
 ### About the generated files

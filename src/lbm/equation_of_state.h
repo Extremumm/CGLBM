@@ -48,8 +48,14 @@ struct ComponentPair {
 
 /// Mixture pressure at a node, from its density and phase field.
 ///
-/// `phi` is expected in [-1, 1]; values slightly outside, as the recolouring
-/// step can produce, are handled without a domain error in the square root.
+/// `phi` is expected in [-1, 1], and is clamped to it. At a large density ratio
+/// the colour transport can carry it past 1 by a few thousandths on the heavy
+/// side of a moving interface, at nodes whose density is far below the heavy
+/// component's; there the phase-weighted sound speeds, extrapolated, gave a
+/// pressure below zero (-0.16 against 1/3 in a capillary wave at 1000 with an
+/// amplitude of 8 nodes), and the run diverged. At |phi| = 1 the pressure of
+/// such a node is the other root of the mixture's quadratic, p = -p_inf of the
+/// other component, a floor rather than a runaway.
 double pressure(double rho, double phi, const ComponentPair& components);
 
 /// The single-component pressure the model reduces to when the two branches

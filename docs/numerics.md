@@ -1847,6 +1847,15 @@ ten more, which is why nothing breaks; at 10¹⁰ it would.
   [velocity-based solver](#the-velocity-based-droplet-solver) streams
   continuous moments instead, and removes the divergence.
 
+  The bound is on the populations rather than on every run. A capillary wave
+  at 1000 whose interface moves at up to 4 × 10⁻³ runs to the end, with
+  negative heavy populations beside it, once the equation of state clamps φ
+  to [−1, 1]; before that it diverged from the pressure of nodes where φ
+  had drifted past 1, not from their sign (*Large amplitudes* under
+  [Oscillations against exact normal modes](#oscillations-against-exact-normal-modes)).
+  What it has not been shown to rescue is the uniform translation above,
+  where the heavy side streams its momentum into the light nodes behind it.
+
   Below the divergence the error is still large, and the capillary-wave and
   droplet benchmarks put numbers on it at 1000 (see
   [The heavy fluid's extensional viscosity](#the-heavy-fluids-extensional-viscosity)):
@@ -2192,7 +2201,15 @@ first half-period decays at 1.6 times the exact rate, its second at 1.3.
 
 The `Solver` droplet is damped, not yet at the right rate: about 0.6 of the
 exact rate once it has settled at R = 20, and less at R = 40 (0.46 fitted over
-the run, 0.34 over its second half-period). Its first
+the run, 0.34 over its second half-period). That rate is steady, not a
+transient or a floor: laid down at the width it keeps (`--width-init=1.6`)
+and run for five periods, 7.2 × 10⁴ steps, its half-periods after the first
+decay at 0.61, 0.63, 0.63, 0.61, 0.61, 0.61, 0.60, 0.61 and 0.60 of the exact
+rate, a single mode to 0.1 %. At fixed W/R it converges, slowly: at R = 40
+with `--width=3.2 --width-init=2.2` the second half-period decays at 0.71,
+where R = 20 at the default width gives 0.61, so the missing part goes from
+0.39 to 0.29 with a doubling (R = 20 at W = 3.2 reads 0.81, 0.80 and 0.44;
+what makes its third half-period drop is not known). Its first
 half-period decays faster, mostly because the interface widens from the 1.1
 it is laid down at to the 1.6 the recolouring keeps; laid down at 1.6
 (`--width-init=1.6`), it decays at 0.94, 0.61 and 0.63 of the exact rate over
@@ -2556,11 +2573,27 @@ rate against 2.52 at 0.3 over the same steps, and 8 % and 5 % low in
 frequency. With its face values limited at the interface
 ([The matched stencil at an interface](#the-matched-stencil-at-an-interface))
 the waves at 4 and 6 run the 1.25 × 10⁴ steps, damped 1.66 and 1.86 times the
-linear rate and 2 % and 6 % low in frequency, and the one at 8 still diverges,
-later, at step 4950: its largest velocity triples in the last 150 steps
-before it. The nine-point source runs the wave at 8, damped 3.89 times the
-linear rate and 14 % low in frequency, its excess normal stress holding the
-light side down where the matched one does not. The velocity-based wave stays
+linear rate and 2 % and 6 % low in frequency, and the one at 8 still diverged,
+later, at step 4950. The populations' sign was not the cause. From step 4000
+the colour transport carried φ past 1, by 3 × 10⁻⁴ and then by 3 × 10⁻³, at
+nodes on the heavy side of the interface holding a twentieth to a fiftieth of
+the heavy density. There the equation of state extrapolated its
+phase-weighted sound speeds past the heavy branch, and the pressure went below
+zero: −8 × 10⁻³ at step 4000 and −0.16 by 4900, against 1/3 in the bulk. The
+velocity beside those nodes tripled in the last 150 steps and the run produced
+NaN. `pressure()` clamped only the `1 − φ²` under its square root; it now
+clamps φ itself to [−1, 1], which at |φ| = 1 gives such a node the other root
+of the mixture's quadratic, a floor. With that the waves at 8 and 10 run the
+1.25 × 10⁴ steps too, damped 1.87 and 1.98 times the linear rate and 8 % and
+12 % low in frequency, with the lowest pressure at 0.30 and φ past 1 by at
+most 3 × 10⁻³. The waves at 4 and 6 are unchanged in the third digit. The
+interface of the wave at 8 moves at up to 4 × 10⁻³, ten times what the heavy
+populations can carry while non-negative, so by `T + u² ≥ |u|` some of them
+are negative wherever the heavy fluid beside it moves faster than
+3 × 10⁻⁴; the run holds regardless. The nine-point source
+runs the waves at 8 and 10, damped 3.89 and 3.81 times the linear rate and
+14 % and 15 % low in frequency, its excess normal stress holding the light
+side down where the matched one does not. The velocity-based wave stays
 bounded, its phase field within [−1, 1], and rings down at 1.024 times the
 linear mode's damping rate. Its frequency is 0.909 of the linear one; before
 the collision was filtered in time the two were 1.090 and 0.907, and at an
@@ -2598,16 +2631,121 @@ step's non-equilibrium, three numbers a node. Against the hybrid collision:
 | wave at $10^4$, ν₁ = 2 × 10⁻⁴ | 2.10, 0.952 | 1.27, 0.992 |
 | droplet at $10^4$, ν₁ = 2 × 10⁻⁴ | 2.00, 0.981 | 1.76, 0.988 |
 
-(damping and frequency over the exact mode's). At $10^4$ what is left is the
-thin boundary layer itself, as at 1000 before λ = 128 resolved it; the droplet,
-whose layer is thinner still for its lower frequency, keeps more of the
-excess. Every other long test holds
+(damping and frequency over the exact mode's). What was left at $10^4$ was
+taken then for the thin boundary layer itself, as at 1000 before λ = 128
+resolved it. For the droplet it was mostly not; see
+*The phase field's own surface diffusion* below. Every other long test holds
 where it was: the static droplet at 0.998 σ/R, the droplets launched at 0.01
 and at 0.1 for viscosity ratios 1, 10 and 100 at their mean speeds, momentum
 conserved, and the droplets at $10^6$; a droplet launched at 0.2 at $10^4$
 runs its 10 000 steps too (research copy). In `layers` the light layer's slip
 is 1.88 % against 1.93 %; the heavy layer's largest error, on the interface
 nodes that read as heavy, is 0.42 % against 0.25 %, its bulk within 0.02 %.
+
+**The phase field's own surface diffusion.** At $10^4$ the droplet was still
+damped 1.76 times the exact rate. The heavy fluid's oscillatory boundary
+layer is 1.7 nodes thick there, and resolution was the first suspect, but the
+droplet did not follow it. Over the first 1.85 × 10⁴ steps, where the shipped
+scheme read 1.51 (research copies): ten times the heavy viscosity, a layer of
+5 nodes, gave 1.06; a wider interface, W = 2.4, gave 1.47; a carrier at
+T = 0.05 instead of 0.2 gave 0.89, and 1.165 over the full run.
+
+What the carrier's temperature sets, besides the mobility, is a surface
+diffusion. Streaming the phase populations alone with the fluid held at rest
+(u = 0 in `phase_populations`), a mode-2 droplet should keep its shape, and
+it relaxes instead (deformation D, fitted from step 2000):
+
+| phase field alone, mode 2, W = 1.6 | relaxation of D per step |
+|---|---|
+| R = 20, T = 0.2, E8 normal (as shipped) | 2.91 × 10⁻⁶ |
+| the same at T = 0.05 | 7.26 × 10⁻⁷ |
+| R = 10, R = 40 | 5.06 × 10⁻⁵, 1.78 × 10⁻⁷ |
+| W = 2.4 | 2.99 × 10⁻⁶ |
+| E6 normal, E4 normal | 2.25 × 10⁻⁶, 2.10 × 10⁻⁶ |
+| E4, with the fourth-order normal | 7.7 × 10⁻⁷ |
+| E4, with the correction flux | 1.42 × 10⁻⁶ |
+| E4, with both | 1.05 × 10⁻⁷ |
+
+Proportional to T and to R⁻⁴, and independent of the width: the interface
+moves at `C ∂_s²κ`, surface diffusion, under which mode n decays at
+`C n²(n² − 1)/R⁴`; with the E8 normal `C ≈ 0.19 T`. It has two sources, both
+carried by the mobility `M = T/2`:
+
+- *The normal.* The lattice gradient `G ψ` is `∇ψ + a ∇∇²ψ` to third order,
+  with `a = 1/6` on E4. Along a curved interface `∇²ψ = ψ'' + κψ'` has a
+  tangential gradient `κ'ψ'`, so the normal leans by `a κ'` through the whole
+  profile, and the sharpening carries c along the interface at `M a κ'`:
+  `C = T/12` on E4, more on the wider stencils.
+- *The transport.* To fourth order, streaming the memoryless populations
+  changes c by `∇·(M(∇c − 2c(1 − c) n/W)) − (T/24) ∇⁴c` on the equilibrium
+  profile: the carrier's diffusion adds `(T/24)∇⁴c`, the sharpening, whose
+  flux there is `(T/2)∇c`, `−(T/12)∇⁴c`. Across a curved interface the
+  residual moves it at `(T/24) ∂_s²κ`.
+
+`T/12 + T/24 = 0.125 T`, against the 0.14 T measured on E4. A shape
+relaxation at rate λ adds λ/2 to an oscillation's damping. For the droplet
+at $10^4$, whose exact rate is 1.98 × 10⁻⁶ per step, that is 0.74 of it: the
+measured excess was 0.76. At 1000 the same relaxation is 0.08 of the
+droplet's rate and 0.05 of the wave's, at $10^4$ 0.50 of the wave's. A finer
+lattice shrinks it only as R⁻² against the viscous damping; the phase
+carrier's temperature was lowered to 0.2 for what turns out to be this, 0.088
+of the wave's rate at 1000 at `c_s²` and 0.053 at 0.2, the 0.035 it gained.
+
+`SolverParameters::fourth_order_phase` takes both out. It is off by default
+for now, for the reasons after the table below. The
+phase populations sharpen along `interface_normal`, the direction of
+`G ψ − (1/6) G L ψ`, a fourth-order gradient, and carry the flux of
+`phase_correction_flux`, `−(T/24) G L c`, bounded with the sharpening. `G` is
+the lattice's own gradient (E4) and `L = 6 Σ_i w_i (f(x + ξ_i) − f(x))` its own
+Laplacian, whatever `stencil` is; the capillary stress, the layer weight and
+the colour gradient keep theirs. The unit test checks that the three are
+exact on a quartic, where the plain E4 normal is 2 % off, and that a mode-2
+droplet of radius 10, its phase field alone, loses 0.2 % of its deformation
+in 2000 steps where the E8 normal loses 9 %. In the solver:
+
+| case | before | with `fourth_order_phase` |
+|---|---|---|
+| droplet at $10^4$ | 1.764, 0.988 | 1.067, 0.988 |
+| wave at $10^4$ | 1.268, 0.992 | 0.711, 0.991 |
+| wave at $10^4$, μ₁ = 20, 2 × 10⁴ steps | 1.064, 1.008 | 0.990, 1.005 |
+| wave at 100 | 1.001, 0.991 | 0.976, 0.991 |
+| wave at 1000 | 0.991, 0.992 | 0.930, 0.991 |
+| wave at 1000, amplitude 8 | 1.024, 0.909 | 0.964, 0.906 |
+
+The wave at $10^4$ is now damped too slowly, and that is the boundary layer:
+1.6 nodes thick at μ₁ = 2 and 5 at μ₁ = 20, where the wave comes to 0.990.
+The surface diffusion had added 0.50 to a deficit of about 0.3, and hidden
+it. At 100 and 1000 the same holds on a smaller scale: the waves, 1.001 and
+0.991 before, were a deficit of 0.02 and 0.06 plus a surface diffusion of
+0.02 and 0.05, and λ = 128, which resolved the layer at 1000 before, is the
+case to settle them. Why the droplet, whose layer is as thin, shows no such
+deficit is not established.
+
+The static droplet at $10^4$ (R = 10) is the other cost. The surface
+diffusion damped its shape modes far faster than viscosity: mode 4 at 4.7 ×
+10⁻⁴ per step against a viscous 4.5 × 10⁻⁵. Without it the currents the
+start-up leaves ring on: 1.5 × 10⁻⁵ at the end of the long test's 10⁴ steps
+and 1.3 × 10⁻⁵ after 2.5 × 10⁴, where they are 3 × 10⁻⁶ and slowly rising
+with it; the jump stays at 0.997 σ/R. At R = 10 the corrected phase field
+leaves a small anti-diffusion on modes 2 and 4, −9.6 × 10⁻⁷ and −1.5 × 10⁻⁵
+per step with the fluid at rest, so every mode is still damped, mode 4 at
+about 0.8 of its viscous rate; modes 6 and 8 relax faster than viscosity
+alone would. Whether the remaining currents are that ringing or a steady
+flow from the phase field's normal (E4, fourth-order) and the capillary
+stress's (E8) disagreeing about the equilibrium shape is still open, and
+until it is settled, and the waves' boundary layer with it, the correction is
+off by default. The droplet programs do not expose it yet.
+
+Two things that were not the cause. At rest the phase populations' diffusion
+and sharpening cancel at each node but not on each link, and `link_momentum`
+upwinds that net exchange as if it were advected mass: a velocity diffusion
+of 6.4 × 10⁻³ ρ₁T at the interface's centre, 12.9 at $10^4$ against μ₁ = 2.
+Scaled by 0.25 the droplet goes from 1.51 to 1.46 over the first 1.85 × 10⁴
+steps; taken out altogether it is damped 6.6 times the exact rate, so that
+upwinding is what keeps the interface quiet, and it stays. And the
+droplet at R = 40, the resolution check, needs 1.2 × 10⁵ steps a period at
+$10^4$; the surface diffusion's share of its damping would be a quarter of
+R = 20's.
 
 
 ## Structure of the solver

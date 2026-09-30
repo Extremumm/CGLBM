@@ -1,5 +1,8 @@
 #include "lbm/velocity_based.h"
 
+#include "lbm/isotropic_gradient.h"
+#include "lbm/surface_force.h"
+
 namespace cglbm {
 namespace lbm {
 namespace velocity_based {
@@ -95,7 +98,9 @@ void phase_populations(double c,
                        double normal_y,
                        double width,
                        double* populations,
-                       double temperature) {
+                       double temperature,
+                       double flux_x,
+                       double flux_y) {
     double gamma[kQ];
     phase_carrier(ux, uy, temperature, gamma);
     // the sharpening vanishes outside [0, 1], so a rounding overshoot of c is
@@ -106,8 +111,9 @@ void phase_populations(double c,
     double flux[kQ];
     double theta = 1.0;
     for (int k = 0; k < kQ; ++k) {
-        const double en = kVelocity[k][0] * normal_x + kVelocity[k][1] * normal_y;
-        flux[k] = phase_weight(k, temperature) * sharpening * en / temperature;
+        const double carried = kVelocity[k][0] * (sharpening * normal_x + flux_x) +
+                               kVelocity[k][1] * (sharpening * normal_y + flux_y);
+        flux[k] = phase_weight(k, temperature) * carried / temperature;
         // keep 0 <= c Gamma_k + theta flux_k <= Gamma_k
         if (flux[k] < 0.0 && bounded * gamma[k] < -theta * flux[k]) {
             theta = bounded * gamma[k] / -flux[k];
@@ -121,6 +127,45 @@ void phase_populations(double c,
     for (int k = 0; k < kQ; ++k) {
         populations[k] = c * gamma[k] + theta * flux[k];
     }
+}
+
+double lattice_laplacian(const double* field, int nx, int ny, int i, int j) {
+    const double here = field[i * ny + j];
+    double sum = 0.0;
+    for (int k = 1; k < kQ; ++k) {
+        const int ik = ((i + kVelocity[k][0]) % nx + nx) % nx;
+        const int jk = ((j + kVelocity[k][1]) % ny + ny) % ny;
+        sum += kWeight[k] * (field[ik * ny + jk] - here);
+    }
+    return 2.0 * sum / kCs2;
+}
+
+void interface_normal(const double* psi,
+                      const double* laplacian_psi,
+                      int nx,
+                      int ny,
+                      int i,
+                      int j,
+                      double* normal_x,
+                      double* normal_y) {
+    double gx = 0.0, gy = 0.0, hx = 0.0, hy = 0.0;
+    gradient_periodic(psi, nx, ny, i, j, GradientStencil::E4, &gx, &gy);
+    gradient_periodic(laplacian_psi, nx, ny, i, j, GradientStencil::E4, &hx, &hy);
+    unit_normal(gx - hx / 6.0, gy - hy / 6.0, normal_x, normal_y);
+}
+
+void phase_correction_flux(const double* laplacian_c,
+                           int nx,
+                           int ny,
+                           int i,
+                           int j,
+                           double temperature,
+                           double* flux_x,
+                           double* flux_y) {
+    double hx = 0.0, hy = 0.0;
+    gradient_periodic(laplacian_c, nx, ny, i, j, GradientStencil::E4, &hx, &hy);
+    *flux_x = -temperature / 24.0 * hx;
+    *flux_y = -temperature / 24.0 * hy;
 }
 
 void forcing(double ux, double uy, double ax, double ay, double* source) {

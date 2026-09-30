@@ -48,23 +48,46 @@ struct SolverParameters {
     /// gradient instead (collide_hybrid, at the same 0.7). That misread the
     /// heavy fluid's oscillatory boundary layer wherever it is thinner than
     /// the interface: a capillary wave at 1e4 was damped 2.10 times the exact
-    /// rate, and is 1.27 times with the mean in time.
+    /// rate, and 1.27 times with the mean in time (before fourth_order_phase).
     double filter_weight = 0.7;
     /// Stencil of the gradients: colour field, normals and capillary stress.
+    /// With fourth_order_phase the phase populations sharpen along a normal of
+    /// their own, on the lattice's stencil whatever this one is.
     GradientStencil stencil = GradientStencil::E8;
     /// Lattice temperature of the phase populations' carrier, which sets the
     /// interface mobility M = phase_temperature / 2 (phase_carrier).
     ///
-    /// 0.2 rather than the lattice's own cs^2 = 1/3. The slower interface
-    /// diffusion took the capillary wave at a density ratio of 1000 from 1.084
-    /// to 1.049 times the exact damping rate (with the hybrid collision then in
-    /// use; 0.991 now) and left the static, moving and
-    /// fast droplets and the sheared layers where they were. 0.2 is the lowest
+    /// 0.2 rather than the lattice's own cs^2 = 1/3. It took the capillary
+    /// wave at a density ratio of 1000 from 1.084 to 1.049 times the exact
+    /// damping rate (with the hybrid collision then in use) and left the
+    /// static, moving and fast droplets and the sheared layers where they
+    /// were. What it took out was not the mobility but the surface diffusion
+    /// fourth_order_phase describes, which is proportional to T: 0.088 of the
+    /// exact rate at cs^2, 0.053 at 0.2. 0.2 is the lowest
     /// round value at which the carrier stays non-negative up to |u| = 0.2,
     /// the fastest a droplet has been launched in a research copy (that needs
     /// 0.184; the 0.1 of the long tests needs 0.106). Must lie below 0.6,
     /// where the rest weight is still positive.
     double phase_temperature = 0.2;
+    /// Build the phase populations on the fourth-order normal of
+    /// interface_normal and with the flux of phase_correction_flux.
+    ///
+    /// Without them the phase field alone, the fluid held at rest, relaxes a
+    /// mode-2 droplet of radius 20 at 2.9e-6 per step with the E8 normal:
+    /// surface diffusion, proportional to phase_temperature and to R^-4, three
+    /// quarters of it from the normal's truncation error and the rest from the
+    /// transport's own fourth-order error. With them it relaxes at 1.0e-7. At
+    /// a density ratio of 1e4 the droplet's own viscous damping is 2e-6 per
+    /// step and half the shape relaxation adds to it: the droplet is damped
+    /// 1.76 times the exact rate, and 1.07 times with them.
+    ///
+    /// Off by default for now. The same surface diffusion had been offsetting
+    /// the under-resolved boundary layer of the capillary waves, which come to
+    /// 0.976, 0.930 and 0.711 of the exact rate at 100, 1000 and 1e4 with it
+    /// on (0.990 at 1e4 once the layer is resolved), and the static droplet
+    /// at 1e4 keeps currents of 1.3e-5 instead of 3e-6. See docs/numerics.md,
+    /// "The phase field's own surface diffusion".
+    bool fourth_order_phase = false;
 };
 
 /// The state of one node, to initialise from.
@@ -168,6 +191,14 @@ private:
     std::vector<double> grad_y_;
     std::vector<double> normal_x_;
     std::vector<double> normal_y_;
+    // the phase populations' normal and correction flux, and the lattice
+    // Laplacians of psi and c they are taken from
+    std::vector<double> laplacian_psi_;
+    std::vector<double> laplacian_c_;
+    std::vector<double> phase_normal_x_;
+    std::vector<double> phase_normal_y_;
+    std::vector<double> phase_flux_x_;
+    std::vector<double> phase_flux_y_;
     std::vector<double> stress_xx_;
     std::vector<double> stress_xy_;
     std::vector<double> stress_yy_;

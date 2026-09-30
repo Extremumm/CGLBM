@@ -26,6 +26,15 @@ Before the matched stencil's face values were limited at interfaces it gave
 wave little.
 The velocity-based solver runs the same case in `capillary_wave_vb`.
 
+A fifth run starts the wave at 1000 with the matched stencil and an amplitude
+of 8 nodes instead of 0.3, for one period. It diverged at step 4950 until the
+equation of state clamped the phase field: the colour transport carries phi
+past 1 by up to 3e-3 on the heavy side of the interface, and the pressure
+extrapolated from there fell below zero. Its interface moves at up to 4e-3,
+ten times the speed at which the heavy populations go negative; the run
+holds, damped 1.87 times the linear rate and 8 % low in frequency, as the
+wave stops being linear at `k a = 0.79`.
+
 These are known gaps, so the values are pinned as measured, with a tolerance
 that catches a change in the scheme, and asserted separately are the things
 that must hold whatever the gap: the run stays bounded, and the signal is one
@@ -46,39 +55,54 @@ SETTLING_STEPS = 500
 #: fluid's is 0.05. Both give tau between 0.65 and 6.5.
 HEAVY_VISCOSITY = {"100": 0.5, "1000": 2.0}
 
-#: Run length: four periods at 100, two at 1000.
-STEPS = {"100": 16000, "1000": 25000}
+#: Initial amplitudes, in nodes: the linear wave, and the large one.
+SMALL = 0.3
+LARGE = 8.0
 
-#: Measured decay rate and angular frequency, over the exact mode's.
+#: Run length: four periods at 100, two at 1000, and one for the large wave.
+STEPS = {("100", SMALL): 16000, ("1000", SMALL): 25000, ("1000", LARGE): 12500}
+
+#: Measured decay rate and angular frequency, over the exact linear mode's.
 MEASURED = {
-    ("100", "isotropic"): {"damping": 1.497, "frequency": 0.989},
-    ("100", "matched"): {"damping": 1.187, "frequency": 0.983},
-    ("1000", "isotropic"): {"damping": 3.727, "frequency": 0.903},
-    ("1000", "matched"): {"damping": 2.809, "frequency": 0.890},
+    ("100", "isotropic", SMALL): {"damping": 1.497, "frequency": 0.989},
+    ("100", "matched", SMALL): {"damping": 1.187, "frequency": 0.983},
+    ("1000", "isotropic", SMALL): {"damping": 3.727, "frequency": 0.903},
+    ("1000", "matched", SMALL): {"damping": 2.809, "frequency": 0.890},
+    ("1000", "matched", LARGE): {"damping": 1.873, "frequency": 0.920},
 }
 DAMPING_TOLERANCE = 0.05
 FREQUENCY_TOLERANCE = 0.01
 
+#: How far past +/-1 the phase field may be in the last fields. The large wave
+#: carries it past by up to 3e-3 while it runs (5e-5 in its last fields), which
+#: the equation of state clamps; the small ones stay within rounding.
+PHASE_OVERSHOOT = {SMALL: 1.0e-6, LARGE: 5.0e-3}
 
-def arguments(ratio: str, stencil: str) -> tuple[str, ...]:
+
+def arguments(ratio: str, stencil: str, amplitude: float) -> tuple[str, ...]:
     nu = HEAVY_VISCOSITY[ratio] / float(ratio)
     return (
         f"--rho1={ratio}",
         f"--nu={nu!r}",
         f"--nu-b={nu!r}",
-        f"--steps={STEPS[ratio]}",
+        f"--steps={STEPS[ratio, amplitude]}",
         f"--source-stencil={stencil}",
+        f"--amplitude={amplitude!r}",
     )
 
 
-@pytest.fixture(scope="module", params=sorted(MEASURED))
+def run_name(ratio: str, stencil: str, amplitude: float) -> str:
+    suffix = "" if amplitude == SMALL else f"_amplitude_{amplitude:g}"
+    return f"capillary_wave_{ratio}_{stencil}{suffix}"
+
+
+@pytest.fixture(scope="module", params=sorted(MEASURED), ids=lambda key: run_name(*key))
 def wave_run(request):
-    """One shared run per density ratio and source stencil."""
-    ratio, stencil = request.param
+    """One shared run per density ratio, source stencil and amplitude."""
     run = run_program(
         "capillary_wave",
-        artifacts_dir() / f"capillary_wave_{ratio}_{stencil}",
-        args=arguments(ratio, stencil),
+        artifacts_dir() / run_name(*request.param),
+        args=arguments(*request.param),
         timeout=2400,
     )
     run.key = request.param
@@ -112,12 +136,13 @@ def result(wave_run):
 @pytest.mark.verification
 def test_verification_capillary_wave_runs_the_intended_case(wave_run):
     """The options reached the solver: a flag lost on the way is a different case."""
-    ratio, stencil = wave_run.key
+    ratio, stencil, amplitude = wave_run.key
     assert wave_run.parameter("rho1") / wave_run.parameter("rho2") == float(ratio)
     assert wave_run.config["source_stencil"] == stencil
     assert wave_run.config["viscosity_mixing"] == "dynamic"
     assert wave_run.config["surface_tension"] == "stress"
-    assert wave_run.parameter("steps", int) == STEPS[ratio]
+    assert wave_run.parameter("steps", int) == STEPS[ratio, amplitude]
+    assert wave_run.parameter("amplitude") == amplitude
 
 
 @pytest.mark.long
@@ -129,8 +154,9 @@ def test_verification_capillary_wave_stays_bounded(wave_run, result):
     for field in wave_run.fields(t).values():
         assert np.isfinite(field).all()
     phase = wave_run.phase(t)
-    assert phase.max() <= 1.0 + 1.0e-6
-    assert phase.min() >= -1.0 - 1.0e-6
+    overshoot = PHASE_OVERSHOOT[wave_run.key[2]]
+    assert phase.max() <= 1.0 + overshoot
+    assert phase.min() >= -1.0 - overshoot
 
 
 @pytest.mark.long

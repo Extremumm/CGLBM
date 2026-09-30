@@ -30,18 +30,36 @@ Solver::Solver(const SolverParameters& parameters) : parameters_(parameters) {
     }
     // The populations start at equilibrium, and so does their non-equilibrium.
     previous_non_equilibrium_.assign(nodes * 3, 0.0);
-    for (std::vector<double>* field : {&c_,          &rho_,
-                                       &psi_,        &pressure_number_,
-                                       &ux_,         &uy_,
-                                       &ax_,         &ay_,
-                                       &lattice_ux_, &lattice_uy_,
-                                       &body_x_,     &body_y_,
-                                       &rho_old_,    &pressure_number_old_,
-                                       &ux_old_,     &uy_old_,
-                                       &ax_old_,     &ay_old_,
-                                       &grad_x_,     &grad_y_,
-                                       &normal_x_,   &normal_y_,
-                                       &stress_xx_,  &stress_xy_,
+    for (std::vector<double>* field : {&c_,
+                                       &rho_,
+                                       &psi_,
+                                       &pressure_number_,
+                                       &ux_,
+                                       &uy_,
+                                       &ax_,
+                                       &ay_,
+                                       &lattice_ux_,
+                                       &lattice_uy_,
+                                       &body_x_,
+                                       &body_y_,
+                                       &rho_old_,
+                                       &pressure_number_old_,
+                                       &ux_old_,
+                                       &uy_old_,
+                                       &ax_old_,
+                                       &ay_old_,
+                                       &grad_x_,
+                                       &grad_y_,
+                                       &normal_x_,
+                                       &normal_y_,
+                                       &laplacian_psi_,
+                                       &laplacian_c_,
+                                       &phase_normal_x_,
+                                       &phase_normal_y_,
+                                       &phase_flux_x_,
+                                       &phase_flux_y_,
+                                       &stress_xx_,
+                                       &stress_xy_,
                                        &stress_yy_}) {
         field->assign(nodes, 0.0);
     }
@@ -130,6 +148,39 @@ void Solver::acceleration() {
             gradient_periodic(psi_.data(), nx, ny, i, j, stencil, &grad_x_[m], &grad_y_[m]);
             unit_normal(grad_x_[m], grad_y_[m], &normal_x_[m], &normal_y_[m]);
         }
+    }
+    if (parameters_.fourth_order_phase) {
+        for (int i = 0; i < nx; ++i) {
+            for (int j = 0; j < ny; ++j) {
+                const int m = node(i, j);
+                laplacian_psi_[m] = lattice_laplacian(psi_.data(), nx, ny, i, j);
+                laplacian_c_[m] = lattice_laplacian(c_.data(), nx, ny, i, j);
+            }
+        }
+        for (int i = 0; i < nx; ++i) {
+            for (int j = 0; j < ny; ++j) {
+                const int m = node(i, j);
+                interface_normal(psi_.data(),
+                                 laplacian_psi_.data(),
+                                 nx,
+                                 ny,
+                                 i,
+                                 j,
+                                 &phase_normal_x_[m],
+                                 &phase_normal_y_[m]);
+                phase_correction_flux(laplacian_c_.data(),
+                                      nx,
+                                      ny,
+                                      i,
+                                      j,
+                                      parameters_.phase_temperature,
+                                      &phase_flux_x_[m],
+                                      &phase_flux_y_[m]);
+            }
+        }
+    } else {
+        phase_normal_x_ = normal_x_;
+        phase_normal_y_ = normal_y_;
     }
     for (int i = 0; i < nx; ++i) {
         for (int j = 0; j < ny; ++j) {
@@ -272,11 +323,13 @@ void Solver::collide_and_stream() {
             phase_populations(c_[m],
                               ux_[m],
                               uy_[m],
-                              normal_x_[m],
-                              normal_y_[m],
+                              phase_normal_x_[m],
+                              phase_normal_y_[m],
                               parameters_.width,
                               phase,
-                              parameters_.phase_temperature);
+                              parameters_.phase_temperature,
+                              phase_flux_x_[m],
+                              phase_flux_y_[m]);
             for (int k = 0; k < kQ; ++k) {
                 const int target =
                     node((i + kVelocity[k][0] + nx) % nx, (j + kVelocity[k][1] + ny) % ny);

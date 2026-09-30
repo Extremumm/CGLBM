@@ -164,6 +164,10 @@ void hydrodynamic_equilibrium(double pressure_number, double ux, double uy, doub
 ///
 /// T is `temperature`, that of phase_carrier, and w_i are the weights at T;
 /// the defaults are the lattice's own, cs^2 and its weights.
+///
+/// (flux_x, flux_y) is a flux of c carried with the sharpening, as
+/// theta w_i (xi_i . flux) / T, and bounded with it by the same theta: the
+/// solver passes phase_correction_flux there.
 void phase_populations(double c,
                        double ux,
                        double uy,
@@ -171,7 +175,54 @@ void phase_populations(double c,
                        double normal_y,
                        double width,
                        double* populations,
-                       double temperature = kSoundSpeedSquared);
+                       double temperature = kSoundSpeedSquared,
+                       double flux_x = 0.0,
+                       double flux_y = 0.0);
+
+/// L f = 6 sum_i w_i (f(x + xi_i) - f(x)), the lattice's own Laplacian, on a
+/// field periodic on both axes and indexed `field[i * ny + j]`. Its error is
+/// isotropic, (1/12) del^4 f.
+double lattice_laplacian(const double* field, int nx, int ny, int i, int j);
+
+/// The unit normal the phase populations sharpen along, from the gradient
+/// G psi - (1/6) G L psi, where G is the lattice's own gradient (E4) and
+/// `laplacian_psi` holds L psi.
+///
+/// The memoryless transport keeps the equilibrium profile of a flat interface
+/// whatever the normal's error, but not the shape of a curved one. G psi is
+/// grad psi + (1/6) grad del^2 psi, and along a curved interface
+/// del^2 psi = psi'' + kappa psi' has a tangential gradient kappa' psi': the
+/// normal leans by kappa'/6 across the whole profile, and the sharpening then
+/// carries c along the interface at M kappa'/6. That is surface diffusion,
+/// which relaxes a mode-2 droplet with the fluid at rest at a rate
+/// ~ M n^2 (n^2 - 1) / (6 R^4), whatever its density or viscosity. Taking
+/// the error out makes the gradient fourth-order.
+void interface_normal(const double* psi,
+                      const double* laplacian_psi,
+                      int nx,
+                      int ny,
+                      int i,
+                      int j,
+                      double* normal_x,
+                      double* normal_y);
+
+/// The flux -(T/24) G L c that cancels the memoryless transport's own
+/// fourth-order error on the equilibrium profile.
+///
+/// Expanded to fourth order, streaming the populations of phase_populations
+/// changes c by del . (M (grad c - 2 c (1 - c) n / W)) - (T/24) del^4 c: the
+/// carrier's diffusion adds (T/24) del^4 c and the sharpening, whose flux is
+/// (T/2) grad c at equilibrium, -(T/12) del^4 c. Across a curved interface
+/// the residual moves it at (T/24) times the surface Laplacian of the
+/// curvature, a second surface diffusion. `laplacian_c` holds L c.
+void phase_correction_flux(const double* laplacian_c,
+                           int nx,
+                           int ny,
+                           int i,
+                           int j,
+                           double temperature,
+                           double* flux_x,
+                           double* flux_y);
 
 /// Guo et al. forcing populations for an acceleration a (force per unit mass).
 void forcing(double ux, double uy, double ax, double ay, double* source);

@@ -16,10 +16,11 @@ resolution: the interface is four nodes wide on a wavelength of 64.
 A third run starts the same wave at 1000 with an amplitude of 8 nodes instead
 of 0.3, for one period. Its interface moves at about 4e-3, thirteen times the
 speed at which the colour-gradient solver's heavy populations go negative;
-that solver's wave, with the matched stencil, diverges at this amplitude.
-This one stays bounded. At `k a = 0.79` the wave is no longer linear, so its
-frequency is held only to the value it measured, which is 9 % below the linear
-mode's.
+that solver's wave, with the matched stencil, runs at this amplitude only
+since its equation of state clamps the phase field, and is damped 1.87 times
+the linear rate. This one stays bounded, closer to it. At `k a = 0.79` the
+wave is no longer linear, so its frequency is held only to the value it
+measured, which is 9 % below the linear mode's.
 
 A fourth runs the wave at a density ratio of 1e4, with the same dynamic
 viscosities, for one period. The heavy fluid's oscillatory boundary layer is

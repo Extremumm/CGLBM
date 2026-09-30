@@ -11,7 +11,9 @@
 //     dynamic viscosities by volume;
 //  4. the surface force of a circular interface integrates to the Laplace
 //     jump sigma/R, sums to zero over any closed interface, and vanishes on a
-//     flat one.
+//     flat one;
+//  5. a phase field carried past +/-1 gives the pressure of +/-1, which on the
+//     heavy side of an interface is a floor, not a negative runaway.
 //
 //   main_lbm_mixture [density_ratio] [stencil]
 
@@ -345,6 +347,25 @@ void report_surface_force(GradientStencil stencil) {
 
 }  // namespace
 
+/// The pressure where the colour transport has carried phi past 1: at a node
+/// on the heavy side of a moving interface, holding a twentieth of the heavy
+/// density, as in the capillary wave at 1000 that diverged before phi was
+/// clamped.
+void report_pressure_overshoot(const ComponentPair& components, double density_ratio) {
+    const double rho = std::max(1.0, density_ratio / 50.0);
+    double error = 0.0;
+    double lowest = 1e300;
+    for (double overshoot : {1.0e-9, 1.0e-3, 3.0e-3, 1.4e-2}) {
+        const double above = cglbm::lbm::pressure(rho, 1.0 + overshoot, components);
+        const double below = cglbm::lbm::pressure(rho, -1.0 - overshoot, components);
+        error = std::max(error, std::fabs(above - cglbm::lbm::pressure(rho, 1.0, components)));
+        error = std::max(error, std::fabs(below - cglbm::lbm::pressure(rho, -1.0, components)));
+        lowest = std::min(lowest, above);
+    }
+    std::cout << "pressure_overshoot_error = " << error << "\n";
+    std::cout << "pressure_overshoot_min = " << lowest << "\n";
+}
+
 int main(int argc, char** argv) {
     double density_ratio = 20.0;
     if (argc > 1) {
@@ -370,6 +391,7 @@ int main(int argc, char** argv) {
     report_viscosity(components);
     report_layer_weight();
     report_surface_force(stencil);
+    report_pressure_overshoot(components, density_ratio);
     std::cout << std::flush;
     return 0;
 }

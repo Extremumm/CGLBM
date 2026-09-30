@@ -226,9 +226,12 @@ has gone. In this code it is the velocity-based
   jump of the quantity it differentiates, and the overshoot, by every
   measurement, cancelled the heavy fluid's viscous normal stress at the
   interface. The limit also carries the wave further past the bound: at 1000
-  it now diverges only from an amplitude of 8 nodes (from 4 before), where
-  the velocity-based solver rings it down at 1.02 times the linear damping
-  rate.
+  it diverged only from an amplitude of 8 nodes (from 4 before), and not for
+  its negative populations but because φ drifted past 1 on the heavy side,
+  where the equation of state's extrapolated pressure fell below zero. With
+  φ clamped there the waves at 8 and 10 run to the end, damped 1.9 and 2.0
+  times the linear rate; the velocity-based solver rings the one at 8 down at
+  1.02.
 - Flows with moving interfaces at 10³ and above belong to the velocity-based
   solver, which is the colour-gradient segregation on a family-3
   hydrodynamics — the model Subhedar (2022) describes. As Subhedar also
@@ -240,3 +243,8 @@ has gone. In this code it is the velocity-based
   the finite-difference velocity gradient, took it to 0.991, and the same
   wave at $10^4$ from 2.10 to 1.27
   ([`numerics.md`](numerics.md#oscillations-against-exact-normal-modes)).
+  What the lower temperature took out turns out to be a spurious surface
+  diffusion of the phase field, proportional to it: the truncation errors of
+  the interface normal and of the memoryless transport move a curved
+  interface at `C ∂_s²κ`. Taken out to fourth order (`fourth_order_phase`,
+  opt-in), the droplet at $10^4$ goes from 1.76 to 1.07 times the exact rate.

@@ -156,3 +156,16 @@ def test_unit_test_lbm_mixture_weighted_surface_force_conserves_momentum(stencil
     values = _run(stencil=stencil)
     assert float(values["weighted_ellipse_net_force"]) < 1e-13
     assert float(values["weighted_flat_force"]) < 1e-14
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("density_ratio", DENSITY_RATIOS)
+def test_unit_test_lbm_mixture_pressure_past_phi_one(density_ratio):
+    """Past |phi| = 1 the pressure is that of |phi| = 1, and never below zero.
+
+    Unclamped, phi = 1.003 at a node holding a twentieth of the heavy density
+    gave -0.16 in a capillary wave at 1000, and the run diverged.
+    """
+    values = _run(density_ratio)
+    assert float(values["pressure_overshoot_error"]) == 0.0
+    assert float(values["pressure_overshoot_min"]) >= 0.0

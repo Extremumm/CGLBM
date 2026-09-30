@@ -6,7 +6,8 @@ by the collisions, the positivity of the phase-field carrier, a pressure force
 that leaves no force from a uniform pressure across a density jump of 1e4, a
 link momentum exchange that is equal and opposite at the two ends of every
 link, a dissipation force that sums to zero, and a phase transport that keeps
-its profile, its mass and its bounds, at speeds up to 0.2.
+its profile, its mass and its bounds, at speeds up to 0.2, and with its
+fourth-order corrections the shape of a curved interface.
 """
 
 import pytest
@@ -158,3 +159,28 @@ def test_unit_test_lbm_velocity_based_phase_limiter(values):
     assert float(values["phase_limited_min"]) > -1e-17
     assert float(values["phase_limited_complement_min"]) > -1e-17
     assert float(values["phase_limited_mass_error"]) < 1e-15
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_fourth_order_operators(values):
+    """On a quartic the lattice Laplacian is del^2 f + del^4 f / 12, the
+    interface normal is grad f / |grad f| and the correction flux is
+    -(T/24) grad del^2 f, to rounding; the plain E4 normal is 2 % off."""
+    assert float(values["lattice_laplacian_error"]) < 1e-13
+    assert float(values["interface_normal_error"]) < 1e-13
+    assert float(values["correction_flux_error"]) < 1e-13
+    assert float(values["plain_normal_error"]) > 1e-2
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_fourth_order_phase_keeps_the_shape(values):
+    """A mode-2 droplet of radius 10, its phase field alone with the fluid at
+    rest: over 2000 steps the E8 normal loses 9 % of the deformation to
+    surface diffusion, the fourth-order phase 0.2 %, conserving c and staying
+    non-negative."""
+    plain = float(values["plain_phase_shape_kept"])
+    corrected = float(values["fourth_order_phase_shape_kept"])
+    assert plain < 0.95
+    assert abs(corrected - 1.0) < 0.1 * (1.0 - plain)
+    assert float(values["fourth_order_phase_mass_error"]) < 1e-12
+    assert float(values["fourth_order_phase_min"]) >= 0.0

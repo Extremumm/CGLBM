@@ -20,14 +20,17 @@
 /// fluid's volume in each column of the lower half.
 ///
 /// The defaults are the density ratio of 1000 the tests run; `--rho1`, `--nu`
-/// and `--nu2` move it. The dynamic viscosities are mixed as rho nu and the
-/// tension is the divergence of the capillary stress, as the high-ratio
-/// Laplace case runs.
+/// and `--nu2` move it, and `--amplitude=X`, which this program reads before
+/// the shared options, sets the initial displacement in nodes. The dynamic viscosities are mixed as
+/// rho nu and the tension is the divergence of the capillary stress, as the high-ratio Laplace case
+/// runs.
 
 #include <cmath>
+#include <cstdlib>
 #include <fstream>
 #include <iostream>
 #include <limits>
+#include <string>
 
 #include "lbm/case_config.h"
 #include "lbm/output_writer.h"
@@ -44,15 +47,16 @@ const double c_dt = c_dx / 347. / std::sqrt(3.);  // s
 
 constexpr double kPi = 3.14159265358979323846;
 
-/// Initial displacement of the lower interface, in nodes. Small enough that
-/// the wave is linear at a density ratio of 1000, where the light side of a
-/// moving interface is what limits the scheme.
+/// Initial displacement of the lower interface, in nodes, unless
+/// `--amplitude` gives another. Small enough that the wave is linear at a
+/// density ratio of 1000, where the light side of a moving interface is what
+/// limits the scheme.
 constexpr double kAmplitude = 0.3;
 
 /// How often `mode.csv` is written.
 constexpr int kTrackInterval = 50;
 
-CaseConfig capillary_wave_case() {
+CaseConfig capillary_wave_case(double amplitude) {
     CaseConfig config;
     config.name = "capillary_wave";
     config.nx = 64;
@@ -85,9 +89,9 @@ CaseConfig capillary_wave_case() {
     config.surface_tension = cglbm::lbm::SurfaceTension::CapillaryStress;
     config.viscosity_mixing = cglbm::lbm::ViscosityMixing::Dynamic;
 
-    config.initial_phase = [](const CaseConfig& c, int i, int j) {
+    config.initial_phase = [amplitude](const CaseConfig& c, int i, int j) {
         const double width = c.physics.ch_width_init;
-        const double lower = c.ny / 4.0 + kAmplitude * std::cos(2.0 * kPi * i / c.nx);
+        const double lower = c.ny / 4.0 + amplitude * std::cos(2.0 * kPi * i / c.nx);
         const double upper = 3.0 * c.ny / 4.0;
         return j < c.ny / 2 ? std::tanh((j - lower) / width) : std::tanh((upper - j) / width);
     };
@@ -112,12 +116,42 @@ double mode_amplitude(const cglbm::lbm::Solver& solver) {
     return amplitude;
 }
 
+/// Takes `--amplitude=X` out of the arguments, which the shared parser would
+/// reject, and reads it into `amplitude`.
+bool take_amplitude(int* argc, char** argv, double* amplitude) {
+    const std::string prefix = "--amplitude=";
+    int kept = 1;
+    for (int n = 1; n < *argc; ++n) {
+        const std::string argument = argv[n];
+        if (argument.rfind(prefix, 0) != 0) {
+            argv[kept++] = argv[n];
+            continue;
+        }
+        const std::string value = argument.substr(prefix.size());
+        char* end = nullptr;
+        *amplitude = std::strtod(value.c_str(), &end);
+        if (value.empty() || *end != '\0' || !std::isfinite(*amplitude)) {
+            std::cerr << "capillary_wave: --amplitude expects a number, got '" << value << "'."
+                      << std::endl;
+            return false;
+        }
+    }
+    *argc = kept;
+    return true;
+}
+
 }  // namespace
 
 int main(int argc, char** argv) {
-    CaseConfig config = capillary_wave_case();
+    double amplitude = kAmplitude;
+    if (!take_amplitude(&argc, argv, &amplitude)) {
+        return 2;
+    }
+    CaseConfig config = capillary_wave_case(amplitude);
     switch (cglbm::lbm::parse_command_line(config, argc, argv, "capillary_wave")) {
     case cglbm::lbm::CommandLineResult::Finished:
+        std::cout << "  --amplitude=X       initial displacement of the lower interface, in\n"
+                  << "                      nodes (" << kAmplitude << ")" << std::endl;
         return 0;
     case cglbm::lbm::CommandLineResult::Error:
         return 2;
@@ -125,7 +159,7 @@ int main(int argc, char** argv) {
         break;
     }
 
-    std::cout << cglbm::lbm::describe(config) << "\namplitude = " << kAmplitude << std::endl;
+    std::cout << cglbm::lbm::describe(config) << "\namplitude = " << amplitude << std::endl;
     try {
         cglbm::lbm::Solver solver(config);
         cglbm::lbm::CsvWriter writer(config.output_precision);
