@@ -5,6 +5,7 @@
 #include <string>
 
 #include "lbm/isotropic_gradient.h"
+#include "lbm/velocity_based_output.h"
 #include "lbm/velocity_based_solver.h"
 #include "omp/omp_environment.h"
 
@@ -59,26 +60,6 @@ const double sigma = 1. / (c_dx * c_dx * c_dx / c_dt / c_dt);  // as in the lapl
 const int interval = 5000;                                     // grid output interval
 const int track_interval = 50;
 
-// Four ASCII grids per output, as the other programs write them.
-void write_grids(const vb::Solver& solver, int timestep) {
-    std::ofstream density("density_" + std::to_string(timestep) + ".csv");
-    std::ofstream velocity("velocity_" + std::to_string(timestep) + ".csv");
-    std::ofstream phase("phase_" + std::to_string(timestep) + ".csv");
-    std::ofstream pressure("pressure_" + std::to_string(timestep) + ".csv");
-    for (auto* file : {&density, &velocity, &phase, &pressure}) {
-        file->precision(10);
-    }
-    for (int j = 0; j < Ly; ++j) {
-        for (int i = 0; i < Lx; ++i) {
-            const char* separator = i < Lx - 1 ? "," : "\n";
-            density << solver.density(i, j) << separator;
-            velocity << solver.velocity_x(i, j) << "," << solver.velocity_y(i, j) << separator;
-            phase << solver.phase(i, j) << separator;
-            pressure << solver.pressure(i, j) << separator;
-        }
-    }
-}
-
 // First cosine coefficient of the lower interface's height.
 double mode_amplitude(const vb::Solver& solver) {
     double result = 0.0;
@@ -90,17 +71,6 @@ double mode_amplitude(const vb::Solver& solver) {
         result += 2.0 / Lx * (Ly / 2.0 - volume) * std::cos(2.0 * kPi * i / Lx);
     }
     return result;
-}
-
-// A number, or false.
-bool parse_number(const char* text, double* value) {
-    char* end = nullptr;
-    const double parsed = std::strtod(text, &end);
-    if (end == text || *end != '\0' || !std::isfinite(parsed)) {
-        return false;
-    }
-    *value = parsed;
-    return true;
 }
 
 // Takes the options out of argv, leaving the positional arguments.
@@ -117,7 +87,7 @@ bool take_options(
         } else if (argument.rfind(wavelength_prefix, 0) == 0) {
             const std::string value = argument.substr(wavelength_prefix.size());
             double parsed = 0.0;
-            if (!parse_number(value.c_str(), &parsed) || parsed < 8.0 ||
+            if (!vb::parse_number(value.c_str(), &parsed) || parsed < 8.0 ||
                 parsed != std::floor(parsed)) {
                 std::cerr << "capillary_wave_vb: --wavelength expects a whole number of nodes, "
                              "at least 8, got '"
@@ -158,22 +128,22 @@ int main(int argc, char** argv) {
                   << "'; expected E4, E6, E8, E10 or E12." << std::endl;
         return 2;
     }
-    if (argc > 2 && !(parse_number(argv[2], &density_ratio) && density_ratio > 1.0)) {
+    if (argc > 2 && !(vb::parse_number(argv[2], &density_ratio) && density_ratio > 1.0)) {
         std::cerr << "Invalid density ratio '" << argv[2] << "'; expected a number above 1."
                   << std::endl;
         return 2;
     }
-    if (argc > 3 && !(parse_number(argv[3], &mu1) && mu1 > 0.0)) {
+    if (argc > 3 && !(vb::parse_number(argv[3], &mu1) && mu1 > 0.0)) {
         std::cerr << "Invalid viscosity '" << argv[3] << "'; expected a positive number."
                   << std::endl;
         return 2;
     }
-    if (argc > 4 && !(parse_number(argv[4], &steps) && steps >= 0.0)) {
+    if (argc > 4 && !(vb::parse_number(argv[4], &steps) && steps >= 0.0)) {
         std::cerr << "Invalid step count '" << argv[4] << "'." << std::endl;
         return 2;
     }
     // at most a quarter of the layer, so the interface stays inside it
-    if (argc > 5 && !(parse_number(argv[5], &amplitude) && std::fabs(amplitude) < Ly / 8.0)) {
+    if (argc > 5 && !(vb::parse_number(argv[5], &amplitude) && std::fabs(amplitude) < Ly / 8.0)) {
         std::cerr << "Invalid amplitude '" << argv[5] << "'; expected a number below " << Ly / 8
                   << " in magnitude." << std::endl;
         return 2;
@@ -227,7 +197,7 @@ int main(int argc, char** argv) {
     }
     track.precision(12);
     track << "timestep,amplitude\n";
-    write_grids(solver, 0);
+    vb::write_fields(solver, 0);
     const int total = static_cast<int>(steps);
     for (int timestep = 0; timestep <= total; ++timestep) {
         if (timestep > 0) {
@@ -238,7 +208,7 @@ int main(int argc, char** argv) {
         }
         if (timestep > 0 && timestep % interval == 0) {
             std::cout << "Step " << timestep << std::endl;
-            write_grids(solver, timestep);
+            vb::write_fields(solver, timestep);
         }
     }
     if (!track) {

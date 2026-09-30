@@ -5,6 +5,7 @@
 #include <string>
 
 #include "lbm/isotropic_gradient.h"
+#include "lbm/velocity_based_output.h"
 #include "lbm/velocity_based_solver.h"
 #include "omp/omp_environment.h"
 
@@ -68,38 +69,6 @@ cglbm::lbm::GradientStencil gradient_stencil = cglbm::lbm::GradientStencil::E8;
 // OpenMP threads from --threads; 0 runs the solver serially.
 int threads = 0;
 
-// Four ASCII grids per output, as the colour-gradient solvers write them. The
-// phase field is psi = 2c - 1, +1 in the droplet; the pressure is relative to
-// the far field.
-void outputDataCSV(const vb::Solver& solver, int timestep) {
-    std::ofstream fileDensity("density_" + std::to_string(timestep) + ".csv");
-    std::ofstream fileVelocity("velocity_" + std::to_string(timestep) + ".csv");
-    std::ofstream filePhase("phase_" + std::to_string(timestep) + ".csv");
-    std::ofstream filePressure("pressure_" + std::to_string(timestep) + ".csv");
-    fileDensity.precision(10);
-    fileVelocity.precision(10);
-    filePhase.precision(10);
-    filePressure.precision(10);
-    for (int j = 0; j < Ly; ++j) {
-        for (int i = 0; i < Lx; ++i) {
-            fileDensity << solver.density(i, j);
-            fileVelocity << solver.velocity_x(i, j) << "," << solver.velocity_y(i, j);
-            filePhase << solver.phase(i, j);
-            filePressure << solver.pressure(i, j);
-            if (i < Lx - 1) {
-                fileDensity << ",";
-                fileVelocity << ",";
-                filePhase << ",";
-                filePressure << ",";
-            }
-        }
-        fileDensity << "\n";
-        fileVelocity << "\n";
-        filePhase << "\n";
-        filePressure << "\n";
-    }
-}
-
 void runSimulation() {
     std::cout << "sigma = " << sigma << std::endl;
     std::cout << "radius = " << radius << std::endl;
@@ -137,25 +106,14 @@ void runSimulation() {
         state.p = sigma / radius * state.c;
         return state;
     });
-    outputDataCSV(solver, 0);
+    vb::write_fields(solver, 0);
     for (int n = 1; n < numSteps + 1; n++) {
         solver.step();
         if (n % interval == 0) {
             std::cout << "Step " << n << std::endl;
-            outputDataCSV(solver, n);
+            vb::write_fields(solver, n);
         }
     }
-}
-
-// A number, or false.
-bool parseNumber(const char* text, double* value) {
-    char* end = nullptr;
-    const double parsed = std::strtod(text, &end);
-    if (end == text || *end != '\0' || !std::isfinite(parsed)) {
-        return false;
-    }
-    *value = parsed;
-    return true;
 }
 
 int main(int argc, char** argv) {
@@ -169,17 +127,17 @@ int main(int argc, char** argv) {
         return 2;
     }
     double density_ratio = rho1 / rho2;
-    if (argc > 2 && !(parseNumber(argv[2], &density_ratio) && density_ratio > 0.0)) {
+    if (argc > 2 && !(vb::parse_number(argv[2], &density_ratio) && density_ratio > 0.0)) {
         std::cerr << "Invalid density ratio '" << argv[2] << "'; expected a positive number."
                   << std::endl;
         return 2;
     }
-    if (argc > 3 && !parseNumber(argv[3], &velocity)) {
+    if (argc > 3 && !vb::parse_number(argv[3], &velocity)) {
         std::cerr << "Invalid velocity '" << argv[3] << "'; expected a number." << std::endl;
         return 2;
     }
     double viscosity_ratio = 1.0;
-    if (argc > 4 && !(parseNumber(argv[4], &viscosity_ratio) && viscosity_ratio > 0.0)) {
+    if (argc > 4 && !(vb::parse_number(argv[4], &viscosity_ratio) && viscosity_ratio > 0.0)) {
         std::cerr << "Invalid viscosity ratio '" << argv[4] << "'; expected a positive number."
                   << std::endl;
         return 2;
