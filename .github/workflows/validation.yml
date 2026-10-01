@@ -17,9 +17,10 @@ jobs:
   laplace:
     name: Laplace benchmark
     runs-on: ubuntu-latest
-    # five full laplace runs of about ten minutes each (density ratio 20 with E8
-    # and E4, density ratios 1e4, 1e5 and 1e6), two translating ones of about
-    # two, eight droplet runs of about five and a layers run of under one
+    # five full laplace runs (density ratio 20 with E8 and E4, density ratios
+    # 1e4, 1e5 and 1e6), two translating ones, eight droplet runs and a layers
+    # run: 82 minutes serially, 40 with every run on the runner's four vCPUs
+    # (--threads, pycglbm.testing.default_threads), the output unchanged
     timeout-minutes: 120
 
     steps:
@@ -189,15 +190,16 @@ jobs:
   oscillations:
     name: Oscillation benchmarks (${{ matrix.shard }})
     runs-on: ubuntu-latest
-    # main: fourteen runs of three to ten minutes each: the capillary wave at
+    # Every run takes all the runner's vCPUs (--threads): main 33 minutes and
+    # fourth-order 24, against 52 and 46 serially, the output unchanged.
+    # main: fourteen runs: the capillary wave at
     # density ratios of 100 and 1000 and the droplet at 1000, in the
     # colour-gradient solver with both source stencils and in the
     # velocity-based solver, the droplet in the two-population solver with
     # both stencils, a large-amplitude wave at 1000 in both solvers, and the
     # wave at 1e4 in the velocity-based solver.
     # fourth-order: the velocity-based solver with --fourth-order-phase, the
-    # wave of wavelength 128 at 1000 (half an hour) and the droplet at 1e4
-    # (under an hour).
+    # wave of wavelength 128 at 1000 and the droplet at 1e4.
     timeout-minutes: 120
     strategy:
       fail-fast: false
