@@ -102,6 +102,8 @@ moving interface stops carrying the density in its populations**.
 | Generalized equilibria, central-moment collision | Saito et al. 2023, Eqs. (25), (56)–(63) | **added here**, `--collision=central` (D2Q9 form derived here) | no |
 | Velocity-based equilibrium | Zu & He 2013; Fakhari et al. 2017; Subhedar 2022 | no | no — the `droplet` solver |
 | Interface mobility set on its own | Subhedar 2022 | no | no — `phase_temperature` in the `droplet` solver |
+| Walls and gravity, for layered Poiseuille flow and Rayleigh–Taylor | Zu & He 2013; Fakhari et al. 2017; Liang et al. 2018 | yes | no — **added here** to the `droplet` solver: `poiseuille_vb`, `rayleigh_taylor_vb` |
+| A viscosity that carries shear across the interface | Liang et al. 2018 (a step at φ = 1/2) | no | no — **added here** to the `droplet` solver, `--viscosity=laminate`: harmonic for the shear across, arithmetic for the stretching along |
 
 Before this review, MRT was the one ingredient of Ba et al. neither
 colour-gradient solver had, and the two-population solver also lacked the
@@ -262,3 +264,21 @@ has gone. In this code it is the velocity-based
   The fourth-order normal has to be kept to the interface itself: taken in
   its far tails as well, it let a capillary wave on a wavelength of 128 grow
   cells in the heavy fluid.
+- The velocity-based solver now runs the wall-bounded benchmarks of family 3:
+  resting walls and gravity, with layered Poiseuille flow and the
+  Rayleigh–Taylor instability scored against exact solutions. The
+  Rayleigh–Taylor mode at a density ratio of 1000 grows at 0.98 of the exact
+  viscous rate, 0.99 on twice the resolution. The layered flow showed what
+  none of the periodic cases had: the shear stress that crosses a diffuse
+  interface sees the two fluids in series, and mixing the viscosity
+  arithmetically on the volume fraction, as most of family 3 does, makes the
+  light side of a 1000-to-1 interface forty times too viscous a few nodes
+  into it. The light layer was 41 % off its profile. Liang et al. (2018) take
+  a viscosity that jumps at φ = 1/2 for this test, which they warn may not
+  hold up under large changes of topology; the laminate mixing here takes the
+  harmonic mean for the shear across the interface and the arithmetic one for
+  the stretching along it, and brings the layered flow to 4.6 % (on Liang et
+  al.'s own case 0.017 in their L1 error, against their 0.032). It lowers the
+  damping of the capillary waves, whose boundary layer the interface does not
+  resolve, by 2 to 17 %, and is not the default
+  ([numerics.md](numerics.md#walls-gravity-and-the-viscosity-across-an-interface)).

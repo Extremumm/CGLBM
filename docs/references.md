@@ -373,7 +373,12 @@ entry above says otherwise, each is cited for what its abstract or Ba et al.
     DOI: [10.1103/PhysRevE.97.033309](https://doi.org/10.1103/PhysRevE.97.033309)
 
     Droplet splashing at a density ratio of 1000, Re 20–500: the test Ba et
-    al. run with a colour-gradient model at 100.
+    al. run with a colour-gradient model at 100. Also layered Poiseuille flow
+    at 1000 in density and 100 in viscosity on 100 nodes, with a viscosity
+    that jumps where φ crosses 1/2: a relative L1 error of 0.032, against 0.11
+    and 0.39 for the models of Ren et al. (2016) and Fakhari et al. (2017),
+    the case `poiseuille_vb` reproduces
+    ([`numerics.md`](numerics.md#walls-gravity-and-the-viscosity-across-an-interface)).
 
 42. **B. Dorschner, F. Bösch, I. V. Karlin.** *Particles on demand for kinetic
     theory.* Physical Review Letters **121**, 130602, 2018. And
@@ -385,6 +390,24 @@ entry above says otherwise, each is cited for what its abstract or Ba et al.
     which lifts the bound a fixed lattice puts on a cold fluid's speed
     (`T + u² ≥ |u|`, [`literature.md`](literature.md#what-limits-the-density-ratio)).
     Shown on compressible single-phase flows; not implemented here.
+
+43. **F. Ren, B. Song, M. C. Sukop, H. Hu.** *Improved lattice Boltzmann
+    modeling of binary flow based on the conservative Allen-Cahn equation.*
+    Physical Review E **94**, 023311, 2016.
+    DOI: [10.1103/PhysRevE.94.023311](https://doi.org/10.1103/PhysRevE.94.023311)
+
+    A conservative Allen–Cahn model of family 3; on the layered Poiseuille flow
+    of Liang et al. (2018) at 1000 in density and 100 in viscosity it is at a
+    relative L1 error of 0.11, as they ran it.
+
+44. **S. Chandrasekhar.** *Hydrodynamic and Hydromagnetic Stability.* Oxford,
+    1961, chapter X.
+
+    The normal modes of a viscous interface under gravity and tension, and
+    with the heavier fluid on top the Rayleigh–Taylor growth rate:
+    `pycglbm.normal_modes.capillary_wave` with `gravity`, which
+    `rayleigh_taylor_vb` is scored against. Checked against Lamb's exact
+    free-surface relation for a stable gravity–capillary wave to 10⁻⁹.
 
 ## Lattice Boltzmann background
 

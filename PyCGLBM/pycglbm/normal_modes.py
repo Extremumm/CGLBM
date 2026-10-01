@@ -78,17 +78,42 @@ def _weak_start(decay_rate: float, angular_frequency: float) -> complex:
 
 
 def capillary_wave(
-    wavenumber: float, rho1: float, rho2: float, mu1: float, mu2: float, sigma: float
+    wavenumber: float,
+    rho1: float,
+    rho2: float,
+    mu1: float,
+    mu2: float,
+    sigma: float,
+    gravity: float = 0.0,
 ) -> NormalMode:
     """The capillary wave on a flat interface between two semi-infinite fluids.
 
-    Fluid 1 lies below the interface, fluid 2 above; gravity is absent. The
-    inviscid limit is `omega^2 = sigma k^3 / (rho1 + rho2)`, and with one fluid
-    only the weak-damping limit is `2 nu k^2`.
+    Fluid 1 lies below the interface, fluid 2 above, and `gravity` points from
+    fluid 2 to fluid 1, downwards. The inviscid limit is
+    `omega^2 = [sigma k^3 + (rho1 - rho2) g k] / (rho1 + rho2)`, and with one
+    fluid only the weak-damping limit is `2 nu k^2`.
+
+    With the heavier fluid on top, `rho2 > rho1`, and a wavelength longer than
+    the capillary cutoff `2 pi (sigma / ((rho2 - rho1) g))^(1/2)`, the interface
+    is unstable: this is the Rayleigh-Taylor mode, `s` is real and positive,
+    and the mode returned has `angular_frequency` 0 and a negative
+    `decay_rate`, minus its growth rate (Chandrasekhar 1961, sec. 94). Gravity
+    enters only through the hydrostatic pressure of the displaced interface,
+    which the normal-stress balance takes up beside the tension:
+    `sigma k^2` becomes `sigma k^2 + (rho1 - rho2) g`.
     """
     k = float(wavenumber)
-    omega_0 = np.sqrt(sigma * k**3 / (rho1 + rho2))
-    start = _weak_start(2.0 * k * k * (mu1 + mu2) / (rho1 + rho2), omega_0)
+    # sigma k^2 + (rho1 - rho2) g, the restoring stiffness per unit displacement
+    stiffness = sigma * k * k + (rho1 - rho2) * gravity
+    omega_squared = stiffness * k / (rho1 + rho2)
+    omega_0 = np.sqrt(abs(omega_squared))
+    if omega_0 == 0.0:
+        raise ValueError("the interface is neutrally stable: no restoring force and no drive")
+    damping = 2.0 * k * k * (mu1 + mu2) / (rho1 + rho2)
+    if omega_squared > 0.0:
+        start = _weak_start(damping, omega_0)
+    else:
+        start = complex(omega_0 - damping, 0.0) if omega_0 > damping else complex(0.5 * omega_0)
     # Fixed row scales, so that the determinant stays analytic in s.
     scale_shear = 1.0 / (max(mu1, mu2) * k * k)
     scale_normal = 1.0 / ((rho1 + rho2) * omega_0)
@@ -110,8 +135,8 @@ def capillary_wave(
                     -scale_shear * mu2 * (m2 * m2 + k * k),
                 ],
                 [
-                    scale_normal * (-(rho1 * s + 2.0 * mu1 * k * k) - sigma * k**3 / s),
-                    scale_normal * (2.0 * mu1 * ik * m1 + sigma * k * k * ik / s),
+                    scale_normal * (-(rho1 * s + 2.0 * mu1 * k * k) - stiffness * k / s),
+                    scale_normal * (2.0 * mu1 * ik * m1 + stiffness * ik / s),
                     scale_normal * (rho2 * s + 2.0 * mu2 * k * k),
                     scale_normal * 2.0 * mu2 * ik * m2,
                 ],
@@ -121,6 +146,10 @@ def capillary_wave(
         return complex(np.linalg.det(matrix))
 
     s = _secant(determinant, start)
+    if omega_squared < 0.0:
+        if s.real <= 0.0 or abs(s.imag) > 1.0e-8 * abs(s):
+            raise ValueError(f"the unstable mode converged to s = {s}, not to a growing one")
+        s = complex(s.real, 0.0)
     return NormalMode(decay_rate=-s.real, angular_frequency=s.imag)
 
 

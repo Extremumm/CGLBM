@@ -104,6 +104,8 @@
 ///    method-based large eddy simulation", J. Turbul. 19, 1051-1076 (2018).
 ///    The regularised and hybrid regularised collisions.
 
+#include "lbm/isotropic_gradient.h"
+
 namespace cglbm {
 namespace lbm {
 namespace velocity_based {
@@ -179,10 +181,42 @@ void phase_populations(double c,
                        double flux_x = 0.0,
                        double flux_y = 0.0);
 
+/// `field` at (i, j), for i and j up to a few nodes outside the lattice; the
+/// fields are `nx * ny` values indexed `[i * ny + j]`.
+///
+/// x is periodic. Along y, Boundary::PeriodicY wraps, and Boundary::WallY
+/// mirrors (i, j) across the wall it is past, at j = -1/2 or j = ny - 1/2,
+/// and multiplies the value by `parity`: +1 for a field even across the wall,
+/// as psi, c and p are at a wall nothing crosses, -1 for an odd one, as the
+/// wall-normal component of a vector is.
+///
+/// Every function below that reads neighbours takes a `boundary`, and reads
+/// them this way: the stencil operators through mirrored values, so that a
+/// uniform field has no gradient at a wall and the interface meets it at a
+/// right angle. The populations themselves bounce back (Solver), which is not
+/// a mirror but a point reflection: what a node sends into the wall along k
+/// it gets back along the opposite direction.
+double
+field_at(const double* field, int nx, int ny, int i, int j, Boundary boundary, double parity = 1.0);
+
+/// The gradient of `field` on `stencil`: gradient_periodic, or with walls
+/// gradient_mirror_y with `parity`.
+void field_gradient(const double* field,
+                    int nx,
+                    int ny,
+                    int i,
+                    int j,
+                    GradientStencil stencil,
+                    Boundary boundary,
+                    double parity,
+                    double* grad_x,
+                    double* grad_y);
+
 /// L f = 6 sum_i w_i (f(x + xi_i) - f(x)), the lattice's own Laplacian, on a
-/// field periodic on both axes and indexed `field[i * ny + j]`. Its error is
+/// field indexed `field[i * ny + j]` and even across any wall. Its error is
 /// isotropic, (1/12) del^4 f.
-double lattice_laplacian(const double* field, int nx, int ny, int i, int j);
+double lattice_laplacian(
+    const double* field, int nx, int ny, int i, int j, Boundary boundary = Boundary::PeriodicY);
 
 /// The unit normal the phase populations sharpen along, from the gradient
 /// G psi - (1/6) G L psi, where G is the lattice's own gradient (E4) and
@@ -206,7 +240,8 @@ void interface_normal(const double* psi,
                       int i,
                       int j,
                       double* normal_x,
-                      double* normal_y);
+                      double* normal_y,
+                      Boundary boundary = Boundary::PeriodicY);
 
 /// 1 - psi^2 below which the phase populations sharpen along the solver's own
 /// normal rather than interface_normal's: |psi| above 0.995, beyond 4.8
@@ -241,7 +276,8 @@ void phase_correction_flux(const double* laplacian_c,
                            int j,
                            double temperature,
                            double* flux_x,
-                           double* flux_y);
+                           double* flux_y,
+                           Boundary boundary = Boundary::PeriodicY);
 
 /// interface_normal carried to sixth order: the direction of
 ///
@@ -260,7 +296,8 @@ void sixth_order_normal(const double* psi,
                         int i,
                         int j,
                         double* normal_x,
-                        double* normal_y);
+                        double* normal_y,
+                        Boundary boundary = Boundary::PeriodicY);
 
 /// phase_correction_flux carried to sixth order:
 ///
@@ -280,7 +317,8 @@ void sixth_order_flux(const double* laplacian_c,
                       int j,
                       double temperature,
                       double* flux_x,
-                      double* flux_y);
+                      double* flux_y,
+                      Boundary boundary = Boundary::PeriodicY);
 
 /// Guo et al. forcing populations for an acceleration a (force per unit mass).
 void forcing(double ux, double uy, double ax, double ay, double* source);
@@ -346,6 +384,31 @@ void collide_filtered(const double* populations,
                       double* previous,
                       double* post_collision);
 
+/// collide_filtered with a viscosity that depends on how the strain sits
+/// against an interface of unit normal n: the deviator's component that
+/// shears across the interface, D_nt, relaxes at `tau_across`, and the one
+/// that stretches along it, D_nn = -D_tt, at `tau_along`.
+///
+/// A diffuse interface is a laminate of the two fluids, and a laminate's
+/// viscosity is not a scalar. The shear stress that crosses it is the same in
+/// every layer, so the layers' shear rates add up in series and the viscosity
+/// that carries it is the harmonic mean of theirs; the stretching along it is
+/// the same in every layer, since the velocity is continuous, so their
+/// stresses add up in parallel and that viscosity is the arithmetic mean.
+/// The solver passes the relaxation times of the two means. With no normal,
+/// away from any interface, both components take `tau_along`.
+void collide_laminate(const double* populations,
+                      const double* equilibrium,
+                      const double* source,
+                      double tau_across,
+                      double tau_along,
+                      double tau_bulk,
+                      double sigma,
+                      double normal_x,
+                      double normal_y,
+                      double* previous,
+                      double* post_collision);
+
 /// Pressure force per unit mass, -grad_lat(p) / rho(x), with p = rho cs^2 P.
 ///
 ///     a(x) = sum_i w_i xi_i p(x - xi_i) / (cs^2 rho(x))
@@ -354,7 +417,20 @@ void collide_filtered(const double* populations,
 /// rather than to P, which jumps by the density ratio. As a force density
 /// rho a it sums to zero over a periodic lattice, and a uniform p exerts no
 /// force whatever rho does. `pressure_number` and `rho` are `nx * ny` values
-/// indexed `[i * ny + j]`; both axes are periodic.
+/// indexed `[i * ny + j]`.
+///
+/// With walls the pressure past them is extrapolated linearly from the two
+/// rows beside them, p(-1) = 2 p(0) - p(1). The wall row reaches from the wall
+/// at -1/2 to 1/2, and against a wall at the extrapolated pressure it feels
+/// the whole of p(0) - p(1): a uniform p exerts no force, a tangential
+/// gradient is read whole, and a hydrostatic gradient supports the wall row as
+/// it does every other. A mirror, p(-1) = p(0), would put the wall pressure at
+/// p(0), with no normal gradient, and give the wall row half its hydrostatic
+/// support; the point reflection of bounce-back has the same defect and reads
+/// five sixths of a tangential gradient. The pressure is taken out of the link
+/// exchange (Solver), so the force is free to take the image it needs. What
+/// it adds over the wall row is the wall's push, normal to it: its tangential
+/// parts sum to zero along a periodic wall.
 void pressure_force(const double* pressure_number,
                     const double* rho,
                     int nx,
@@ -362,7 +438,8 @@ void pressure_force(const double* pressure_number,
                     int i,
                     int j,
                     double* ax,
-                    double* ay);
+                    double* ay,
+                    Boundary boundary = Boundary::PeriodicY);
 
 /// One end of a lattice link, as link_momentum reads it after streaming.
 struct LinkEnd {
@@ -419,13 +496,30 @@ void link_momentum(int k,
                    double* dissipation,
                    double temperature = kSoundSpeedSquared);
 
+/// The far end of a link through a resting wall, as link_momentum reads it:
+/// the receiver's own point image.
+///
+/// Half-way bounce-back hands a node back along k what it sent into the wall
+/// along the opposite direction. The image sends exactly that, from the same
+/// density, viscosity and pressure, at the opposite velocity, which puts the
+/// wall at rest halfway between the two. `receiver.outgoing` and
+/// `receiver.phase` are then the bounced populations, and so are the image's.
+/// Through such a link no volume and no mass cross, the advection and both
+/// dissipations vanish, and what is left is the lattice's own exchange with
+/// the wall, weighted by the node's density: the wall's friction and viscous
+/// stress. That momentum leaves the fluid; it is what holds a channel flow
+/// against its drive.
+LinkEnd wall_image(const LinkEnd& receiver);
+
 /// Force density sum_k D_k (u(x - xi_k) - u(x)) at node (i, j), from the
 /// link coefficients link_momentum returns.
 ///
 /// `coefficients` holds kQ values per node, `[(i * ny + j) * kQ + k]` for the
 /// link to (i, j) - xi_k; `ux` and `uy` are `nx * ny` values indexed
-/// `[i * ny + j]`, both axes periodic. With the same coefficient at the two
-/// ends of every link, the force sums to zero over the lattice.
+/// `[i * ny + j]`. With the same coefficient at the two ends of every link,
+/// the force sums to zero over the lattice. A link through a wall joins a
+/// node to its own point image, whose coefficient link_momentum makes zero;
+/// it contributes nothing.
 void dissipation_force(const double* coefficients,
                        const double* ux,
                        const double* uy,
@@ -434,7 +528,8 @@ void dissipation_force(const double* coefficients,
                        int i,
                        int j,
                        double* fx,
-                       double* fy);
+                       double* fy,
+                       Boundary boundary = Boundary::PeriodicY);
 
 /// Replace the first moment of `populations` by u, leaving the zeroth and
 /// second moments unchanged.

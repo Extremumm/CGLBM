@@ -343,6 +343,40 @@ void gradient_wall_y(const double* field,
     *grad_y = gy;
 }
 
+void gradient_mirror_y(const double* field,
+                       int nx,
+                       int ny,
+                       int i,
+                       int j,
+                       GradientStencil stencil,
+                       double parity,
+                       double* grad_x,
+                       double* grad_y) {
+    int count = 0;
+    const StencilPoint* points = stencil_points(stencil, &count);
+
+    double gx = 0.0;
+    double gy = 0.0;
+    for (int n = 0; n < count; ++n) {
+        const int ip = ((i + points[n].cx) % nx + nx) % nx;
+        int jp = j + points[n].cy;
+        double sign = 1.0;
+        if (jp < 0) {
+            jp = -1 - jp;
+            sign = parity;
+        } else if (jp >= ny) {
+            jp = 2 * ny - 1 - jp;
+            sign = parity;
+        }
+        const double value = sign * field[ip * ny + jp];
+        gx += points[n].weight * points[n].cx * value;
+        gy += points[n].weight * points[n].cy * value;
+    }
+
+    *grad_x = gx;
+    *grad_y = gy;
+}
+
 void gradient(const double* field,
               int nx,
               int ny,

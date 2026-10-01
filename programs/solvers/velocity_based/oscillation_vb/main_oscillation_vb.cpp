@@ -14,7 +14,8 @@
 // `oscillation`, against the same exact viscous normal mode.
 //
 // Usage: oscillation_vb [E4|E6|E8|E10|E12] [density_ratio] [mu1] [steps]
-//                       [--fourth-order-phase] [--sixth-order-phase] [--threads=N]
+//                       [--fourth-order-phase] [--sixth-order-phase]
+//                       [--viscosity=arithmetic|harmonic|laminate] [--threads=N]
 //
 //   density_ratio  rho1/rho2, default 1000.
 //   mu1            dynamic viscosity of the droplet, lattice units, default 2.
@@ -25,6 +26,8 @@
 //                  SolverParameters::fourth_order_phase describes.
 //   --sixth-order-phase
 //                  and as SolverParameters::sixth_order_phase does.
+//   --viscosity=M  how the two viscosities are mixed across the interface,
+//                  SolverParameters::interface_viscosity; arithmetic by default.
 //   --threads=N    runs the solver's loops on N OpenMP threads; the fields
 //                  are the same to the last bit as on one.
 //
@@ -95,6 +98,12 @@ int main(int argc, char** argv) {
     double steps = 24000.0;
     const bool fourth_order_phase = take_flag(&argc, argv, "--fourth-order-phase");
     const bool sixth_order_phase = take_flag(&argc, argv, "--sixth-order-phase");
+    vb::InterfaceViscosity mixing = vb::InterfaceViscosity::Arithmetic;
+    if (!vb::take_viscosity_option(&argc, argv, &mixing)) {
+        std::cerr << "oscillation_vb: --viscosity expects arithmetic, harmonic or laminate."
+                  << std::endl;
+        return 2;
+    }
     int threads = 0;
     if (!cglbm::omp::take_threads_option(&argc, argv, &threads)) {
         std::cerr << "oscillation_vb: --threads expects a whole number of at least 1." << std::endl;
@@ -131,6 +140,7 @@ int main(int argc, char** argv) {
     parameters.stencil = stencil;
     parameters.fourth_order_phase = fourth_order_phase;
     parameters.sixth_order_phase = sixth_order_phase;
+    parameters.interface_viscosity = mixing;
     if (threads > 0) {
         cglbm::omp::set_thread_count(threads);
         parameters.parallel = true;
@@ -149,7 +159,8 @@ int main(int argc, char** argv) {
               << "width = " << parameters.width << "\n"
               << "deformation = " << deformation_0 << "\n"
               << "fourth_order_phase = " << fourth_order_phase << "\n"
-              << "sixth_order_phase = " << sixth_order_phase << std::endl;
+              << "sixth_order_phase = " << sixth_order_phase << "\n"
+              << "viscosity = " << vb::interface_viscosity_name(mixing) << std::endl;
 
     vb::Solver solver(parameters);
     const double scale = 1.0 / std::sqrt(1.0 + 0.5 * deformation_0 * deformation_0);

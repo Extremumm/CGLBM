@@ -120,6 +120,26 @@ void gradient_wall_y(const double* field,
                      double* grad_x,
                      double* grad_y);
 
+/// Gradient of a field periodic along x and mirrored across walls at
+/// j = -1/2 and j = ny - 1/2, the walls of half-way bounce-back.
+///
+/// A neighbour past a wall reads the node it mirrors onto, times `parity`:
+/// +1 for a field even across the wall, as a scalar with no flux through it
+/// is, -1 for an odd one, as the wall-normal component of a vector or the
+/// shear component of a stress is. A uniform even field then has no gradient
+/// at the wall, where gradient_wall_y, which drops those neighbours, gives it
+/// one: half its value per node on E4. The field must be at least
+/// `stencil_reach` nodes tall.
+void gradient_mirror_y(const double* field,
+                       int nx,
+                       int ny,
+                       int i,
+                       int j,
+                       GradientStencil stencil,
+                       double parity,
+                       double* grad_x,
+                       double* grad_y);
+
 /// How the domain is closed along y. Both cases are periodic along x.
 enum class Boundary {
     /// Periodic on both axes, as in gradient_periodic. The droplet cases

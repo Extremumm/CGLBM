@@ -22,7 +22,17 @@
 //     phase population between 0 and its carrier;
 //  7. the lattice Laplacian, the fourth-order interface normal and the
 //     correction flux are exact on a quartic, and with them a mode-2 droplet's
-//     phase field, the fluid held at rest, keeps its shape.
+//     phase field, the fluid held at rest, keeps its shape;
+//  8. between walls, the mirrored stencils leave a uniform field without a
+//     gradient and are exact on fields even or odd across the wall, the
+//     pressure force exerts nothing from a uniform pressure, and a link
+//     through a wall carries the lattice's own exchange and nothing else;
+//  9. the laminate collision is the filtered one when its two rates agree,
+//     relaxes the shear across an interface and the stretching along it each
+//     at its own rate, and conserves P and u;
+// 10. the solver between walls holds a stratified fluid at rest under gravity,
+//     drives a channel flow to its parabola, conserves the phase, and gives
+//     the same fields on any number of threads.
 //
 //   main_lbm_velocity_based
 
@@ -30,6 +40,7 @@
 #include <cmath>
 #include <iostream>
 #include <random>
+#include <string>
 #include <vector>
 
 #include "lbm/isotropic_gradient.h"
@@ -1076,6 +1087,368 @@ void report_fourth_order_phase() {
     std::cout << "sixth_order_phase_min = " << lowest << "\n";
 }
 
+void report_wall_operators() {
+    const int nx = 8;
+    const int ny = 16;
+    const cglbm::lbm::Boundary walls = cglbm::lbm::Boundary::WallY;
+    std::vector<double> uniform(nx * ny, 0.7), odd(nx * ny), even(nx * ny), along(nx * ny);
+    for (int i = 0; i < nx; ++i) {
+        for (int j = 0; j < ny; ++j) {
+            odd[i * ny + j] = j + 0.5;                    // odd across the wall at -1/2
+            even[i * ny + j] = (j + 0.5) * (j + 0.5);     // even across it
+            along[i * ny + j] = std::sin(0.7 * i) + 2.0;  // the same on every row
+        }
+    }
+    double uniform_error = 0.0, odd_error = 0.0, even_error = 0.0, along_error = 0.0;
+    double laplacian_error = 0.0;
+    for (cglbm::lbm::GradientStencil stencil : {cglbm::lbm::GradientStencil::E4,
+                                                cglbm::lbm::GradientStencil::E8,
+                                                cglbm::lbm::GradientStencil::E12}) {
+        for (int i = 0; i < nx; ++i) {
+            for (int j = 0; j < ny; ++j) {
+                double gx = 0.0, gy = 0.0, px = 0.0, py = 0.0;
+                cglbm::lbm::gradient_mirror_y(uniform.data(), nx, ny, i, j, stencil, 1.0, &gx, &gy);
+                uniform_error = std::max(uniform_error, std::hypot(gx, gy));
+                cglbm::lbm::gradient_mirror_y(along.data(), nx, ny, i, j, stencil, 1.0, &gx, &gy);
+                cglbm::lbm::gradient_periodic(along.data(), nx, ny, i, j, stencil, &px, &py);
+                along_error = std::max(along_error, std::hypot(gx - px, gy - py));
+                // near the lower wall only: the fields are odd or even about it
+                if (j < 4) {
+                    cglbm::lbm::gradient_mirror_y(
+                        odd.data(), nx, ny, i, j, stencil, -1.0, &gx, &gy);
+                    odd_error = std::max(odd_error, std::hypot(gx, gy - 1.0));
+                    cglbm::lbm::gradient_mirror_y(
+                        even.data(), nx, ny, i, j, stencil, 1.0, &gx, &gy);
+                    even_error = std::max(even_error, std::hypot(gx, gy - 2.0 * (j + 0.5)));
+                }
+            }
+        }
+    }
+    for (int i = 0; i < nx; ++i) {
+        for (int j = 0; j < 4; ++j) {
+            const double l = vb::lattice_laplacian(even.data(), nx, ny, i, j, walls);
+            laplacian_error = std::max(laplacian_error, std::fabs(l - 2.0));
+        }
+    }
+    std::cout << "wall_uniform_gradient = " << uniform_error << "\n";
+    std::cout << "wall_odd_gradient_error = " << odd_error << "\n";
+    std::cout << "wall_even_gradient_error = " << even_error << "\n";
+    std::cout << "wall_tangential_gradient_error = " << along_error << "\n";
+    std::cout << "wall_laplacian_error = " << laplacian_error << "\n";
+
+    // a uniform pressure across a density jump of 1e4, against the walls
+    std::vector<double> rho(nx * ny), number(nx * ny);
+    for (int i = 0; i < nx; ++i) {
+        for (int j = 0; j < ny; ++j) {
+            rho[i * ny + j] = j < ny / 2 ? 1.0e4 : 1.0;
+            number[i * ny + j] = 0.02 / (rho[i * ny + j] * kCs2);
+        }
+    }
+    double pressure_error = 0.0, tangential_error = 0.0;
+    for (int i = 0; i < nx; ++i) {
+        for (int j = 0; j < ny; ++j) {
+            double ax = 0.0, ay = 0.0;
+            vb::pressure_force(number.data(), rho.data(), nx, ny, i, j, &ax, &ay, walls);
+            pressure_error = std::max(pressure_error, rho[i * ny + j] * std::hypot(ax, ay));
+        }
+    }
+    // a pressure varying along the wall: the wall row feels the whole gradient
+    for (int i = 0; i < nx; ++i) {
+        for (int j = 0; j < ny; ++j) {
+            rho[i * ny + j] = 1.0;
+            number[i * ny + j] = along[i * ny + j] / kCs2;
+        }
+    }
+    for (int i = 0; i < nx; ++i) {
+        double ax = 0.0, ay = 0.0, px = 0.0, py = 0.0;
+        vb::pressure_force(number.data(), rho.data(), nx, ny, i, 0, &ax, &ay, walls);
+        vb::pressure_force(number.data(), rho.data(), nx, ny, i, ny / 2, &px, &py, walls);
+        tangential_error = std::max(tangential_error, std::hypot(ax - px, ay - py));
+    }
+    std::cout << "wall_uniform_pressure_force = " << pressure_error << "\n";
+    std::cout << "wall_tangential_pressure_error = " << tangential_error << "\n";
+
+    // a link through a wall: the node's own image, with no mass, no volume and
+    // no dissipation crossing, and the lattice's exchange weighted by its density
+    std::mt19937 random(23);
+    double image_dissipation = 0.0, image_error = 0.0;
+    for (int trial = 0; trial < 100; ++trial) {
+        for (int k = 1; k < vb::kQ; ++k) {
+            const vb::LinkEnd receiver = random_end(random, 1.0e4, 1.0);
+            double jx = 0.0, jy = 0.0, d = 0.0;
+            vb::link_momentum(k, vb::wall_image(receiver), receiver, 1.0e4, 1.0, &jx, &jy, &d, 0.2);
+            const double eu = vb::kVelocity[k][0] * receiver.ux + vb::kVelocity[k][1] * receiver.uy;
+            const double usq = receiver.ux * receiver.ux + receiver.uy * receiver.uy;
+            const double advective =
+                vb::kWeight[k] * (0.5 * eu * eu / (kCs2 * kCs2) - 0.5 * usq / kCs2);
+            const double expected = receiver.rho * 2.0 * (receiver.outgoing - advective);
+            image_error = std::max(image_error,
+                                   std::hypot(jx - expected * vb::kVelocity[k][0],
+                                              jy - expected * vb::kVelocity[k][1]) /
+                                       std::fabs(expected));
+            image_dissipation = std::max(image_dissipation, d / receiver.mu);
+        }
+    }
+    std::cout << "wall_link_error = " << image_error << "\n";
+    std::cout << "wall_link_dissipation = " << image_dissipation << "\n";
+}
+
+void report_collide_laminate() {
+    const double P = 0.021;
+    const double ux = 0.011;
+    const double uy = -0.017;
+    const double tau_bulk = 1.0;
+    double eq[vb::kQ];
+    double source[vb::kQ];
+    vb::hydrodynamic_equilibrium(P, ux, uy, eq);
+    vb::forcing(ux, uy, 2.0e-5, -1.0e-5, source);
+    double state[vb::kQ];
+    for (int k = 0; k < vb::kQ; ++k) {
+        state[k] = eq[k] + 1.0e-4 * std::sin(2.1 * k + 0.7);
+    }
+    const double nx = 0.6;
+    const double ny = 0.8;
+
+    // with one rate, the filtered collision, whatever the normal
+    double previous[3] = {3.0e-5, -2.0e-5, 1.0e-5};
+    double copy[3] = {3.0e-5, -2.0e-5, 1.0e-5};
+    double filtered[vb::kQ], laminate[vb::kQ];
+    vb::collide_filtered(state, eq, source, 0.8, tau_bulk, 0.7, previous, filtered);
+    vb::collide_laminate(state, eq, source, 0.8, 0.8, tau_bulk, 0.7, nx, ny, copy, laminate);
+    double same = 0.0;
+    for (int k = 0; k < vb::kQ; ++k) {
+        same = std::max(same, std::fabs(filtered[k] - laminate[k]));
+    }
+    std::cout << "laminate_single_rate_error = " << same << "\n";
+
+    // each component of the deviator, in the frame of the normal, at its own
+    // rate: D_nt at tau_across, D_nn at tau_along
+    auto deviator = [&](const double* f, double* dnn, double* dnt) {
+        double pxx = 0.0, pyy = 0.0, pxy = 0.0;
+        for (int k = 0; k < vb::kQ; ++k) {
+            const double neq = f[k] - eq[k] + 0.5 * source[k];
+            pxx += neq * vb::kVelocity[k][0] * vb::kVelocity[k][0];
+            pyy += neq * vb::kVelocity[k][1] * vb::kVelocity[k][1];
+            pxy += neq * vb::kVelocity[k][0] * vb::kVelocity[k][1];
+        }
+        const double a = 0.5 * (pxx - pyy);
+        const double cos2 = nx * nx - ny * ny;
+        const double sin2 = 2.0 * nx * ny;
+        *dnn = a * cos2 + pxy * sin2;
+        *dnt = pxy * cos2 - a * sin2;
+    };
+    const double tau_across = 0.5003;
+    const double tau_along = 3.0;
+    double unfiltered[3] = {0.0, 0.0, 0.0};
+    double post[vb::kQ];
+    deviator(state, &unfiltered[0], &unfiltered[1]);
+    double before_nn = 0.0, before_nt = 0.0, after_nn = 0.0, after_nt = 0.0;
+    deviator(state, &before_nn, &before_nt);
+    // sigma = 1: the populations' own non-equilibrium
+    double none[3] = {0.0, 0.0, 0.0};
+    vb::collide_laminate(
+        state, eq, source, tau_across, tau_along, tau_bulk, 1.0, nx, ny, none, post);
+    // the post-collision non-equilibrium is g - g_eq - S/2, the relaxed part
+    double relaxed[vb::kQ];
+    for (int k = 0; k < vb::kQ; ++k) {
+        relaxed[k] = post[k] - source[k];
+    }
+    deviator(relaxed, &after_nn, &after_nt);
+    const double rate_error =
+        std::max(std::fabs(after_nn - (1.0 - 1.0 / tau_along) * before_nn) / std::fabs(before_nn),
+                 std::fabs(after_nt - (1.0 - 1.0 / tau_across) * before_nt) / std::fabs(before_nt));
+    std::cout << "laminate_rate_error = " << rate_error << "\n";
+
+    // conserves P, and u up to the half-step force
+    const Moments start = moments(state);
+    double own[vb::kQ];
+    vb::hydrodynamic_equilibrium(start.m0, start.mx, start.my, own);
+    double arbitrary[3] = {4.0e-5, 1.0e-5, -3.0e-5};
+    vb::collide_laminate(
+        state, own, source, tau_across, tau_along, tau_bulk, 0.7, nx, ny, arbitrary, post);
+    const Moments end = moments(post);
+    double cerr = std::fabs(end.m0 - start.m0);
+    cerr = std::max(cerr, std::fabs(end.mx - (start.mx + 0.5 * 2.0e-5)));
+    cerr = std::max(cerr, std::fabs(end.my - (start.my - 0.5 * 1.0e-5)));
+    std::cout << "laminate_conservation_error = " << cerr << "\n";
+}
+
+void report_wall_solver() {
+    // a heavy layer under a light one, at rest under gravity: the initial
+    // pressure balances it column by column, and the walls hold it
+    {
+        vb::SolverParameters parameters;
+        parameters.nx = 8;
+        parameters.ny = 48;
+        parameters.rho1 = 1.0e3;
+        parameters.rho2 = 1.0;
+        parameters.mu1 = 2.0;
+        parameters.mu2 = 0.05;
+        parameters.surface_tension = 0.01;
+        parameters.boundary = cglbm::lbm::Boundary::WallY;
+        parameters.gravity_y = -1.0e-5;
+        parameters.gravity_reference_density = parameters.rho2;
+        const double centre = 23.5;
+        auto fraction = [&](int j) { return 0.5 * (1.0 - std::tanh((j - centre) / 1.6)); };
+        std::vector<double> p(parameters.ny);
+        double running = 0.0;
+        for (int j = 0; j < parameters.ny; ++j) {
+            if (j > 0) {
+                running -= 0.5 * 1.0e-5 * (parameters.rho1 - parameters.rho2) *
+                           (fraction(j - 1) + fraction(j));
+            }
+            p[j] = running;
+        }
+        // the light fluid at zero pressure, above the heavy one
+        for (double& value : p) {
+            value -= running;
+        }
+        vb::Solver solver(parameters);
+        solver.initialize([&](int, int j) {
+            vb::NodeState state;
+            state.c = fraction(j);
+            state.p = p[j];
+            return state;
+        });
+        double mass0 = 0.0;
+        for (int i = 0; i < parameters.nx; ++i) {
+            for (int j = 0; j < parameters.ny; ++j) {
+                mass0 += solver.volume_fraction(i, j);
+            }
+        }
+        double fastest = 0.0;
+        for (int step = 0; step < 3000; ++step) {
+            solver.step();
+        }
+        double mass = 0.0;
+        for (int i = 0; i < parameters.nx; ++i) {
+            for (int j = 0; j < parameters.ny; ++j) {
+                fastest =
+                    std::max(fastest, std::hypot(solver.velocity_x(i, j), solver.velocity_y(i, j)));
+                mass += solver.volume_fraction(i, j);
+            }
+        }
+        std::cout << "wall_hydrostatic_velocity = " << fastest << "\n";
+        std::cout << "wall_hydrostatic_mass_error = " << std::fabs(mass - mass0) / mass0 << "\n";
+    }
+
+    // a single fluid driven along a channel: half-way bounce-back at tau = 1
+    // puts the walls at -1/2 and ny - 1/2
+    {
+        vb::SolverParameters parameters;
+        parameters.nx = 4;
+        parameters.ny = 16;
+        parameters.mu1 = parameters.mu2 = 1.0 / 6.0;
+        parameters.boundary = cglbm::lbm::Boundary::WallY;
+        const double drive = 1.0e-6;
+        vb::Solver solver(parameters);
+        solver.initialize([](int, int) { return vb::NodeState(); });
+        solver.set_body_force([&](int, int, double* fx, double* fy) {
+            *fx = drive;
+            *fy = 0.0;
+        });
+        for (int step = 0; step < 6000; ++step) {
+            solver.step();
+        }
+        double error = 0.0, peak = 0.0, transverse = 0.0;
+        for (int j = 0; j < parameters.ny; ++j) {
+            const double y = j + 0.5;
+            const double exact = drive / (2.0 * parameters.mu1) * y * (parameters.ny - y);
+            peak = std::max(peak, exact);
+            for (int i = 0; i < parameters.nx; ++i) {
+                error = std::max(error, std::fabs(solver.velocity_x(i, j) - exact));
+                transverse = std::max(transverse, std::fabs(solver.velocity_y(i, j)));
+            }
+        }
+        std::cout << "wall_channel_error = " << error / peak << "\n";
+        std::cout << "wall_channel_transverse = " << transverse / peak << "\n";
+    }
+
+    // a droplet launched at a wall, with gravity and the fourth-order phase:
+    // the phase is conserved, and threads change nothing
+    auto run = [](bool parallel, double* mass_error) {
+        vb::SolverParameters parameters;
+        parameters.nx = 32;
+        parameters.ny = 32;
+        parameters.rho1 = 1.0e3;
+        parameters.rho2 = 1.0;
+        parameters.mu1 = parameters.mu2 = 0.05;
+        parameters.surface_tension = 0.01;
+        parameters.fourth_order_phase = true;
+        parameters.interface_viscosity = vb::InterfaceViscosity::Laminate;
+        parameters.boundary = cglbm::lbm::Boundary::WallY;
+        parameters.gravity_y = -1.0e-6;
+        parameters.gravity_reference_density = parameters.rho2;
+        parameters.parallel = parallel;
+        vb::Solver solver(parameters);
+        solver.initialize([](int i, int j) {
+            vb::NodeState state;
+            const double r = std::hypot(i - 16.0, j - 9.0);
+            state.c = 0.5 * (1.0 - std::tanh((r - 6.0) / 1.6));
+            state.uy = -0.01 * state.c;
+            return state;
+        });
+        double mass0 = 0.0;
+        for (int i = 0; i < parameters.nx; ++i) {
+            for (int j = 0; j < parameters.ny; ++j) {
+                mass0 += solver.volume_fraction(i, j);
+            }
+        }
+        for (int step = 0; step < 300; ++step) {
+            solver.step();
+        }
+        std::vector<double> fields;
+        double mass = 0.0;
+        for (int i = 0; i < parameters.nx; ++i) {
+            for (int j = 0; j < parameters.ny; ++j) {
+                mass += solver.volume_fraction(i, j);
+                fields.insert(fields.end(),
+                              {solver.density(i, j),
+                               solver.velocity_x(i, j),
+                               solver.velocity_y(i, j),
+                               solver.phase(i, j),
+                               solver.pressure(i, j)});
+            }
+        }
+        *mass_error = std::fabs(mass - mass0) / mass0;
+        return fields;
+    };
+    double mass_error = 0.0, threaded_mass_error = 0.0;
+    const std::vector<double> serial = run(false, &mass_error);
+    cglbm::omp::set_thread_count(3);
+    const std::vector<double> threaded = run(true, &threaded_mass_error);
+    cglbm::omp::set_thread_count(0);
+    bool finite = true;
+    for (double v : serial) {
+        finite = finite && std::isfinite(v);
+    }
+    std::cout << "wall_droplet_finite = " << (finite ? 1 : 0) << "\n";
+    std::cout << "wall_droplet_mass_error = " << mass_error << "\n";
+    std::cout << "wall_parallel_identical = " << (serial == threaded ? 1 : 0) << "\n";
+}
+
+void report_viscosity_option() {
+    const char* names[] = {"arithmetic", "harmonic", "laminate", "bogus"};
+    int read = 0;
+    for (int n = 0; n < 4; ++n) {
+        std::string option = std::string("--viscosity=") + names[n];
+        std::string keep = "E8";
+        char* argv[] = {const_cast<char*>("program"), &keep[0], &option[0]};
+        int argc = 3;
+        vb::InterfaceViscosity mixing = vb::InterfaceViscosity::Arithmetic;
+        const bool valid = vb::take_viscosity_option(&argc, argv, &mixing);
+        const bool kept = argc == 2 && std::string(argv[1]) == "E8";
+        if (n < 3 && valid && kept &&
+            std::string(vb::interface_viscosity_name(mixing)) == names[n]) {
+            ++read;
+        }
+        if (n == 3 && !valid && kept) {
+            ++read;
+        }
+    }
+    std::cout << "viscosity_option_read = " << read << "\n";
+}
+
 }  // namespace
 
 int main() {
@@ -1095,6 +1468,10 @@ int main() {
     report_sixth_order_operators();
     report_parallel_identity();
     report_parse_number();
+    report_wall_operators();
+    report_collide_laminate();
+    report_wall_solver();
+    report_viscosity_option();
     std::cout << std::flush;
     return 0;
 }

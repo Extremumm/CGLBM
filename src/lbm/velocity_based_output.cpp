@@ -40,6 +40,43 @@ bool parse_number(const char* text, double* value) {
     return true;
 }
 
+const char* interface_viscosity_name(InterfaceViscosity mixing) {
+    switch (mixing) {
+    case InterfaceViscosity::Harmonic:
+        return "harmonic";
+    case InterfaceViscosity::Laminate:
+        return "laminate";
+    case InterfaceViscosity::Arithmetic:
+    default:
+        return "arithmetic";
+    }
+}
+
+bool take_viscosity_option(int* argc, char** argv, InterfaceViscosity* mixing) {
+    const std::string prefix = "--viscosity=";
+    bool valid = true;
+    int kept = 1;
+    for (int n = 1; n < *argc; ++n) {
+        const std::string argument = argv[n];
+        if (argument.rfind(prefix, 0) != 0) {
+            argv[kept++] = argv[n];
+            continue;
+        }
+        const std::string value = argument.substr(prefix.size());
+        if (value == "arithmetic") {
+            *mixing = InterfaceViscosity::Arithmetic;
+        } else if (value == "harmonic") {
+            *mixing = InterfaceViscosity::Harmonic;
+        } else if (value == "laminate") {
+            *mixing = InterfaceViscosity::Laminate;
+        } else {
+            valid = false;
+        }
+    }
+    *argc = kept;
+    return valid;
+}
+
 }  // namespace velocity_based
 }  // namespace lbm
 }  // namespace cglbm

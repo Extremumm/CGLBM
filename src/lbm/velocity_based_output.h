@@ -20,6 +20,15 @@ void write_fields(const Solver& solver, int timestep);
 /// when it is not one.
 bool parse_number(const char* text, double* value);
 
+/// Name of the mixing, as take_viscosity_option reads it: "arithmetic",
+/// "harmonic" or "laminate".
+const char* interface_viscosity_name(InterfaceViscosity mixing);
+
+/// Takes every --viscosity=arithmetic|harmonic|laminate out of argv, leaving
+/// the other arguments in order, and sets `mixing` from the last valid one.
+/// False if any of them names none of the three.
+bool take_viscosity_option(int* argc, char** argv, InterfaceViscosity* mixing);
+
 }  // namespace velocity_based
 }  // namespace lbm
 }  // namespace cglbm

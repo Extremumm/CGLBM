@@ -8,22 +8,47 @@
 #include "lbm/velocity_based.h"
 
 /// The time step of the velocity-based two-phase scheme of velocity_based.h,
-/// on a doubly periodic lattice.
+/// on a lattice periodic along x and, along y, periodic or closed by resting
+/// walls.
 ///
 /// A step collides the hydrodynamic populations, builds the phase
 /// populations, streams both, updates the momentum link by link, and applies
 /// the forces through the forcing term, half before and half after the step:
-/// surface tension, pressure, the link dissipation, and an optional body
-/// force. The programs under programs/solvers/velocity_based set up the
+/// surface tension, pressure, the link dissipation, gravity and an optional
+/// body force. The programs under programs/solvers/velocity_based set up the
 /// initial state and write the output; this does everything in between.
 ///
 /// Surface tension is the capillary stress of surface_force.h on psi = 2c - 1,
 /// with each layer of the interface weighted by layer_weight so that a
 /// circular interface carries sigma / R whatever its width.
+///
+/// Walls (Boundary::WallY) sit halfway between the first and last rows and
+/// their ghosts, at j = -1/2 and j = ny - 1/2. Both sets of populations bounce
+/// back there: the fluid is at rest on the wall, and no volume crosses it, nor
+/// any of P, the pressure number the populations carry. A link through a wall
+/// joins a node to its own point image (wall_image), so
+/// the momentum exchange is the lattice's own friction and nothing else. The
+/// stencil operators read every field mirrored across the wall
+/// (velocity_based.h, field_at), which leaves a uniform phase field without a
+/// normal at the wall and meets an interface there at a right angle: the walls
+/// are neutrally wetting.
 
 namespace cglbm {
 namespace lbm {
 namespace velocity_based {
+
+/// How the dynamic viscosity is mixed across the diffuse interface, on the
+/// volume fraction c of component 1.
+enum class InterfaceViscosity {
+    /// mu = c mu1 + (1 - c) mu2.
+    Arithmetic,
+    /// 1 / mu = c / mu1 + (1 - c) / mu2.
+    Harmonic,
+    /// The harmonic mean for the strain that shears across the interface and
+    /// the arithmetic mean for the strain that stretches along it
+    /// (collide_laminate); the links take the harmonic mean.
+    Laminate
+};
 
 struct SolverParameters {
     int nx = 128;
@@ -37,6 +62,8 @@ struct SolverParameters {
     double surface_tension = 0.0;
     /// Interface width W of the profile c = (1 + tanh(x / W)) / 2.
     double width = 1.6;
+    /// How the two viscosities are mixed across the interface.
+    InterfaceViscosity interface_viscosity = InterfaceViscosity::Arithmetic;
     /// Relaxation time of the trace of the non-equilibrium.
     double tau_bulk = 1.0;
     /// Weight of the populations' own non-equilibrium in collide_filtered; the
@@ -112,6 +139,17 @@ struct SolverParameters {
     /// edge and the sharpening's own nonlinearity. See docs/numerics.md,
     /// "The phase field's own surface diffusion".
     bool sixth_order_phase = false;
+    /// How the lattice is closed along y: periodic, or by resting walls.
+    /// Periodic along x either way.
+    Boundary boundary = Boundary::PeriodicY;
+    /// Gravitational acceleration. The force per unit volume is
+    /// (rho - gravity_reference_density) g, which follows the interface as it
+    /// moves. The reference changes only the pressure, by rho_ref g . x, in an
+    /// incompressible flow; between walls any value holds, and on a lattice
+    /// periodic along g only the mean density leaves no net force.
+    double gravity_x = 0.0;
+    double gravity_y = 0.0;
+    double gravity_reference_density = 0.0;
     /// Run the per-node loops across OpenMP threads.
     ///
     /// Every loop of a step writes only its own node, or in the streaming a
@@ -178,7 +216,18 @@ private:
     int node(int i, int j) const {
         return i * parameters_.ny + j;
     }
+    /// The viscosity the links and the isotropic collision take, by
+    /// interface_viscosity.
     double dynamic_viscosity(double c) const;
+    double arithmetic_viscosity(double c) const;
+    double harmonic_viscosity(double c) const;
+
+    /// Link k of node (i, j) reaches through a wall: its donor (i, j) - xi_k
+    /// lies outside the lattice.
+    bool through_wall(int j, int k) const {
+        const int jd = j - kVelocity[k][1];
+        return walls_ && (jd < 0 || jd >= parameters_.ny);
+    }
 
     void macroscopic();
     void acceleration();
@@ -188,6 +237,7 @@ private:
     void collide_and_stream();
 
     SolverParameters parameters_;
+    bool walls_;
 
     // populations, kQ per node
     std::vector<double> g_;

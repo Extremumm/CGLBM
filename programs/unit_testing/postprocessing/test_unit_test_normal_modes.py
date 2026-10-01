@@ -71,6 +71,55 @@ def test_unit_test_normal_modes_benchmark_references():
     assert droplet.angular_frequency == pytest.approx(4.5304e-4, rel=1.0e-4)
 
 
+def _lamb_free_surface(k, nu, gravity, sigma):
+    """The root of Lamb's exact free-surface relation (art. 349),
+    ``(s + 2 nu k^2)^2 + g k + sigma k^3 = 4 nu^2 k^3 (k^2 + s / nu)^(1/2)``,
+    by Newton's method from the inviscid root."""
+    s = complex(-2.0 * nu * k * k, np.sqrt(gravity * k + sigma * k**3))
+    for _ in range(50):
+        m = np.sqrt(k * k + s / nu)
+        f = (s + 2 * nu * k * k) ** 2 + gravity * k + sigma * k**3 - 4 * nu * nu * k**3 * m
+        df = 2 * (s + 2 * nu * k * k) - 2 * nu * k**3 / m
+        s -= f / df
+    return s
+
+
+@pytest.mark.unit_test
+@pytest.mark.parametrize("sigma", [0.0, SIGMA])
+def test_unit_test_normal_modes_gravity_wave_against_lamb(sigma):
+    """With gravity, a free surface's viscous wave is Lamb's exact root.
+
+    Gravity enters the normal-stress balance beside the tension, as
+    ``sigma k^2 + (rho1 - rho2) g``; the free surface is fluid 1 under a
+    fluid a millionth as dense.
+    """
+    k, nu, gravity = 2 * np.pi / 64, 1.0e-3, 1.0e-4
+    mode = capillary_wave(k, 1.0, 1.0e-9, nu, 1.0e-15, sigma, gravity=gravity)
+    exact = _lamb_free_surface(k, nu, gravity, sigma)
+    assert mode.decay_rate == pytest.approx(-exact.real, rel=1.0e-6)
+    assert mode.angular_frequency == pytest.approx(exact.imag, rel=1.0e-6)
+
+
+@pytest.mark.unit_test
+def test_unit_test_normal_modes_rayleigh_taylor_limits():
+    """The heavier fluid on top: the mode grows, at ``(A g k)^(1/2)`` without
+    viscosity or tension, at ``(A g k - sigma k^3 / (rho1 + rho2))^(1/2)`` with
+    tension alone, and slower with viscosity; below the capillary cutoff the
+    interface is stable again."""
+    k, gravity = 2 * np.pi / 64, 1.0e-5
+    atwood = 999.0 / 1001.0
+    inviscid = capillary_wave(k, 1.0, 1000.0, 1.0e-7, 1.0e-7, 0.0, gravity=gravity)
+    assert inviscid.angular_frequency == 0.0
+    assert -inviscid.decay_rate == pytest.approx(np.sqrt(atwood * gravity * k), rel=1.0e-4)
+    tension = capillary_wave(k, 1.0, 1000.0, 1.0e-7, 1.0e-7, SIGMA, gravity=gravity)
+    expected = np.sqrt(atwood * gravity * k - SIGMA * k**3 / 1001.0)
+    assert -tension.decay_rate == pytest.approx(expected, rel=1.0e-4)
+    viscous = capillary_wave(k, 1.0, 1000.0, 0.05, 2.0, SIGMA, gravity=gravity)
+    assert 0.0 < -viscous.decay_rate < -tension.decay_rate
+    short = capillary_wave(2 * np.pi / 16, 1.0, 1000.0, 0.05, 2.0, SIGMA, gravity=gravity)
+    assert short.decay_rate > 0.0 and short.angular_frequency > 0.0
+
+
 @pytest.mark.unit_test
 def test_unit_test_normal_modes_reject_mode_below_two():
     """Modes 0 and 1 are not restored by tension."""

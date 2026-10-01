@@ -209,9 +209,32 @@ diffusion of its own, which `--fourth-order-phase` takes out
 (`oscillation_vb E8 1e4 2 45000 --fourth-order-phase`, 1.07). That option is
 off by default, since the diffusion had also been hiding the waves'
 under-resolved boundary layer (0.93 at 1000 on the default wavelength of 64
-nodes, 0.976 with `--wavelength=128`). The four velocity-based programs take
+nodes, 0.976 with `--wavelength=128`). The velocity-based programs take
 `--threads=N`. See
 [`docs/numerics.md`](docs/numerics.md#the-velocity-based-droplet-solver).
+
+The velocity-based solver also closes its box with resting walls and takes
+gravity, which is what the wall-bounded benchmarks of the high-density-ratio
+literature need. `poiseuille_vb` drives two layers along a channel, 1000
+apart in density and viscosity, against the exact piecewise-parabolic profile;
+`rayleigh_taylor_vb` releases a heavy fluid above a light one, 1000 or 10⁴
+apart, against the exact growth rate of the viscous normal mode, which it
+measures at 0.98 (0.99 on twice the resolution). How the two viscosities mix
+across the interface decides the channel flow: arithmetically on the volume
+fraction, the default, the light layer flows 41 % off its profile, because a
+shear stress that crosses the interface sees the two fluids in series.
+`--viscosity=laminate` takes the harmonic mean for that shear and the
+arithmetic one for the stretching along the interface, and brings it to 4.6 %
+(1.7 % on the case of Liang et al. 2018, against their 3.2 %); the capillary
+waves, whose boundary layer the interface does not resolve, are damped 2 to 17 %
+less with it, so it is not the default:
+
+```bash
+bin/solvers/velocity_based/poiseuille_vb/poiseuille_vb_opt E8 1000 1000 30000 --viscosity=laminate
+bin/solvers/velocity_based/rayleigh_taylor_vb/rayleigh_taylor_vb_opt E8 1000 2 12000
+```
+
+See [`docs/numerics.md`](docs/numerics.md#walls-gravity-and-the-viscosity-across-an-interface).
 
 ### About the generated files
 
@@ -267,6 +290,8 @@ Pass `--precision=17` for output that round-trips.
 | `layers` | 8×128 | 10⁴ | 10⁴/1 | no | velocity-based solver: two layers sheared across their interfaces |
 | `capillary_wave_vb` | 64×128 | 2.5×10⁴ | 1000/1 | no | velocity-based solver: the `capillary_wave` case, at any amplitude |
 | `oscillation_vb` | 128×128 | 2.4×10⁴ | 1000/1 | no | velocity-based solver: the `oscillation` case |
+| `poiseuille_vb` | 4×64 | 3×10⁴ | 1000/1 | no | velocity-based solver: layered Poiseuille flow between walls, against its exact profile |
+| `rayleigh_taylor_vb` | 64×256 | 1.2×10⁴ | 1000/1, up to 10⁴/1 | yes | velocity-based solver: Rayleigh–Taylor growth rate between walls, against the exact viscous mode |
 
 > `rayleigh_taylor_omp` allocates several GB of lattice at its production
 > resolution. Check the available memory before launching it, or lower it with

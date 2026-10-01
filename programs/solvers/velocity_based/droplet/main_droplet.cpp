@@ -13,13 +13,17 @@
 // src/lbm/velocity_based.h: static (the Laplace law) or launched through a
 // quiescent lighter fluid (an interface that moves).
 //
-// Usage: droplet [E4|E6|E8|E10|E12] [density_ratio] [velocity] [viscosity_ratio] [--threads=N]
+// Usage: droplet [E4|E6|E8|E10|E12] [density_ratio] [velocity] [viscosity_ratio]
+//                [--viscosity=arithmetic|harmonic|laminate] [--threads=N]
 //
 //   density_ratio    rho1/rho2, default 1e4.
 //   velocity         initial speed of the droplet along x, lattice units per
 //                    step; the surrounding fluid starts at rest. Default 0: a
 //                    static droplet, the Laplace benchmark.
 //   viscosity_ratio  mu1/mu2, default 1.
+//   --viscosity=M    how the two viscosities are mixed across the interface,
+//                    SolverParameters::interface_viscosity; arithmetic by
+//                    default.
 //   --threads=N      runs the solver's loops on N OpenMP threads; the fields
 //                    are the same to the last bit as on one.
 //
@@ -66,6 +70,9 @@ double mu1 = mu2;                  // dynamic viscosity of component 1
 // Isotropy order of the gradients (surface tension, normals).
 cglbm::lbm::GradientStencil gradient_stencil = cglbm::lbm::GradientStencil::E8;
 
+// How the two viscosities are mixed across the interface, from --viscosity.
+vb::InterfaceViscosity interface_viscosity = vb::InterfaceViscosity::Arithmetic;
+
 // OpenMP threads from --threads; 0 runs the solver serially.
 int threads = 0;
 
@@ -88,6 +95,7 @@ void runSimulation() {
     parameters.surface_tension = sigma;
     parameters.width = width;
     parameters.stencil = gradient_stencil;
+    parameters.interface_viscosity = interface_viscosity;
     if (threads > 0) {
         cglbm::omp::set_thread_count(threads);
         parameters.parallel = true;
@@ -117,6 +125,10 @@ void runSimulation() {
 }
 
 int main(int argc, char** argv) {
+    if (!vb::take_viscosity_option(&argc, argv, &interface_viscosity)) {
+        std::cerr << "--viscosity expects arithmetic, harmonic or laminate." << std::endl;
+        return 2;
+    }
     if (!cglbm::omp::take_threads_option(&argc, argv, &threads)) {
         std::cerr << "--threads expects a whole number of at least 1." << std::endl;
         return 2;
@@ -145,6 +157,7 @@ int main(int argc, char** argv) {
     rho1 = density_ratio * rho2;
     mu1 = viscosity_ratio * mu2;
     std::cout << "gradient stencil = " << cglbm::lbm::stencil_name(gradient_stencil) << std::endl;
+    std::cout << "viscosity = " << vb::interface_viscosity_name(interface_viscosity) << std::endl;
     std::cout << "density ratio = " << density_ratio << std::endl;
     std::cout << "viscosity ratio = " << viscosity_ratio << std::endl;
     runSimulation();

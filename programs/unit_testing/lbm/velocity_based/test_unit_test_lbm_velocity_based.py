@@ -229,3 +229,72 @@ def test_unit_test_lbm_velocity_based_parse_number(values):
     anything else, leaving the value alone."""
     assert values["parse_number_read"] == "1"
     assert values["parse_number_rejected"] == "6"
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_wall_stencils(values):
+    """Mirrored across a wall at -1/2, a uniform field has no gradient, the E4,
+    E8 and E12 gradients are exact on fields odd and even about the wall, a
+    field the same on every row has its periodic gradient, and the lattice
+    Laplacian of a quadratic even about the wall is its own."""
+    assert float(values["wall_uniform_gradient"]) == 0.0
+    assert float(values["wall_odd_gradient_error"]) < 1e-14
+    assert float(values["wall_even_gradient_error"]) < 1e-13
+    assert float(values["wall_tangential_gradient_error"]) == 0.0
+    assert float(values["wall_laplacian_error"]) < 1e-14
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_wall_pressure_force(values):
+    """Against a wall, a uniform pressure across a density jump of 1e4 exerts
+    no force, and a pressure varying along the wall pushes the wall row as it
+    pushes the rows inside."""
+    assert float(values["wall_uniform_pressure_force"]) < 1e-15
+    assert float(values["wall_tangential_pressure_error"]) == 0.0
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_wall_link(values):
+    """A link through a wall, to the node's own image, carries the lattice's
+    exchange weighted by the node's density and no dissipation."""
+    assert float(values["wall_link_error"]) < 1e-14
+    assert float(values["wall_link_dissipation"]) < 1e-14
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_laminate_collision(values):
+    """With one rate the laminate collision is the filtered one; with two, the
+    shear across the interface and the stretching along it relax each at its
+    own; P and u are conserved."""
+    assert float(values["laminate_single_rate_error"]) < 1e-18
+    assert float(values["laminate_rate_error"]) < 1e-12
+    assert float(values["laminate_conservation_error"]) < 1e-15
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_wall_solver(values):
+    """Between walls: a heavy layer under a light one, 1000 apart, held at rest
+    by its hydrostatic pressure under gravity, the phase conserved; a channel
+    flow on its parabola to the slip of half-way bounce-back on 16 nodes; a
+    droplet launched at a wall with gravity, the laminate viscosity and the
+    fourth-order phase conserving its phase, the same on one thread and on
+    three.
+
+    The layer at rest moves at 5e-6, g/2 through the heavy fluid: streamed, the
+    pressure parts of the populations diffuse P = p / (rho cs^2), whose
+    hydrostatic slope stops at the interface, and the scheme carries the
+    difference with a drift (docs/numerics.md)."""
+    assert float(values["wall_hydrostatic_velocity"]) < 6e-6
+    assert float(values["wall_hydrostatic_mass_error"]) < 1e-12
+    assert float(values["wall_channel_error"]) < 2e-3
+    assert float(values["wall_channel_transverse"]) < 1e-9
+    assert values["wall_droplet_finite"] == "1"
+    assert float(values["wall_droplet_mass_error"]) < 1e-12
+    assert values["wall_parallel_identical"] == "1"
+
+
+@pytest.mark.unit_test
+def test_unit_test_lbm_velocity_based_viscosity_option(values):
+    """--viscosity= reads arithmetic, harmonic and laminate, refuses anything
+    else, and leaves the other arguments where they were."""
+    assert values["viscosity_option_read"] == "4"
